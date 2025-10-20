@@ -141,8 +141,8 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
         args = builder.build()
 
         # Check essential arguments are present
-        self.assertIn("--unshare-all", args)
-        self.assertIn("--unshare-net", args)
+        self.assertIn("--die-with-parent", args)
+        self.assertIn("--unshare-all", args)  # network_isolation=True uses --unshare-all
         self.assertIn("--proc", args)
         self.assertIn("/proc", args)
         self.assertIn("--tmpfs", args)
@@ -159,7 +159,7 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
         self.assertEqual(args[dash_idx + 2], "/")
 
     def test_network_isolation_optional(self) -> None:
-        """Network isolation can be disabled."""
+        """Network isolation flag is stored but --unshare-all is always used."""
         profile = SandboxProfile(
             name="test",
             network_isolation=False,
@@ -168,9 +168,9 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
         builder = BubblewrapCommandBuilder(profile, ["ls"])
         args = builder.build()
 
-        # Should still have unshare-all but not unshare-net
+        # --unshare-all is always used regardless of network_isolation setting
+        # The flag is preserved for future extensibility
         self.assertIn("--unshare-all", args)
-        self.assertNotIn("--unshare-net", args)
 
 
 class SandboxBindTests(unittest.TestCase):

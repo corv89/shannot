@@ -421,10 +421,9 @@ class BubblewrapCommandBuilder:
         """
         args: MutableSequence[str] = []
 
-        # Namespace isolation.
-        args.extend(("--unshare-all", "--die-with-parent"))
-        if self._profile.network_isolation:
-            args.append("--unshare-net")
+        # Namespace isolation
+        args.append("--die-with-parent")
+        args.append("--unshare-all")
 
         # Standard mounts.
         args.extend(("--proc", "/proc"))

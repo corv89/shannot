@@ -45,6 +45,7 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1.0",
     "basedpyright>=1.0",
+    "types-setuptools",
 ]
 
 [tool.setuptools.packages.find]
@@ -96,6 +97,7 @@ reportUnusedImport = "warning"
 reportUnreachable = "warning"
 reportUnannotatedClassAttribute = "warning"
 reportExplicitAny = "warning"
+reportMissingImports = "warning"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -106,4 +108,9 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--verbose",
+]
+markers = [
+    "linux_only: marks tests as requiring Linux platform (deselect with '-m \"not linux_only\"')",
+    "requires_bwrap: marks tests as requiring bubblewrap to be installed (deselect with '-m \"not requires_bwrap\"')",
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]

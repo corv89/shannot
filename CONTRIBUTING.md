@@ -1,0 +1,304 @@
+# Contributing to Shannot
+
+Thank you for your interest in contributing to Shannot! This document provides guidelines and instructions for contributing.
+
+## Quick Start
+
+The easiest way to start contributing is using GitHub Codespaces:
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/corv89/shannot?quickstart=1)
+
+Click the badge above to get a fully configured development environment with bubblewrap and all dependencies pre-installed.
+
+## Development Setup
+
+### Prerequisites
+
+- **Linux** - Shannot requires Linux for development and testing (bubblewrap is Linux-only)
+- **Python 3.9+** - The minimum supported version
+- **bubblewrap** - The underlying sandboxing tool
+
+### Local Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/corv89/shannot.git
+cd shannot
+
+# Install bubblewrap
+# Debian/Ubuntu
+sudo apt install bubblewrap
+
+# Fedora/RHEL
+sudo dnf install bubblewrap
+
+# Arch Linux
+sudo pacman -S bubblewrap
+
+# Install shannot in development mode with all dev dependencies
+pip install -e ".[dev]"
+```
+
+### Verify Installation
+
+```bash
+# Verify bubblewrap is available
+bwrap --version
+
+# Run the test suite
+pytest tests/ -v
+
+# Run linter
+ruff check .
+
+# Run type checker
+basedpyright
+```
+
+## Development Workflow
+
+### 1. Create a Branch
+
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/your-bug-fix
+```
+
+### 2. Make Your Changes
+
+Follow these guidelines:
+
+- **Code Style**: We use `ruff` for linting and formatting
+- **Type Hints**: All code should have type annotations (checked with `basedpyright`)
+- **Documentation**: Update docstrings and documentation as needed
+- **Tests**: Add tests for new features or bug fixes
+
+### 3. Run Quality Checks
+
+Before committing, ensure all checks pass:
+
+```bash
+# Format code
+ruff format .
+
+# Check linting
+ruff check .
+
+# Run type checker
+basedpyright
+
+# Run tests
+pytest tests/ -v
+
+# Run tests with coverage
+pytest tests/ --cov=shannot --cov-report=term
+```
+
+### 4. Commit Your Changes
+
+Write clear, descriptive commit messages:
+
+```bash
+git add .
+git commit -m "Add feature: brief description of what you did"
+```
+
+Good commit message examples:
+- `Add support for seccomp filters in profiles`
+- `Fix path resolution bug in SandboxBind validation`
+- `Update documentation for profile configuration`
+- `Add integration tests for network isolation`
+
+### 5. Push and Create Pull Request
+
+```bash
+git push origin feature/your-feature-name
+```
+
+Then create a pull request on GitHub with:
+- Clear description of what the PR does
+- Reference any related issues (e.g., "Fixes #123")
+- Screenshots or examples if applicable
+
+## Testing Guidelines
+
+### Test Categories
+
+We have three types of tests:
+
+1. **Unit Tests** - Fast, no external dependencies, run on all platforms
+2. **Integration Tests** - Require Linux + bubblewrap, marked with `@pytest.mark.integration`
+3. **Platform-Specific Tests** - Marked with `@pytest.mark.linux_only`
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run only unit tests (skip integration tests)
+pytest tests/ -v -m "not integration"
+
+# Run only integration tests
+pytest tests/ -v -m "integration"
+
+# Run with coverage report
+pytest tests/ --cov=shannot --cov-report=html
+# Open htmlcov/index.html to view coverage
+```
+
+**Note on Network Isolation:** Integration tests use `network_isolation=False` in test profiles to ensure compatibility with CI environments (GitHub Actions) that don't provide the `CAP_NET_ADMIN` capability. Network isolation features work correctly in production when run with appropriate privileges.
+
+### Writing Tests
+
+When adding new features:
+
+1. Add unit tests in the appropriate `tests/test_*.py` file
+2. Add integration tests in `tests/test_integration.py` if the feature requires actual sandbox execution
+3. Use the fixtures from `tests/conftest.py` for common test setup
+4. Mark platform-specific tests appropriately:
+
+```python
+import pytest
+
+@pytest.mark.linux_only
+@pytest.mark.requires_bwrap
+@pytest.mark.integration
+def test_my_feature(minimal_profile, bwrap_path):
+    """Test description."""
+    # Your test code
+```
+
+## Code Style
+
+### Python Style
+
+- Follow PEP 8 (enforced by `ruff`)
+- Maximum line length: 100 characters
+- Use double quotes for strings
+- Use type hints for all function signatures
+
+### Type Hints
+
+All code must be fully typed:
+
+```python
+from __future__ import annotations
+
+def process_command(args: Sequence[str], *, timeout: float | None = None) -> ProcessResult:
+    """Process a command with optional timeout."""
+    ...
+```
+
+### Documentation
+
+- All public functions, classes, and methods must have docstrings
+- Use Google-style docstrings
+- Include type information in docstrings for clarity
+
+Example:
+
+```python
+def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
+    """
+    Load a SandboxProfile from a JSON configuration file.
+
+    Parameters
+    ----------
+    path:
+        Path to the JSON profile file. Supports tilde expansion.
+
+    Returns
+    -------
+    SandboxProfile
+        The loaded and validated profile.
+
+    Raises
+    ------
+    SandboxError
+        If the file cannot be read or contains invalid configuration.
+    """
+```
+
+## Pull Request Guidelines
+
+### Before Submitting
+
+- [ ] All tests pass (`pytest tests/ -v`)
+- [ ] Code is formatted (`ruff format .`)
+- [ ] No linting errors (`ruff check .`)
+- [ ] Type checking passes (`basedpyright`)
+- [ ] Documentation is updated
+- [ ] New features have tests
+- [ ] Commit messages are clear and descriptive
+
+### PR Description
+
+Include in your PR description:
+
+1. **What** - What does this PR do?
+2. **Why** - Why is this change needed?
+3. **How** - How does it work? (for complex changes)
+4. **Testing** - How was this tested?
+5. **Screenshots** - If UI/output changes, include examples
+
+### Review Process
+
+1. Automated tests will run via GitHub Actions
+2. A maintainer will review your code
+3. Address any feedback or requested changes
+4. Once approved, your PR will be merged
+
+## Release Process
+
+Releases are automated via GitHub Actions:
+
+1. Update version in `pyproject.toml`
+2. Create a git tag: `git tag -a v0.2.0 -m "Release v0.2.0"`
+3. Push tag: `git push origin v0.2.0`
+4. Create a GitHub release for the tag
+5. GitHub Actions will automatically build and publish to PyPI
+
+## Project Structure
+
+```
+shannot/
+├── .devcontainer/          # GitHub Codespaces configuration
+├── .github/
+│   └── workflows/          # GitHub Actions CI/CD
+├── docs/                   # Documentation
+├── profiles/               # Example sandbox profiles
+├── shannot/                # Main package
+│   ├── __init__.py        # Package exports
+│   ├── cli.py             # Command-line interface
+│   ├── process.py         # Process execution utilities
+│   └── sandbox.py         # Core sandbox implementation
+├── tests/                  # Test suite
+│   ├── conftest.py        # Pytest fixtures and configuration
+│   ├── test_cli.py        # CLI tests
+│   ├── test_integration.py # Integration tests
+│   └── test_sandbox.py    # Unit tests
+└── pyproject.toml         # Project configuration
+```
+
+## Getting Help
+
+- **Issues**: [GitHub Issues](https://github.com/corv89/shannot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/corv89/shannot/discussions)
+- **Documentation**: [docs/](docs/)
+
+## Code of Conduct
+
+- Be respectful and inclusive
+- Focus on constructive feedback
+- Help others learn and grow
+- Assume good intentions
+
+## License
+
+By contributing to Shannot, you agree that your contributions will be licensed under the Apache License 2.0.
+
+---
+
+Thank you for contributing to Shannot! 🎉

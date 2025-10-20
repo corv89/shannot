@@ -1,5 +1,6 @@
 # Shannot Sandbox
 
+[![Tests](https://github.com/corv89/shannot/actions/workflows/test.yml/badge.svg)](https://github.com/corv89/shannot/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Linux](https://img.shields.io/badge/os-linux-green.svg)](https://www.kernel.org/)
@@ -7,6 +8,11 @@
 **Shannot** is an easy-to-deploy sandbox tool for running commands in a secure, read-only environment using Linux's [bubblewrap](https://github.com/containers/bubblewrap). It's designed for system diagnostics and monitoring, particularly with LLM-based agents where strict read-only enforcement is critical.
 
 > Claude __shannot__ do *that!*
+
+## 🚀 Try it now
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/corv89/shannot?quickstart=1)
+
+Want to try Shannot without installing anything? Click the badge above to open a dev environment to start testing sandboxed commands in seconds!
 
 ## Features
 
@@ -186,6 +192,63 @@ pip install git+https://github.com/corv89/shannot.git
 ```
 
 See [docs/deployment.md](docs/deployment.md) for advanced deployment scenarios.
+
+## Development
+
+### Quick Start with Codespaces
+
+The fastest way to start developing:
+
+1. Click the "Open in GitHub Codespaces" badge above
+2. Wait for the container to build (includes bubblewrap and all dependencies)
+3. Start coding immediately - everything is pre-configured!
+
+### Local Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/corv89/shannot.git
+cd shannot
+
+# Install bubblewrap (required for testing)
+sudo apt install bubblewrap  # Debian/Ubuntu
+sudo dnf install bubblewrap  # Fedora/RHEL
+
+# Install in development mode with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/ -v
+
+# Run linter and formatter
+ruff check .
+ruff format .
+
+# Run type checker
+basedpyright
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=shannot --cov-report=html
+
+# Run only unit tests (skip integration tests)
+pytest tests/ -v -m "not integration"
+
+# Run only integration tests (requires Linux + bubblewrap)
+pytest tests/ -v -m "integration"
+```
+
+**Note**: Integration tests require Linux and bubblewrap. They will be automatically skipped on other platforms.
+
+### Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Documentation
 
