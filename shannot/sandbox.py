@@ -598,7 +598,33 @@ class SandboxManager:
             result = run_process(invocation, env=env, capture_output=True, check=False)
 
         if check and not result.succeeded():
-            raise SandboxError(
-                f"Sandbox command failed with exit code {result.returncode}: {executable}"
-            )
+            error_msg = f"Sandbox command failed with exit code {result.returncode}: {executable}"
+            if result.stderr:
+                error_msg += f"\nStderr: {result.stderr.strip()}"
+
+                # Detect common environment issues
+                if "pivot_root: Operation not permitted" in result.stderr:
+                    error_msg += (
+                        "\n\nENVIRONMENT ISSUE: pivot_root is not permitted"
+                        "\nThis usually means you're running in a restricted container environment"
+                        "\n(e.g., GitHub Codespaces, Docker, or Kubernetes)."
+                        "\n"
+                        "\nBubblewrap requires CAP_SYS_ADMIN capability to create namespaces."
+                        "\nThis is typically not available in container environments for security."
+                        "\n"
+                        "\nSolutions:"
+                        "\n  1. Use a real Linux VM instead of a container"
+                        "\n  2. Use WSL2 on Windows (supports user namespaces)"
+                        "\n  3. Run on native Linux (Ubuntu, Fedora, etc.)"
+                        "\n  4. Enable privileged containers (not recommended)"
+                    )
+                elif "Operation not permitted" in result.stderr:
+                    error_msg += (
+                        "\n\nHint: This may be a permissions or capability issue."
+                        "\nCheck if user namespaces are enabled:"
+                        "\n  cat /proc/sys/kernel/unprivileged_userns_clone"
+                    )
+            if not result.stderr and not result.stdout:
+                error_msg += "\n(No output captured - command may require stdin or file not found)"
+            raise SandboxError(error_msg)
         return result
