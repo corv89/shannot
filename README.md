@@ -9,8 +9,6 @@
 
 > Claude __shannot__ do *that!*
 
-
-
 ## Features
 
 - **Minimal dependencies** - Only requires Python 3.9+ and bubblewrap
@@ -25,19 +23,62 @@
 
 ### Installation
 
-```bash
-# Install bubblewrap (if not already installed)
-# Fedora/RHEL
-sudo dnf install bubblewrap
+#### 1. Install bubblewrap (required dependency)
 
+```bash
 # Debian/Ubuntu
 sudo apt install bubblewrap
 
-# Install shannot
-pip install shannot
+# Fedora/RHEL
+sudo dnf install bubblewrap
 
-# Or use the installation script
+# openSUSE
+sudo zypper install bubblewrap
+
+# Arch Linux
+sudo pacman -S bubblewrap
+```
+
+#### 2. Install shannot
+
+**Option A: Use the install script (recommended)**
+
+The install script automatically detects your environment and uses the best method (uv → pipx → pip).
+
+*From local source (after cloning the repo):*
+```bash
+git clone https://github.com/corv89/shannot.git
+cd shannot
 ./install.sh
+```
+
+*Remote installation (direct from GitHub):*
+```bash
+curl -fsSL https://raw.githubusercontent.com/corv89/shannot/main/install.sh | bash
+```
+
+*For automation/CI (non-interactive):*
+```bash
+./install.sh -y
+# or
+curl -fsSL https://raw.githubusercontent.com/corv89/shannot/main/install.sh | bash -s -- -y
+```
+
+**Option B: Manual installation (for advanced users)**
+
+Using uv (fastest, handles Python versions automatically):
+```bash
+uv tool install shannot
+```
+
+Using pipx (good alternative, requires Python 3.9+):
+```bash
+pipx install shannot
+```
+
+Using pip (fallback, may require `--break-system-packages` on some systems):
+```bash
+pip install --user shannot
 ```
 
 ### Usage
@@ -170,26 +211,24 @@ See [docs/api.md](docs/api.md) for complete API documentation including profile 
 
 ## Deployment
 
-### SSH Install
+### Automated Installation
 
-For quick deployment to remote systems:
+For CI/CD, scripts, or remote deployment:
 
 ```bash
-# Transfer and install in one command
-ssh user@remote "bash -s" < install.sh
+# Non-interactive installation (auto-installs uv if needed, accepts all prompts)
+./install.sh -y
+
+# SSH remote installation
+ssh user@remote "bash -s -- -y" < install.sh
+
+# Direct curl installation
+curl -fsSL https://raw.githubusercontent.com/corv89/shannot/main/install.sh | bash -s -- -y
 ```
 
 See [docs/deployment.md](docs/deployment.md) for advanced deployment scenarios.
 
 ## Development
-
-### Quick Start with Codespaces
-
-The fastest way to start developing:
-
-1. Click the "Open in GitHub Codespaces" badge above
-2. Wait for the container to build (includes bubblewrap and all dependencies)
-3. Start coding immediately - everything is pre-configured!
 
 ### Local Development Setup
 
@@ -241,6 +280,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 ## Documentation
 
 - **[installation.md](docs/installation.md)** - Installation for various Linux distributions
+- **[troubleshooting.md](docs/troubleshooting.md)** - Common issues and solutions
 - **[usage.md](docs/usage.md)** - CLI usage and common use cases
 - **[profiles.md](docs/profiles.md)** - Complete profile configuration reference
 - **[api.md](docs/api.md)** - Python API documentation
@@ -249,7 +289,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 ## Contributing
 
-Contributions are welcome!
+Contributions are welcome! Please see our [guide](CONTRIBUTING.md).
 
 - Report bugs via [GitHub Issues](https://github.com/corv89/shannot/issues)
 - Submit pull requests
@@ -267,13 +307,9 @@ While Shannot provides strong isolation, it's not a security boundary:
 
 For production security, combine with:
 - SELinux/AppArmor policies
-- seccomp filters (supported via profiles)
+- seccomp filters (supported via [profiles](docs/profiles.md))
 - User namespaces
 - Resource limits via cgroups
-
-## License
-
-Apache License 2.0 - See [LICENSE](LICENSE) file for details.
 
 ## Credits
 
