@@ -9,10 +9,7 @@
 
 > Claude __shannot__ do *that!*
 
-## 🚀 Try it now
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/corv89/shannot?quickstart=1)
 
-Want to try Shannot without installing anything? Click the badge above to open a dev environment to start testing sandboxed commands in seconds!
 
 ## Features
 
