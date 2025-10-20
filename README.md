@@ -36,7 +36,7 @@ sudo dnf install bubblewrap
 # Debian/Ubuntu
 sudo apt install bubblewrap
 
-# Install shannot (once published)
+# Install shannot
 pip install shannot
 
 # Or use the installation script
@@ -173,22 +173,13 @@ See [docs/api.md](docs/api.md) for complete API documentation including profile 
 
 ## Deployment
 
-### Single-File Transfer
+### SSH Install
 
 For quick deployment to remote systems:
-
-### SSH Install
 
 ```bash
 # Transfer and install in one command
 ssh user@remote "bash -s" < install.sh
-```
-
-### Via pip
-
-```bash
-# From source
-pip install git+https://github.com/corv89/shannot.git
 ```
 
 See [docs/deployment.md](docs/deployment.md) for advanced deployment scenarios.
