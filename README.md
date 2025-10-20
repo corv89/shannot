@@ -23,6 +23,8 @@ Want to try Shannot without installing anything? Click the badge above to open a
 - **Command allowlisting** - Restrict which commands can be executed
 - **Drop-in deployment** - Transfer to remote systems and run in minutes
 - **Type-safe API** - Fully typed Python interface
+- **🆕 MCP Integration** - Works with Claude Desktop out-of-the-box ([docs](docs/mcp.md))
+- **🆕 LLM-Ready** - Pydantic-AI tools for building custom agents ([LLM.md](LLM.md))
 
 ## Quick Start
 
@@ -39,9 +41,27 @@ sudo apt install bubblewrap
 # Install shannot (once published)
 pip install shannot
 
+# Or with MCP support for Claude Desktop
+pip install shannot[mcp]
+
 # Or use the installation script
 ./install.sh
 ```
+
+### 🚀 New: Use with Claude Desktop (5 minutes)
+
+```bash
+# Install with MCP support
+pip install shannot[mcp]
+
+# Auto-configure Claude Desktop
+shannot mcp install
+
+# Restart Claude Desktop and ask:
+# "Check my disk space" or "Show me /etc/os-release"
+```
+
+See **[MCP Integration Guide](docs/mcp.md)** for full setup.
 
 ### Usage
 

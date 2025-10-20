@@ -271,7 +271,107 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.set_defaults(handler=_handle_verify)
 
+    # mcp subcommand
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="MCP server commands (install, test).",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", required=True)
+
+    # mcp install
+    mcp_install_parser = mcp_subparsers.add_parser(
+        "install",
+        help="Install MCP server config for Claude Desktop.",
+    )
+    mcp_install_parser.set_defaults(handler=_handle_mcp_install)
+
+    # mcp test
+    mcp_test_parser = mcp_subparsers.add_parser(
+        "test",
+        help="Test MCP server with sample commands.",
+    )
+    mcp_test_parser.set_defaults(handler=_handle_mcp_test)
+
     return parser
+
+
+def _handle_mcp_install(args: argparse.Namespace) -> int:
+    """Install MCP server configuration for Claude Desktop."""
+    import platform
+
+    if platform.system() == "Darwin":
+        config_path = (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "Claude"
+            / "claude_desktop_config.json"
+        )
+    elif platform.system() == "Windows":
+        config_path = Path.home() / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
+    else:
+        _LOGGER.error("Claude Desktop config location unknown for this platform")
+        _LOGGER.info("Please manually add the following to your Claude Desktop config:")
+        _LOGGER.info(
+            json.dumps({"mcpServers": {"shannot": {"command": "shannot-mcp", "env": {}}}}, indent=2)
+        )
+        return 1
+
+    # Check if config file exists
+    if config_path.exists():
+        with open(config_path) as f:
+            config = json.load(f)
+    else:
+        config = {}
+
+    # Add shannot MCP server
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    config["mcpServers"]["shannot"] = {"command": "shannot-mcp", "env": {}}
+
+    # Write config
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+    _LOGGER.info(f"✓ Installed MCP server config to {config_path}")
+    _LOGGER.info("✓ Restart Claude Desktop to use Shannot tools")
+    return 0
+
+
+def _handle_mcp_test(args: argparse.Namespace) -> int:
+    """Test MCP server functionality."""
+    try:
+        # Check if MCP dependencies are installed
+        import mcp  # type: ignore
+        from shannot.tools import SandboxDeps, run_command, CommandInput
+    except ImportError:
+        _LOGGER.error("MCP dependencies not installed")
+        _LOGGER.info("Install with: pip install shannot[mcp]")
+        return 1
+
+    # Try to load a profile and test basic functionality
+    try:
+        deps = SandboxDeps(profile_name="minimal")
+        _LOGGER.info(f"✓ Loaded profile: {deps.profile.name}")
+        _LOGGER.info(f"  Allowed commands: {', '.join(deps.profile.allowed_commands[:5])}")
+
+        # Test a simple command
+        import asyncio
+
+        result = asyncio.run(run_command(deps, CommandInput(command=["ls", "/"])))
+        if result.succeeded:
+            _LOGGER.info("✓ Test command succeeded")
+            _LOGGER.info(f"  Output preview: {result.stdout[:100]}...")
+            return 0
+        else:
+            _LOGGER.error("✗ Test command failed")
+            _LOGGER.error(f"  Error: {result.stderr}")
+            return 1
+    except Exception as e:
+        _LOGGER.error(f"✗ Test failed: {e}")
+        return 1
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -38,6 +38,7 @@ Documentation = "https://github.com/corv89/shannot/blob/main/README.md"
 
 [project.scripts]
 shannot = "shannot.cli:main"
+shannot-mcp = "shannot.mcp_main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -46,6 +47,19 @@ dev = [
     "ruff>=0.1.0",
     "basedpyright>=1.0",
     "types-setuptools",
+]
+mcp = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+]
+pydantic-ai = [
+    "pydantic-ai>=0.0.1",
+    "pydantic>=2.0.0",
+]
+all = [
+    "mcp>=1.0.0",
+    "pydantic-ai>=0.0.1",
+    "pydantic>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
