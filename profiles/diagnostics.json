@@ -1,0 +1,87 @@
+{
+  "name": "diagnostics",
+  "allowed_commands": [
+    "ls", "/usr/bin/ls", "/bin/ls",
+    "cat", "/usr/bin/cat", "/bin/cat",
+    "head", "/usr/bin/head",
+    "tail", "/usr/bin/tail",
+    "grep", "/usr/bin/grep", "/bin/grep",
+    "find", "/usr/bin/find",
+    "df", "/usr/bin/df", "/bin/df",
+    "free", "/usr/bin/free",
+    "ps", "/usr/bin/ps", "/bin/ps",
+    "uptime", "/usr/bin/uptime",
+    "stat", "/usr/bin/stat",
+    "wc", "/usr/bin/wc",
+    "env", "/usr/bin/env"
+  ],
+  "binds": [
+    {
+      "source": "/usr",
+      "target": "/usr",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/bin",
+      "target": "/bin",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/sbin",
+      "target": "/sbin",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/lib",
+      "target": "/lib",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/lib64",
+      "target": "/lib64",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/etc",
+      "target": "/etc",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/proc",
+      "target": "/proc",
+      "read_only": false,
+      "create_target": false
+    },
+    {
+      "source": "/sys",
+      "target": "/sys",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/var/log",
+      "target": "/var/log",
+      "read_only": true,
+      "create_target": true
+    }
+  ],
+  "tmpfs_paths": ["/tmp", "/var/tmp", "/run", "/home/diagnostics"],
+  "environment": {
+    "HOME": "/home/diagnostics",
+    "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8"
+  },
+  "network_isolation": true,
+  "additional_args": [
+    "--hostname", "diagnostics-sandbox",
+    "--chdir", "/home/diagnostics",
+    "--dir", "/var/cache"
+  ]
+}

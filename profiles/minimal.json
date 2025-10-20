@@ -1,0 +1,59 @@
+{
+  "name": "minimal",
+  "allowed_commands": [
+    "ls",
+    "/usr/bin/ls",
+    "/bin/ls",
+    "cat",
+    "/usr/bin/cat",
+    "/bin/cat",
+    "grep",
+    "/usr/bin/grep",
+    "/bin/grep",
+    "find",
+    "/usr/bin/find"
+  ],
+  "binds": [
+    {
+      "source": "/usr",
+      "target": "/usr",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/bin",
+      "target": "/bin",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/lib",
+      "target": "/lib",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/lib64",
+      "target": "/lib64",
+      "read_only": true,
+      "create_target": false
+    },
+    {
+      "source": "/etc",
+      "target": "/etc",
+      "read_only": true,
+      "create_target": false
+    }
+  ],
+  "tmpfs_paths": ["/tmp", "/home/sandbox"],
+  "environment": {
+    "HOME": "/home/sandbox",
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C.UTF-8"
+  },
+  "network_isolation": true,
+  "additional_args": [
+    "--hostname", "sandbox",
+    "--chdir", "/home/sandbox"
+  ]
+}

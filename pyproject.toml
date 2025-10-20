@@ -1,0 +1,109 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shannot"
+version = "0.1.0"
+description = "Secure read-only sandboxing for LLM agents and system diagnostics"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "corv89", email = "corv89@users.noreply.github.com"}
+]
+keywords = ["sandbox", "bubblewrap", "security", "read-only", "llm", "diagnostics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/corv89/shannot"
+Repository = "https://github.com/corv89/shannot"
+"Bug Tracker" = "https://github.com/corv89/shannot/issues"
+Documentation = "https://github.com/corv89/shannot/blob/main/README.md"
+
+[project.scripts]
+shannot = "shannot.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "basedpyright>=1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shannot*"]
+
+[tool.setuptools.package-data]
+shannot = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "UP006",  # Use `list` instead of `List` - not available in Python 3.9 for all contexts
+    "UP007",  # Use `X | Y` instead of `Union[X, Y]` - requires Python 3.10+
+    "UP035",  # `typing.List` is deprecated - still needed for Python 3.9 compatibility
+    "UP045",  # Use `X | None` instead of `Optional[X]` - requires Python 3.10+
+]
+
+[tool.basedpyright]
+pythonVersion = "3.9"
+typeCheckingMode = "standard"
+reportDeprecated = false
+reportUnnecessaryIsInstance = false
+reportUnusedCallResult = "warning"
+reportAny = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownArgumentType = "warning"
+reportUnknownMemberType = "warning"
+reportPrivateUsage = "warning"
+reportUnusedImport = "warning"
+reportUnreachable = "warning"
+reportUnannotatedClassAttribute = "warning"
+reportExplicitAny = "warning"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]
