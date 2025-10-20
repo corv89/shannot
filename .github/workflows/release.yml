@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       test_pypi:
-        description: 'Publish to Test PyPI instead of PyPI'
+        description: "Publish to Test PyPI instead of PyPI"
         required: false
         type: boolean
         default: true
@@ -56,7 +56,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/shannot
     permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
+      id-token: write # IMPORTANT: mandatory for trusted publishing
 
     steps:
       - name: Download artifacts
@@ -101,6 +101,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
