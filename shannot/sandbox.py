@@ -264,6 +264,9 @@ class SandboxProfile:
     network_isolation:
         When ``True``, the sandbox is expected to execute within an isolated
         network namespace (e.g. ``--unshare-net``).
+    user_namespace_isolation:
+        When ``True``, use user namespace isolation (``--unshare-user``).
+        May need to be disabled in some environments (e.g., restrictive kernels).
     additional_args:
         Extra ``bwrap`` arguments to append verbatim. Useful for experimental
         tuning while the profile format is still evolving.
@@ -276,6 +279,7 @@ class SandboxProfile:
     environment: Mapping[str, str] = field(default_factory=dict)
     seccomp_profile: Optional[Path] = None
     network_isolation: bool = True
+    user_namespace_isolation: bool = True
     additional_args: Sequence[str] = field(default_factory=tuple)
 
     @classmethod
@@ -318,6 +322,11 @@ class SandboxProfile:
             field_name="network_isolation",
             default=True,
         )
+        user_namespace_isolation = _coerce_bool(
+            data.get("user_namespace_isolation"),
+            field_name="user_namespace_isolation",
+            default=True,
+        )
         additional_args = _coerce_string_sequence(
             data.get("additional_args"),
             field_name="additional_args",
@@ -330,6 +339,7 @@ class SandboxProfile:
             environment=environment,
             seccomp_profile=seccomp_profile,
             network_isolation=network_isolation,
+            user_namespace_isolation=user_namespace_isolation,
             additional_args=additional_args,
         )
         profile.validate()
@@ -423,7 +433,16 @@ class BubblewrapCommandBuilder:
 
         # Namespace isolation
         args.append("--die-with-parent")
-        args.append("--unshare-all")
+
+        # Use granular unsharing instead of --unshare-all to handle isolation flags
+        if self._profile.network_isolation:
+            args.append("--unshare-net")
+        if self._profile.user_namespace_isolation:
+            args.append("--unshare-user")
+        args.append("--unshare-ipc")
+        args.append("--unshare-pid")
+        args.append("--unshare-uts")
+        args.append("--unshare-cgroup")
 
         # Standard mounts.
         args.extend(("--proc", "/proc"))
@@ -603,7 +622,36 @@ class SandboxManager:
                 error_msg += f"\nStderr: {result.stderr.strip()}"
 
                 # Detect common environment issues
-                if "pivot_root: Operation not permitted" in result.stderr:
+                if (
+                    "setting up uid map: Permission denied" in result.stderr
+                    or "Failed RTM_NEWADDR: Operation not permitted" in result.stderr
+                ):
+                    error_msg += (
+                        "\n\nUSER NAMESPACE ISSUE: Unprivileged user namespace creation is blocked"
+                        "\n"
+                        "\nCommon causes:"
+                        "\n  1. Ubuntu 24.04+ has AppArmor restricting unprivileged user namespaces"
+                        "\n  2. Kernel user namespace support is disabled"
+                        "\n  3. Running in a restricted container/VM environment"
+                        "\n"
+                        "\nSolutions (in order of preference):"
+                        "\n"
+                        "\n  Ubuntu 24.04+ (AppArmor restriction):"
+                        "\n    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0"
+                        "\n    echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee -a /etc/sysctl.conf"
+                        "\n"
+                        "\n  Other distros (check if enabled):"
+                        "\n    cat /proc/sys/kernel/unprivileged_userns_clone  # should be 1"
+                        "\n    cat /proc/sys/user/max_user_namespaces          # should be > 0"
+                        "\n"
+                        "\n  Enable if needed:"
+                        "\n    sudo sysctl -w kernel.unprivileged_userns_clone=1"
+                        "\n    echo 'kernel.unprivileged_userns_clone=1' | sudo tee -a /etc/sysctl.conf"
+                        "\n"
+                        "\nFor more details, see:"
+                        "\n  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md"
+                    )
+                elif "pivot_root: Operation not permitted" in result.stderr:
                     error_msg += (
                         "\n\nENVIRONMENT ISSUE: pivot_root is not permitted"
                         "\nThis usually means you're running in a restricted container environment"
@@ -623,6 +671,7 @@ class SandboxManager:
                         "\n\nHint: This may be a permissions or capability issue."
                         "\nCheck if user namespaces are enabled:"
                         "\n  cat /proc/sys/kernel/unprivileged_userns_clone"
+                        "\n  cat /proc/sys/user/max_user_namespaces"
                     )
             if not result.stderr and not result.stdout:
                 error_msg += "\n(No output captured - command may require stdin or file not found)"
