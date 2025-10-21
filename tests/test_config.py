@@ -7,10 +7,9 @@ from unittest.mock import patch
 import pytest
 
 from shannot.config import (
-    ExecutorConfig,
     LocalExecutorConfig,
-    SSHExecutorConfig,
     ShannotConfig,
+    SSHExecutorConfig,
     create_executor,
     get_config_path,
     load_config,
