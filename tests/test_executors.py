@@ -150,29 +150,25 @@ class TestSSHExecutor:
     @pytest.mark.asyncio
     async def test_ssh_executor_init(self):
         """Test SSHExecutor initialization."""
-        try:
-            from shannot.executors import SSHExecutor
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
-            executor = SSHExecutor(
-                host="test.example.com",
-                username="testuser",
-                key_file=Path("/tmp/test_key"),
-                port=2222,
-            )
+        executor = SSHExecutor(
+            host="test.example.com",
+            username="testuser",
+            key_file=Path("/tmp/test_key"),
+            port=2222,
+        )
 
-            assert executor.host == "test.example.com"
-            assert executor.username == "testuser"
-            assert executor.port == 2222
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        assert executor.host == "test.example.com"
+        assert executor.username == "testuser"
+        assert executor.port == 2222
 
     @pytest.mark.asyncio
     async def test_ssh_executor_run_command(self, mock_ssh_connection):
         """Test SSH command execution with mocked connection."""
-        try:
-            from shannot.executors import SSHExecutor
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
         executor = SSHExecutor(host="test.example.com")
         profile = SandboxProfile(name="test", allowed_commands=["echo"])
@@ -188,10 +184,8 @@ class TestSSHExecutor:
     @pytest.mark.asyncio
     async def test_ssh_executor_connection_pooling(self, mock_ssh_connection):
         """Test that SSH connections are pooled and reused."""
-        try:
-            from shannot.executors import SSHExecutor
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
         executor = SSHExecutor(host="test.example.com", connection_pool_size=2)
         profile = SandboxProfile(name="test", allowed_commands=["echo"])
@@ -211,10 +205,8 @@ class TestSSHExecutor:
     @pytest.mark.asyncio
     async def test_ssh_executor_timeout_handling(self, mock_ssh_connection):
         """Test SSH timeout handling."""
-        try:
-            from shannot.executors import SSHExecutor
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
         executor = SSHExecutor(host="test.example.com")
         profile = SandboxProfile(name="test", allowed_commands=["sleep"])
@@ -229,10 +221,8 @@ class TestSSHExecutor:
     @pytest.mark.asyncio
     async def test_ssh_executor_cleanup(self, mock_ssh_connection):
         """Test cleanup closes all pooled connections."""
-        try:
-            from shannot.executors import SSHExecutor
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
         executor = SSHExecutor(host="test.example.com")
 
@@ -248,10 +238,8 @@ class TestSSHExecutor:
     @pytest.mark.asyncio
     async def test_ssh_executor_connection_failure(self):
         """Test SSH connection failure handling."""
-        try:
-            from shannot.executors import SSHExecutor
-        except ImportError:
-            pytest.skip("asyncssh not installed")
+        pytest.importorskip("asyncssh")
+        from shannot.executors import SSHExecutor
 
         executor = SSHExecutor(host="nonexistent.example.com")
         profile = SandboxProfile(name="test", allowed_commands=["echo"])

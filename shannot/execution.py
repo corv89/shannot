@@ -85,7 +85,7 @@ class SandboxExecutor(ABC):
             >>> assert result.returncode == 0
             >>> assert "hello" in result.stdout
         """
-        ...
+        raise NotImplementedError("Subclasses must implement run_command")
 
     async def read_file(self, profile: SandboxProfile, path: str) -> str:
         """Read file from filesystem.
