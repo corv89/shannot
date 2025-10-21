@@ -7,8 +7,8 @@ name = "shannot"
 version = "0.1.1"
 description = "Secure read-only sandboxing for LLM agents and system diagnostics"
 readme = "README.md"
-requires-python = ">=3.9"
-license = "Apache-2.0"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
 authors = [
     {name = "corv89", email = "corv89@users.noreply.github.com"}
 ]
@@ -19,7 +19,6 @@ classifiers = [
     "Topic :: Security",
     "Topic :: System :: Systems Administration",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,14 +36,33 @@ Documentation = "https://github.com/corv89/shannot/blob/main/README.md"
 
 [project.scripts]
 shannot = "shannot.cli:main"
+shannot-mcp = "shannot.mcp_main:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0",
     "ruff>=0.1.0",
     "basedpyright>=1.0",
     "types-setuptools",
+]
+mcp = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+]
+pydantic-ai = [
+    "pydantic-ai>=0.0.1",
+    "pydantic>=2.0.0",
+]
+remote = [
+    "asyncssh>=2.14.0",
+]
+all = [
+    "mcp>=1.0.0",
+    "pydantic-ai>=0.0.1",
+    "pydantic>=2.0.0",
+    "asyncssh>=2.14.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -56,7 +74,7 @@ shannot = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.format]
 quote-style = "double"
@@ -74,14 +92,11 @@ select = [
     "B",   # flake8-bugbear
 ]
 ignore = [
-    "UP006",  # Use `list` instead of `List` - not available in Python 3.9 for all contexts
-    "UP007",  # Use `X | Y` instead of `Union[X, Y]` - requires Python 3.10+
-    "UP035",  # `typing.List` is deprecated - still needed for Python 3.9 compatibility
-    "UP045",  # Use `X | None` instead of `Optional[X]` - requires Python 3.10+
+    # All Python 3.10+ upgrade rules are now enabled
 ]
 
 [tool.basedpyright]
-pythonVersion = "3.9"
+pythonVersion = "3.10"
 typeCheckingMode = "standard"
 reportDeprecated = false
 reportUnnecessaryIsInstance = false

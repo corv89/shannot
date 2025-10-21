@@ -8,7 +8,6 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Optional
 
 from shannot import (
     BubblewrapCommandBuilder,
@@ -42,7 +41,7 @@ class SandboxProfileTests(unittest.TestCase):
             binds=cast(tuple[SandboxBind, ...], kwargs["binds"]),
             tmpfs_paths=cast(tuple[Path, ...], kwargs["tmpfs_paths"]),
             environment=cast(dict[str, str], kwargs["environment"]),
-            seccomp_profile=cast(Optional[Path], kwargs["seccomp_profile"]),
+            seccomp_profile=cast(Path | None, kwargs["seccomp_profile"]),
             network_isolation=cast(bool, kwargs["network_isolation"]),
             additional_args=cast(tuple[str, ...], kwargs["additional_args"]),
         )
