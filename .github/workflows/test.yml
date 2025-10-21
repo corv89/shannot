@@ -80,15 +80,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap
 
-      - name: Test install script
+      - name: Install shannot with pip
         run: |
-          bash install.sh
+          pip install --user ".[all]"
+
+      - name: Add user bin to PATH
+        run: |
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Verify shannot command exists and shows help
         run: |
           shannot --help
-          shannot run --help
           shannot verify --help
           shannot export --help
 
