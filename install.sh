@@ -108,6 +108,10 @@ fi
 # Check if uv is available
 if command -v uv &> /dev/null; then
     echo "Using uv for installation..."
+
+    # Ensure ~/.local/bin exists for UV to create symlinks
+    mkdir -p "$HOME/.local/bin"
+
     if [ "$INSTALL_SOURCE" = "local" ]; then
         uv tool install --from . shannot || {
             echo -e "${RED}Installation with uv failed${NC}"
@@ -119,8 +123,26 @@ if command -v uv &> /dev/null; then
             exit 1
         }
     fi
-# Offer to install uv if not present
-elif ! command -v pipx &> /dev/null; then
+# Check if pipx is available and use it
+elif command -v pipx &> /dev/null; then
+    echo "Using pipx for installation..."
+
+    # Ensure ~/.local/bin exists
+    mkdir -p "$HOME/.local/bin"
+
+    if [ "$INSTALL_SOURCE" = "local" ]; then
+        pipx install . || {
+            echo -e "${RED}Installation with pipx failed${NC}"
+            exit 1
+        }
+    else
+        pipx install shannot || {
+            echo -e "${RED}Installation with pipx failed${NC}"
+            exit 1
+        }
+    fi
+# Offer to install uv if neither uv nor pipx are present
+else
     SHOULD_INSTALL_UV=false
 
     if [ "$NON_INTERACTIVE" = true ]; then
@@ -152,6 +174,10 @@ elif ! command -v pipx &> /dev/null; then
                 echo -e "${GREEN}✓${NC} uv installed successfully"
                 echo
                 echo "Installing shannot with uv..."
+
+                # Ensure ~/.local/bin exists for UV to create symlinks
+                mkdir -p "$HOME/.local/bin"
+
                 if [ "$INSTALL_SOURCE" = "local" ]; then
                     uv tool install --from . shannot || {
                         echo -e "${RED}Installation with uv failed${NC}"
@@ -180,25 +206,14 @@ elif ! command -v pipx &> /dev/null; then
     fi
 fi
 
-# Fall back to pipx if available and uv installation was skipped/failed
-if [ "$INSTALL_METHOD" = "fallback" ] && command -v pipx &> /dev/null; then
-    echo "Using pipx for installation..."
-    if [ "$INSTALL_SOURCE" = "local" ]; then
-        pipx install . || {
-            echo -e "${RED}Installation with pipx failed${NC}"
-            exit 1
-        }
-    else
-        pipx install shannot || {
-            echo -e "${RED}Installation with pipx failed${NC}"
-            exit 1
-        }
-    fi
-# Use traditional pip as last resort
-elif [ "$INSTALL_METHOD" = "fallback" ]; then
+# Use traditional pip as fallback (when uv installation was declined/failed)
+if [ "$INSTALL_METHOD" = "fallback" ]; then
     echo -e "${YELLOW}Note:${NC} Using pip installation..."
     echo "  For better experience, install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
     echo
+
+    # Ensure ~/.local/bin exists for pip --user installations
+    mkdir -p "$HOME/.local/bin"
 
     # Determine pip install target
     if [ "$INSTALL_SOURCE" = "local" ]; then
@@ -208,7 +223,10 @@ elif [ "$INSTALL_METHOD" = "fallback" ]; then
     fi
 
     # Try pip install and check for PEP 668 error
-    if python3 -m pip install --user "$PIP_TARGET" 2>&1 | grep -q "externally-managed-environment"; then
+    PIP_OUTPUT=$(python3 -m pip install --user "$PIP_TARGET" 2>&1)
+    PIP_EXIT_CODE=$?
+
+    if echo "$PIP_OUTPUT" | grep -q "externally-managed-environment"; then
         echo -e "${YELLOW}Error:${NC} System Python is externally managed (PEP 668)"
         echo
 
@@ -237,6 +255,14 @@ elif [ "$INSTALL_METHOD" = "fallback" ]; then
                 exit 1
             fi
         fi
+    elif [ $PIP_EXIT_CODE -ne 0 ]; then
+        # pip failed for some other reason
+        echo -e "${RED}Installation failed${NC}"
+        echo "$PIP_OUTPUT"
+        exit 1
+    else
+        # pip succeeded
+        echo -e "${GREEN}✓${NC} Installed with pip"
     fi
 fi
 
@@ -292,7 +318,28 @@ echo
 echo "Verifying installation..."
 
 # Add common tool installation paths to PATH for verification
+# UV installs tools to ~/.local/bin by default on Unix systems
 export PATH="$HOME/.local/bin:$PATH"
+
+# Also add Python user scripts directory (for pip --user installs)
+PYTHON_USER_BIN="$(python3 -c 'import sysconfig; print(sysconfig.get_path("scripts", "posix_user"))' 2>/dev/null)"
+if [ -n "$PYTHON_USER_BIN" ]; then
+    echo "  Python user scripts dir: $PYTHON_USER_BIN"
+    export PATH="$PYTHON_USER_BIN:$PATH"
+else
+    echo "  Could not determine Python user scripts directory"
+fi
+
+# Debug: Check where shannot was installed
+if [ -f "$HOME/.local/bin/shannot" ]; then
+    echo "  Found shannot in ~/.local/bin"
+elif [ -n "$PYTHON_USER_BIN" ] && [ -f "$PYTHON_USER_BIN/shannot" ]; then
+    echo "  Found shannot in $PYTHON_USER_BIN"
+elif [ -d "$HOME/.local/bin" ]; then
+    echo "  ~/.local/bin exists but shannot not found"
+else
+    echo "  ~/.local/bin does not exist"
+fi
 
 if command -v shannot &> /dev/null; then
     echo -e "${GREEN}✓${NC} shannot command is available"
@@ -319,10 +366,10 @@ echo
 echo -e "${GREEN}${BOLD}Installation complete!${NC}"
 echo
 echo "Quick start:"
-echo "  ${BOLD}shannot run ls /${NC}              # Run ls / in sandbox"
-echo "  ${BOLD}shannot verify${NC}                # Verify sandbox works"
-echo "  ${BOLD}shannot export${NC}                # Export profile config"
-echo "  ${BOLD}shannot --help${NC}                # Show all options"
+echo -e "  ${BOLD}shannot run ls /${NC}              # Run ls / in sandbox"
+echo -e "  ${BOLD}shannot verify${NC}                # Verify sandbox works"
+echo -e "  ${BOLD}shannot export${NC}                # Export profile config"
+echo -e "  ${BOLD}shannot --help${NC}                # Show all options"
 echo
 echo "Configuration:"
 echo "  Profile: ~/.config/shannot/profile.json"

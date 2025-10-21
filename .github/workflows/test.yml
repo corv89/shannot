@@ -83,6 +83,7 @@ jobs:
       - name: Test install script
         run: |
           bash install.sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Verify shannot command exists and shows help
         run: |
