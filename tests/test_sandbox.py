@@ -141,7 +141,13 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
 
         # Check essential arguments are present
         self.assertIn("--die-with-parent", args)
-        self.assertIn("--unshare-all", args)  # network_isolation=True uses --unshare-all
+        # Check granular namespace isolation flags
+        self.assertIn("--unshare-net", args)  # network_isolation=True
+        self.assertIn("--unshare-user", args)  # user_namespace_isolation=True (default)
+        self.assertIn("--unshare-ipc", args)
+        self.assertIn("--unshare-pid", args)
+        self.assertIn("--unshare-uts", args)
+        self.assertIn("--unshare-cgroup", args)
         self.assertIn("--proc", args)
         self.assertIn("/proc", args)
         self.assertIn("--tmpfs", args)
@@ -158,7 +164,7 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
         self.assertEqual(args[dash_idx + 2], "/")
 
     def test_network_isolation_optional(self) -> None:
-        """Network isolation flag is stored but --unshare-all is always used."""
+        """Network isolation can be disabled while other namespaces remain isolated."""
         profile = SandboxProfile(
             name="test",
             network_isolation=False,
@@ -167,9 +173,32 @@ class BubblewrapCommandBuilderTests(unittest.TestCase):
         builder = BubblewrapCommandBuilder(profile, ["ls"])
         args = builder.build()
 
-        # --unshare-all is always used regardless of network_isolation setting
-        # The flag is preserved for future extensibility
-        self.assertIn("--unshare-all", args)
+        # When network_isolation=False, --unshare-net should NOT be present
+        self.assertNotIn("--unshare-net", args)
+        # But other namespace isolation should still be present
+        self.assertIn("--unshare-user", args)
+        self.assertIn("--unshare-ipc", args)
+        self.assertIn("--unshare-pid", args)
+        self.assertIn("--unshare-uts", args)
+        self.assertIn("--unshare-cgroup", args)
+
+    def test_user_namespace_isolation_optional(self) -> None:
+        """User namespace isolation can be disabled for restricted environments."""
+        profile = SandboxProfile(
+            name="test",
+            user_namespace_isolation=False,
+        )
+
+        builder = BubblewrapCommandBuilder(profile, ["ls"])
+        args = builder.build()
+
+        # When user_namespace_isolation=False, --unshare-user should NOT be present
+        self.assertNotIn("--unshare-user", args)
+        # But other namespace isolation should still be present
+        self.assertIn("--unshare-ipc", args)
+        self.assertIn("--unshare-pid", args)
+        self.assertIn("--unshare-uts", args)
+        self.assertIn("--unshare-cgroup", args)
 
 
 class SandboxBindTests(unittest.TestCase):
