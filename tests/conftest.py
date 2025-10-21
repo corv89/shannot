@@ -115,12 +115,14 @@ def profile_json_minimal(temp_dir: Path) -> Path:
     profile_path = temp_dir / "minimal.json"
     profile_content = """{
   "name": "test-minimal",
-  "allowed_commands": ["ls", "cat", "echo"],
+  "allowed_commands": ["ls", "cat", "echo", "df", "free", "find", "grep"],
   "binds": [
     {"source": "/usr", "target": "/usr", "read_only": true},
     {"source": "/lib", "target": "/lib", "read_only": true},
     {"source": "/lib64", "target": "/lib64", "read_only": true},
-    {"source": "/etc", "target": "/etc", "read_only": true}
+    {"source": "/etc", "target": "/etc", "read_only": true},
+    {"source": "/proc", "target": "/proc", "read_only": true},
+    {"source": "/sys", "target": "/sys", "read_only": true}
   ],
   "tmpfs_paths": ["/tmp"],
   "environment": {"PATH": "/usr/bin:/bin"},

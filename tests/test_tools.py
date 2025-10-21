@@ -51,6 +51,7 @@ def sandbox_deps(mock_profile, mock_manager):
     deps = Mock(spec=SandboxDeps)
     deps.profile = mock_profile
     deps.manager = mock_manager
+    deps.executor = None  # Default to None, matches backward compatibility mode
     return deps
 
 
