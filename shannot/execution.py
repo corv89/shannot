@@ -15,11 +15,15 @@ Example:
         >>> result = await executor.run_command(profile, ["ls", "/"])
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from shannot.process import ProcessResult
-from shannot.sandbox import SandboxProfile
+
+if TYPE_CHECKING:
+    from shannot.sandbox import SandboxProfile
 
 # Type for executor configuration
 ExecutorType = Literal["local", "ssh"]
