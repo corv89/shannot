@@ -312,6 +312,7 @@ class TestConfigRoundTrip:
         assert set(loaded.executor.keys()) == {"local", "prod", "staging"}
 
         prod = loaded.executor["prod"]
+        assert isinstance(prod, SSHExecutorConfig)
         assert prod.host == "prod.example.com"
         assert prod.username == "admin"
         assert prod.port == 2222
@@ -319,6 +320,7 @@ class TestConfigRoundTrip:
         assert prod.profile == "diagnostics"
 
         staging = loaded.executor["staging"]
+        assert isinstance(staging, SSHExecutorConfig)
         assert staging.host == "staging.example.com"
         assert staging.username is None
         assert staging.port == 22  # default
