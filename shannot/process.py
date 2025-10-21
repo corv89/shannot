@@ -6,7 +6,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Union, cast
+from typing import cast
 
 
 @dataclass
@@ -24,7 +24,7 @@ class ProcessResult:
         return self.returncode == 0
 
 
-def _decode_stream(stream: Optional[Union[bytes, str]]) -> str:
+def _decode_stream(stream: bytes | str | None) -> str:
     if stream is None:
         return ""
     if isinstance(stream, str):
@@ -35,11 +35,11 @@ def _decode_stream(stream: Optional[Union[bytes, str]]) -> str:
 def run_process(
     args: Sequence[str],
     *,
-    cwd: Optional[Union[Path, str]] = None,
-    env: Optional[Mapping[str, str]] = None,
+    cwd: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
     check: bool = False,
     capture_output: bool = True,
-    timeout: Optional[float] = None,
+    timeout: float | None = None,
     print_command: bool = False,
 ) -> ProcessResult:
     """Execute ``args`` with ``subprocess.run`` and return a structured result.
@@ -111,8 +111,8 @@ def run_process(
             duration=time.monotonic() - start,
         )
     except subprocess.CalledProcessError as exc:
-        stdout_raw = cast(Union[bytes, str, None], getattr(exc, "stdout", None))
-        stderr_raw = cast(Union[bytes, str, None], getattr(exc, "stderr", None))
+        stdout_raw = cast(bytes | str | None, getattr(exc, "stdout", None))
+        stderr_raw = cast(bytes | str | None, getattr(exc, "stderr", None))
         stdout = _decode_stream(stdout_raw)
         stderr = _decode_stream(stderr_raw)
         return ProcessResult(

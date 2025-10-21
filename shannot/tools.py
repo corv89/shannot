@@ -7,30 +7,84 @@ These tools can be used standalone, in MCP servers, or with Pydantic-AI agents.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from shannot import SandboxManager, load_profile_from_path
+from shannot.process import ProcessResult
+
+if TYPE_CHECKING:
+    from shannot.execution import SandboxExecutor
+
+
+# Helper function to run commands with either sync or async manager
+async def _run_manager_command(deps: SandboxDeps, command: list[str]) -> ProcessResult:
+    """Run command using async or sync method depending on executor availability.
+
+    Catches SandboxError and converts to failed ProcessResult for compatibility
+    with MCP tools that expect error results instead of exceptions.
+    """
+    from shannot.sandbox import SandboxError
+
+    try:
+        if deps.executor is not None:
+            return await deps.manager.run_async(command)
+        else:
+            return deps.manager.run(command)
+    except SandboxError as e:
+        # Convert SandboxError to failed ProcessResult
+        return ProcessResult(
+            command=tuple(command),
+            returncode=1,
+            stdout="",
+            stderr=str(e),
+            duration=0.0,
+        )
 
 
 # Dependencies injected into tools
 class SandboxDeps:
-    """Dependencies for sandbox tools."""
+    """Dependencies for sandbox tools.
+
+    Supports both legacy mode (with bubblewrap_path) and new executor mode.
+
+    Examples:
+        Legacy mode (backward compatible):
+            >>> deps = SandboxDeps(profile_name="minimal")
+
+        With LocalExecutor:
+            >>> from shannot.executors import LocalExecutor
+            >>> executor = LocalExecutor()
+            >>> deps = SandboxDeps(profile_name="minimal", executor=executor)
+
+        With SSHExecutor (for remote execution):
+            >>> from shannot.executors import SSHExecutor
+            >>> executor = SSHExecutor(host="prod.example.com")
+            >>> deps = SandboxDeps(profile_name="minimal", executor=executor)
+    """
 
     def __init__(
         self,
         profile_name: str = "readonly",
-        profile_path: Optional[Path] = None,
-        bwrap_path: Path = Path("/usr/bin/bwrap"),
+        profile_path: Path | None = None,
+        bwrap_path: Path | None = None,
+        executor: SandboxExecutor | None = None,
     ):
         """Initialize sandbox dependencies.
 
         Args:
             profile_name: Name of profile to load from ~/.config/shannot/
             profile_path: Explicit path to profile (overrides profile_name)
-            bwrap_path: Path to bubblewrap executable
+            bwrap_path: Path to bubblewrap executable (legacy mode, optional if executor provided)
+            executor: Optional executor instance (LocalExecutor or SSHExecutor)
+                     If provided, bwrap_path is not required.
+
+        Raises:
+            ValueError: If neither bwrap_path nor executor is provided
         """
+
+        # Load profile
         if profile_path:
             self.profile = load_profile_from_path(profile_path)
         else:
@@ -43,7 +97,34 @@ class SandboxDeps:
                 bundled_profile = Path(__file__).parent.parent / "profiles" / f"{profile_name}.json"
                 self.profile = load_profile_from_path(bundled_profile)
 
-        self.manager = SandboxManager(self.profile, bwrap_path)
+        # Store executor for later use
+        self.executor = executor
+
+        # Create manager
+        if executor is not None:
+            # New mode: use executor
+            self.manager = SandboxManager(self.profile, executor=executor)
+        else:
+            # Legacy mode: use bwrap_path
+            if bwrap_path is None:
+                bwrap_path = Path("/usr/bin/bwrap")
+            self.manager = SandboxManager(self.profile, bwrap_path)
+
+    async def cleanup(self):
+        """Cleanup executor resources (e.g., SSH connections).
+
+        Should be called when done using the dependencies, especially
+        when using SSHExecutor to ensure connections are closed.
+
+        Example:
+            >>> deps = SandboxDeps(profile_name="minimal", executor=ssh_executor)
+            >>> try:
+            ...     result = await run_command(deps, CommandInput(command=["ls", "/"]))
+            ... finally:
+            ...     await deps.cleanup()
+        """
+        if self.executor is not None:
+            await self.executor.cleanup()
 
 
 # Input/Output Models
@@ -105,7 +186,7 @@ async def run_command(deps: SandboxDeps, input: CommandInput) -> CommandOutput:
     Returns:
         CommandOutput with stdout, stderr, returncode, duration, and success status
     """
-    result = deps.manager.run(input.command)
+    result = await _run_manager_command(deps, input.command)
 
     return CommandOutput(
         stdout=result.stdout,
@@ -126,7 +207,7 @@ async def read_file(deps: SandboxDeps, input: FileReadInput) -> str:
     Returns:
         File contents as string, or error message if failed
     """
-    result = deps.manager.run(["cat", input.path])
+    result = await _run_manager_command(deps, ["cat", input.path])
     if result.succeeded():
         return result.stdout
     else:
@@ -150,7 +231,7 @@ async def list_directory(deps: SandboxDeps, input: DirectoryListInput) -> str:
         cmd.append("-a")
     cmd.append(input.path)
 
-    result = deps.manager.run(cmd)
+    result = await _run_manager_command(deps, cmd)
     return result.stdout if result.succeeded() else result.stderr
 
 
@@ -160,7 +241,7 @@ async def check_disk_usage(deps: SandboxDeps) -> str:
     Returns:
         Human-readable disk usage output (df -h), or error message if failed
     """
-    result = deps.manager.run(["df", "-h"])
+    result = await _run_manager_command(deps, ["df", "-h"])
     return result.stdout if result.succeeded() else result.stderr
 
 
@@ -170,7 +251,7 @@ async def check_memory(deps: SandboxDeps) -> str:
     Returns:
         Human-readable memory info (free -h), or error message if failed
     """
-    result = deps.manager.run(["free", "-h"])
+    result = await _run_manager_command(deps, ["free", "-h"])
     return result.stdout if result.succeeded() else result.stderr
 
 
@@ -186,7 +267,7 @@ async def search_files(
     Returns:
         List of matching file paths, or error message if failed
     """
-    result = deps.manager.run(["find", "/", "-name", pattern])
+    result = await _run_manager_command(deps, ["find", "/", "-name", pattern])
     return result.stdout if result.succeeded() else result.stderr
 
 
@@ -212,7 +293,7 @@ async def grep_content(
         cmd.append("-r")
     cmd.extend([pattern, path])
 
-    result = deps.manager.run(cmd)
+    result = await _run_manager_command(deps, cmd)
     return result.stdout if result.succeeded() else result.stderr
 
 
