@@ -29,9 +29,12 @@ import json
 from collections.abc import Mapping, MutableSequence, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING
 
 from .process import ProcessResult, run_process
+
+if TYPE_CHECKING:
+    from shannot.execution import SandboxExecutor
 
 __all__ = [
     "SandboxError",
@@ -80,7 +83,7 @@ class SandboxBind:
             raise SandboxError(f"Bind target must be absolute: {self.target}")
 
 
-def _normalize_base_path(base_path: Optional[Union[Path, str]]) -> Optional[Path]:
+def _normalize_base_path(base_path: Path | str | None) -> Path | None:
     """Return an absolute Path for ``base_path`` when provided."""
     if base_path is None:
         return None
@@ -131,7 +134,7 @@ def _coerce_path(value: object, *, field_name: str) -> Path:
     raise SandboxError(f"{field_name} must be a non-empty string or Path.")
 
 
-def _absolutize_path(path: Path, *, field_name: str, base_path: Optional[Path]) -> Path:
+def _absolutize_path(path: Path, *, field_name: str, base_path: Path | None) -> Path:
     """Return an absolute path, using ``base_path`` when ``path`` is relative."""
     if path.is_absolute():
         return path
@@ -144,8 +147,8 @@ def _coerce_optional_path(
     value: object,
     *,
     field_name: str,
-    base_path: Optional[Path],
-) -> Optional[Path]:
+    base_path: Path | None,
+) -> Path | None:
     """Coerce optional path fields to absolute ``Path`` instances."""
     if value is None:
         return None
@@ -157,7 +160,7 @@ def _coerce_path_sequence(
     value: object,
     *,
     field_name: str,
-    base_path: Optional[Path],
+    base_path: Path | None,
 ) -> tuple[Path, ...]:
     """Convert ``value`` into a tuple of absolute paths."""
     if value is None:
@@ -191,7 +194,7 @@ def _coerce_environment_mapping(value: object, *, field_name: str) -> Mapping[st
     return environment
 
 
-def _coerce_binds(value: object, *, base_path: Optional[Path]) -> tuple[SandboxBind, ...]:
+def _coerce_binds(value: object, *, base_path: Path | None) -> tuple[SandboxBind, ...]:
     """Convert ``value`` into a tuple of ``SandboxBind`` entries."""
     if value is None:
         return tuple()
@@ -274,7 +277,7 @@ class SandboxProfile:
     binds: Sequence[SandboxBind] = field(default_factory=tuple)
     tmpfs_paths: Sequence[Path] = field(default_factory=tuple)
     environment: Mapping[str, str] = field(default_factory=dict)
-    seccomp_profile: Optional[Path] = None
+    seccomp_profile: Path | None = None
     network_isolation: bool = True
     additional_args: Sequence[str] = field(default_factory=tuple)
 
@@ -283,7 +286,7 @@ class SandboxProfile:
         cls,
         data: Mapping[str, object],
         *,
-        base_path: Optional[Union[Path, str]] = None,
+        base_path: Path | str | None = None,
     ) -> SandboxProfile:
         """Construct a ``SandboxProfile`` from a plain mapping."""
         # Note: data is already typed as Mapping[str, object], so isinstance check is redundant
@@ -362,14 +365,14 @@ class SandboxProfile:
 def load_profile_from_mapping(
     data: Mapping[str, object],
     *,
-    base_path: Optional[Union[Path, str]] = None,
+    base_path: Path | str | None = None,
 ) -> SandboxProfile:
     """Create a ``SandboxProfile`` from an in-memory mapping."""
     # TODO: Provide a YAML loader that reuses this helper for parity with JSON profiles.
     return SandboxProfile.from_mapping(data, base_path=base_path)
 
 
-def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
+def load_profile_from_path(path: Path | str) -> SandboxProfile:
     """Load a ``SandboxProfile`` from a JSON configuration file."""
     candidate = Path(path).expanduser()
     try:
@@ -402,17 +405,27 @@ class BubblewrapCommandBuilder:
     command:
         Sequence representing the command to run inside the sandbox. This is
         appended after ``--`` in the resulting Bubblewrap invocation.
+    validate_paths:
+        Whether to validate that bind source paths exist locally. Set to False
+        for remote execution where paths exist on the remote system only.
+        Defaults to True for backward compatibility.
     """
 
-    def __init__(self, profile: SandboxProfile, command: Sequence[str]) -> None:
+    def __init__(
+        self,
+        profile: SandboxProfile,
+        command: Sequence[str],
+        validate_paths: bool = True,
+    ) -> None:
         profile.validate()
         if not command:
             raise SandboxError("Sandbox command must not be empty.")
 
         self._profile: SandboxProfile = profile
         self._command: tuple[str, ...] = tuple(command)
+        self._validate_paths: bool = validate_paths
 
-    def build(self) -> List[str]:
+    def build(self) -> list[str]:
         """
         Return the complete ``bwrap`` argument list without the executable name.
 
@@ -435,8 +448,8 @@ class BubblewrapCommandBuilder:
 
         # Bind mounts.
         for bind in sorted(self._profile.binds, key=lambda b: str(b.target)):
-            # Skip binds where the source doesn't exist
-            if not bind.source.exists():
+            # Skip binds where the source doesn't exist (only when validating paths)
+            if self._validate_paths and not bind.source.exists():
                 continue
             if bind.create_target:
                 args.extend(("--dir", str(bind.target)))
@@ -464,11 +477,9 @@ class SandboxManager:
     """
     Orchestrate sandbox validation and execution.
 
-    The initial scaffolding purposefully omits the runtime logic (spawning
-    Bubblewrap, log handling, and command allowlist enforcement). Those pieces
-    depend on broader system integration that will be implemented in later
-    commits. For now, the manager offers structural hooks and enforces the
-    invariants needed by upcoming tests.
+    The SandboxManager can now use different execution strategies via the
+    executor parameter. This allows for local execution (LocalExecutor) or
+    remote execution (SSHExecutor) while maintaining backward compatibility.
 
     Parameters
     ----------
@@ -476,17 +487,53 @@ class SandboxManager:
         The profile to use when launching sandboxed commands.
     bubblewrap_path:
         Filesystem location of the Bubblewrap executable.
+        Used for backward compatibility when executor is not provided.
+    executor:
+        Optional executor instance (LocalExecutor or SSHExecutor).
+        If not provided, uses legacy direct execution with bubblewrap_path.
+
+    Examples
+    --------
+    Legacy usage (backward compatible):
+        >>> manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
+        >>> result = manager.run(["ls", "/"])
+
+    New usage with LocalExecutor:
+        >>> from shannot.executors import LocalExecutor
+        >>> executor = LocalExecutor()
+        >>> manager = SandboxManager(profile, executor=executor)
+        >>> result = manager.run(["ls", "/"])
+
+    New usage with SSHExecutor:
+        >>> from shannot.executors import SSHExecutor
+        >>> executor = SSHExecutor(host="prod.example.com")
+        >>> manager = SandboxManager(profile, executor=executor)
+        >>> result = manager.run(["ls", "/"])
     """
 
-    def __init__(self, profile: SandboxProfile, bubblewrap_path: Path) -> None:
+    def __init__(
+        self,
+        profile: SandboxProfile,
+        bubblewrap_path: Path | None = None,
+        executor: SandboxExecutor | None = None,
+    ) -> None:
         profile.validate()
-        if not bubblewrap_path.is_absolute():
-            raise SandboxError("Bubblewrap path must be absolute.")
-        resolved = bubblewrap_path.resolve()
-        if not resolved.exists():
-            raise SandboxError(f"Bubblewrap executable not found at {resolved}")
         self._profile: SandboxProfile = profile
-        self._bubblewrap_path: Path = resolved
+        self._executor: SandboxExecutor | None = executor
+
+        # Legacy mode: use bubblewrap_path directly
+        if executor is None:
+            if bubblewrap_path is None:
+                raise SandboxError("Either bubblewrap_path or executor must be provided")
+            if not bubblewrap_path.is_absolute():
+                raise SandboxError("Bubblewrap path must be absolute.")
+            resolved = bubblewrap_path.resolve()
+            if not resolved.exists():
+                raise SandboxError(f"Bubblewrap executable not found at {resolved}")
+            self._bubblewrap_path: Path | None = resolved
+        else:
+            # New mode: use executor
+            self._bubblewrap_path = bubblewrap_path
 
     @property
     def profile(self) -> SandboxProfile:
@@ -494,17 +541,29 @@ class SandboxManager:
         return self._profile
 
     @property
-    def bubblewrap_path(self) -> Path:
-        """Return the resolved Bubblewrap executable path."""
+    def bubblewrap_path(self) -> Path | None:
+        """Return the resolved Bubblewrap executable path.
+
+        Returns None when using an executor instead of direct bubblewrap_path.
+        """
         return self._bubblewrap_path
 
-    def build_command(self, command: Sequence[str]) -> List[str]:
+    @property
+    def executor(self) -> SandboxExecutor | None:
+        """Return the executor if one is configured."""
+        return self._executor
+
+    def build_command(self, command: Sequence[str]) -> list[str]:
         """
         Construct the full Bubblewrap invocation for the requested command.
 
         The returned list includes the Bubblewrap executable at index 0 followed
         by the arguments produced by ``BubblewrapCommandBuilder``.
+
+        Note: Only used in legacy mode (when executor is None).
         """
+        if self._bubblewrap_path is None:
+            raise SandboxError("bubblewrap_path not available when using executor")
         builder = BubblewrapCommandBuilder(self._profile, command)
         return [str(self._bubblewrap_path), *builder.build()]
 
@@ -521,7 +580,7 @@ class SandboxManager:
         command: Sequence[str],
         *,
         check: bool = True,
-        env: Optional[Mapping[str, str]] = None,
+        env: Mapping[str, str] | None = None,
     ) -> ProcessResult:
         """
         Execute ``command`` inside the sandbox and return a ``ProcessResult``.
@@ -627,4 +686,73 @@ class SandboxManager:
             if not result.stderr and not result.stdout:
                 error_msg += "\n(No output captured - command may require stdin or file not found)"
             raise SandboxError(error_msg)
+        return result
+
+    async def run_async(
+        self,
+        command: Sequence[str],
+        *,
+        check: bool = True,
+        timeout: int = 30,
+    ) -> ProcessResult:
+        """
+        Execute ``command`` inside the sandbox asynchronously using an executor.
+
+        This method requires an executor to be configured. It delegates execution
+        to the executor, which can be LocalExecutor (for local execution) or
+        SSHExecutor (for remote execution).
+
+        Parameters
+        ----------
+        command:
+            Command and arguments to execute within the sandbox.
+        check:
+            When ``True`` (default), raise ``SandboxError`` if the command exits
+            with a non-zero status.
+        timeout:
+            Command timeout in seconds (default: 30).
+
+        Raises
+        ------
+        SandboxError
+            Raised when the command is not permitted, no executor is configured,
+            or the command exits with a non-zero status while ``check`` is enabled.
+
+        Examples
+        --------
+        With LocalExecutor:
+            >>> from shannot.executors import LocalExecutor
+            >>> executor = LocalExecutor()
+            >>> manager = SandboxManager(profile, executor=executor)
+            >>> result = await manager.run_async(["ls", "/"])
+
+        With SSHExecutor:
+            >>> from shannot.executors import SSHExecutor
+            >>> executor = SSHExecutor(host="prod.example.com")
+            >>> manager = SandboxManager(profile, executor=executor)
+            >>> result = await manager.run_async(["ls", "/"])
+        """
+        if self._executor is None:
+            raise SandboxError(
+                "run_async() requires an executor. Either provide an executor "
+                "during initialization or use the synchronous run() method."
+            )
+
+        if not command:
+            raise SandboxError("Sandbox command must not be empty.")
+
+        executable = command[0]
+        if not self._is_command_allowed(executable):
+            raise SandboxError(
+                f"Command '{executable}' is not permitted by sandbox profile "
+                f"'{self._profile.name}'."
+            )
+
+        # Use executor to run command
+        result = await self._executor.run_command(self._profile, list(command), timeout=timeout)
+
+        if check and not result.succeeded():
+            raise SandboxError(
+                f"Sandbox command failed with exit code {result.returncode}: {executable}"
+            )
         return result
