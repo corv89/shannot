@@ -22,7 +22,7 @@ import sys
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional, cast
+from typing import cast
 
 from . import (
     SandboxError,
@@ -66,7 +66,7 @@ def _configure_logging(verbose: bool) -> None:
     )
 
 
-def _resolve_bubblewrap_path(candidate: Optional[str]) -> Path:
+def _resolve_bubblewrap_path(candidate: str | None) -> Path:
     if candidate:
         return Path(candidate).expanduser()
     env_candidate = os.environ.get("BWRAP")
@@ -83,7 +83,7 @@ def _load_profile(path: str) -> SandboxProfile:
 def _profile_to_serializable(profile: SandboxProfile) -> dict[str, object]:
     data = asdict(profile)
 
-    def _path_to_str(value: Optional[Path]) -> Optional[str]:
+    def _path_to_str(value: Path | None) -> str | None:
         if value is None:
             return None
         return str(value)
@@ -97,7 +97,7 @@ def _profile_to_serializable(profile: SandboxProfile) -> dict[str, object]:
     binds = [_convert_bind(cast(Mapping[str, object], bind)) for bind in data["binds"]]
     tmpfs_paths = [str(cast(Path, path)) for path in data["tmpfs_paths"]]
     environment = dict(cast(Mapping[str, str], data["environment"]))
-    seccomp_profile = _path_to_str(cast(Optional[Path], data["seccomp_profile"]))
+    seccomp_profile = _path_to_str(cast(Path | None, data["seccomp_profile"]))
     additional_args = list(cast(Sequence[str], data["additional_args"]))
 
     return {
@@ -125,9 +125,9 @@ def _execute_command(manager: SandboxManager, command: Sequence[str]) -> Process
 
 def _handle_run(args: argparse.Namespace) -> int:
     """Handle 'run' subcommand - execute command in sandbox."""
-    profile_path = cast(Optional[str], args.profile) or _get_default_profile()
+    profile_path = cast(str | None, args.profile) or _get_default_profile()
     profile = _load_profile(str(profile_path))
-    bubblewrap = _resolve_bubblewrap_path(cast(Optional[str], args.bubblewrap))
+    bubblewrap = _resolve_bubblewrap_path(cast(str | None, args.bubblewrap))
     manager = SandboxManager(profile, bubblewrap)
     command = list(cast(Sequence[str], args.command))
     if not command:
@@ -142,7 +142,7 @@ def _handle_run(args: argparse.Namespace) -> int:
 
 def _handle_export(args: argparse.Namespace) -> int:
     """Handle 'export' subcommand - export profile as JSON."""
-    profile_path = cast(Optional[str], args.profile) or _get_default_profile()
+    profile_path = cast(str | None, args.profile) or _get_default_profile()
     profile = _load_profile(str(profile_path))
     serialized = _profile_to_serializable(profile)
     json_output = json.dumps(serialized, indent=2, sort_keys=True)
@@ -152,13 +152,13 @@ def _handle_export(args: argparse.Namespace) -> int:
 
 def _handle_verify(args: argparse.Namespace) -> int:
     """Handle 'verify' subcommand - verify sandbox configuration."""
-    profile_path = cast(Optional[str], args.profile) or _get_default_profile()
+    profile_path = cast(str | None, args.profile) or _get_default_profile()
     profile = _load_profile(str(profile_path))
-    bubblewrap = _resolve_bubblewrap_path(cast(Optional[str], args.bubblewrap))
+    bubblewrap = _resolve_bubblewrap_path(cast(str | None, args.bubblewrap))
     manager = SandboxManager(profile, bubblewrap)
 
-    allowed_command = cast(Optional[Sequence[str]], args.allowed_command) or ["ls", "/"]
-    disallowed_command = cast(Optional[Sequence[str]], args.disallowed_command) or [
+    allowed_command = cast(Sequence[str] | None, args.allowed_command) or ["ls", "/"]
+    disallowed_command = cast(Sequence[str] | None, args.disallowed_command) or [
         "touch",
         "/tmp/probe",
     ]
@@ -344,8 +344,7 @@ def _handle_mcp_test(args: argparse.Namespace) -> int:
     """Test MCP server functionality."""
     try:
         # Check if MCP dependencies are installed
-        import mcp  # type: ignore
-        from shannot.tools import SandboxDeps, run_command, CommandInput
+        from shannot.tools import CommandInput, SandboxDeps, run_command
     except ImportError:
         _LOGGER.error("MCP dependencies not installed")
         _LOGGER.info("Install with: pip install shannot[mcp]")
@@ -374,7 +373,7 @@ def _handle_mcp_test(args: argparse.Namespace) -> int:
         return 1
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     _configure_logging(cast(bool, args.verbose))

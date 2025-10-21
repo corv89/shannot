@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -319,7 +319,10 @@ class TestCheckDiskUsage:
         """Test disk usage check."""
         mock_result = ProcessResult(
             command=("test",),
-            stdout="Filesystem      Size  Used Avail Use% Mounted on\n/dev/sda1       100G   50G   50G  50% /",
+            stdout=(
+                "Filesystem      Size  Used Avail Use% Mounted on\n"
+                "/dev/sda1       100G   50G   50G  50% /"
+            ),
             stderr="",
             returncode=0,
             duration=0.1,
@@ -357,7 +360,10 @@ class TestCheckMemory:
         """Test memory usage check."""
         mock_result = ProcessResult(
             command=("test",),
-            stdout="              total        used        free\nMem:           16Gi       8Gi        8Gi",
+            stdout=(
+                "              total        used        free\n"
+                "Mem:           16Gi       8Gi        8Gi"
+            ),
             stderr="",
             returncode=0,
             duration=0.1,

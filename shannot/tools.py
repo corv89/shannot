@@ -7,12 +7,15 @@ These tools can be used standalone, in MCP servers, or with Pydantic-AI agents.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from shannot import SandboxManager, load_profile_from_path
 from shannot.process import ProcessResult
+
+if TYPE_CHECKING:
+    from shannot.execution import SandboxExecutor
 
 
 # Helper function to run commands with either sync or async manager
@@ -64,9 +67,9 @@ class SandboxDeps:
     def __init__(
         self,
         profile_name: str = "readonly",
-        profile_path: Optional[Path] = None,
-        bwrap_path: Optional[Path] = None,
-        executor: Optional["SandboxExecutor"] = None,
+        profile_path: Path | None = None,
+        bwrap_path: Path | None = None,
+        executor: SandboxExecutor | None = None,
     ):
         """Initialize sandbox dependencies.
 
@@ -80,7 +83,6 @@ class SandboxDeps:
         Raises:
             ValueError: If neither bwrap_path nor executor is provided
         """
-        from shannot.execution import SandboxExecutor
 
         # Load profile
         if profile_path:

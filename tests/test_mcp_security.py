@@ -11,9 +11,9 @@ Tests various security aspects including:
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from shannot.tools import (
     CommandInput,
@@ -56,8 +56,8 @@ class TestInputValidation:
         assert dir_input.path == "/tmp"
 
         # Boolean type validation
-        with pytest.raises(Exception):  # Pydantic will raise ValidationError
-            DirectoryListInput(path="/tmp", long_format="not a bool")
+        with pytest.raises(ValidationError):
+            DirectoryListInput(path="/tmp", long_format="not a bool")  # type: ignore[arg-type]
 
 
 @pytest.mark.linux_only
@@ -298,14 +298,14 @@ class TestErrorHandling:
     def test_malformed_json_in_command(self):
         """Test that malformed JSON doesn't break validation."""
         # Pydantic handles validation, so invalid types should raise
-        with pytest.raises(Exception):
-            CommandInput(command="not a list")
+        with pytest.raises(ValidationError):
+            CommandInput(command="not a list")  # type: ignore[arg-type]
 
     def test_null_values_handled(self):
         """Test that null values are handled gracefully."""
         # Test with None values
-        with pytest.raises(Exception):
-            CommandInput(command=None)
+        with pytest.raises(ValidationError):
+            CommandInput(command=None)  # type: ignore[arg-type]
 
     def test_extremely_long_command(self):
         """Test handling of extremely long commands."""

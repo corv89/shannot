@@ -15,7 +15,6 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from shannot.execution import SandboxExecutor
 from shannot.process import ProcessResult, run_process
@@ -47,7 +46,7 @@ class LocalExecutor(SandboxExecutor):
         RuntimeError: If not on Linux or bubblewrap not found
     """
 
-    def __init__(self, bwrap_path: Optional[Path] = None):
+    def __init__(self, bwrap_path: Path | None = None):
         """Initialize local executor.
 
         Args:

@@ -46,10 +46,7 @@ class SandboxExecutor(ABC):
 
     @abstractmethod
     async def run_command(
-        self,
-        profile: SandboxProfile,
-        command: list[str],
-        timeout: int = 30
+        self, profile: SandboxProfile, command: list[str], timeout: int = 30
     ) -> ProcessResult:
         """Execute command in sandbox.
 
@@ -86,11 +83,7 @@ class SandboxExecutor(ABC):
         """
         ...
 
-    async def read_file(
-        self,
-        profile: SandboxProfile,
-        path: str
-    ) -> str:
+    async def read_file(self, profile: SandboxProfile, path: str) -> str:
         """Read file from filesystem.
 
         Default implementation uses 'cat' command via run_command.
@@ -116,9 +109,7 @@ class SandboxExecutor(ABC):
         """
         result = await self.run_command(profile, ["cat", path])
         if result.returncode != 0:
-            raise FileNotFoundError(
-                f"Cannot read {path}: {result.stderr}"
-            )
+            raise FileNotFoundError(f"Cannot read {path}: {result.stderr}")
         return result.stdout
 
     async def cleanup(self):
@@ -139,4 +130,5 @@ class SandboxExecutor(ABC):
             ... finally:
             ...     await executor.cleanup()  # Close SSH connections
         """
-        pass
+        # Default implementation: no cleanup needed
+        return None

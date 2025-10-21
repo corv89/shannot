@@ -29,9 +29,12 @@ import json
 from collections.abc import Mapping, MutableSequence, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import TYPE_CHECKING
 
 from .process import ProcessResult, run_process
+
+if TYPE_CHECKING:
+    from shannot.execution import SandboxExecutor
 
 __all__ = [
     "SandboxError",
@@ -80,7 +83,7 @@ class SandboxBind:
             raise SandboxError(f"Bind target must be absolute: {self.target}")
 
 
-def _normalize_base_path(base_path: Optional[Union[Path, str]]) -> Optional[Path]:
+def _normalize_base_path(base_path: Path | str | None) -> Path | None:
     """Return an absolute Path for ``base_path`` when provided."""
     if base_path is None:
         return None
@@ -131,7 +134,7 @@ def _coerce_path(value: object, *, field_name: str) -> Path:
     raise SandboxError(f"{field_name} must be a non-empty string or Path.")
 
 
-def _absolutize_path(path: Path, *, field_name: str, base_path: Optional[Path]) -> Path:
+def _absolutize_path(path: Path, *, field_name: str, base_path: Path | None) -> Path:
     """Return an absolute path, using ``base_path`` when ``path`` is relative."""
     if path.is_absolute():
         return path
@@ -144,8 +147,8 @@ def _coerce_optional_path(
     value: object,
     *,
     field_name: str,
-    base_path: Optional[Path],
-) -> Optional[Path]:
+    base_path: Path | None,
+) -> Path | None:
     """Coerce optional path fields to absolute ``Path`` instances."""
     if value is None:
         return None
@@ -157,7 +160,7 @@ def _coerce_path_sequence(
     value: object,
     *,
     field_name: str,
-    base_path: Optional[Path],
+    base_path: Path | None,
 ) -> tuple[Path, ...]:
     """Convert ``value`` into a tuple of absolute paths."""
     if value is None:
@@ -191,7 +194,7 @@ def _coerce_environment_mapping(value: object, *, field_name: str) -> Mapping[st
     return environment
 
 
-def _coerce_binds(value: object, *, base_path: Optional[Path]) -> tuple[SandboxBind, ...]:
+def _coerce_binds(value: object, *, base_path: Path | None) -> tuple[SandboxBind, ...]:
     """Convert ``value`` into a tuple of ``SandboxBind`` entries."""
     if value is None:
         return tuple()
@@ -274,7 +277,7 @@ class SandboxProfile:
     binds: Sequence[SandboxBind] = field(default_factory=tuple)
     tmpfs_paths: Sequence[Path] = field(default_factory=tuple)
     environment: Mapping[str, str] = field(default_factory=dict)
-    seccomp_profile: Optional[Path] = None
+    seccomp_profile: Path | None = None
     network_isolation: bool = True
     additional_args: Sequence[str] = field(default_factory=tuple)
 
@@ -283,7 +286,7 @@ class SandboxProfile:
         cls,
         data: Mapping[str, object],
         *,
-        base_path: Optional[Union[Path, str]] = None,
+        base_path: Path | str | None = None,
     ) -> SandboxProfile:
         """Construct a ``SandboxProfile`` from a plain mapping."""
         # Note: data is already typed as Mapping[str, object], so isinstance check is redundant
@@ -362,14 +365,14 @@ class SandboxProfile:
 def load_profile_from_mapping(
     data: Mapping[str, object],
     *,
-    base_path: Optional[Union[Path, str]] = None,
+    base_path: Path | str | None = None,
 ) -> SandboxProfile:
     """Create a ``SandboxProfile`` from an in-memory mapping."""
     # TODO: Provide a YAML loader that reuses this helper for parity with JSON profiles.
     return SandboxProfile.from_mapping(data, base_path=base_path)
 
 
-def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
+def load_profile_from_path(path: Path | str) -> SandboxProfile:
     """Load a ``SandboxProfile`` from a JSON configuration file."""
     candidate = Path(path).expanduser()
     try:
@@ -422,7 +425,7 @@ class BubblewrapCommandBuilder:
         self._command: tuple[str, ...] = tuple(command)
         self._validate_paths: bool = validate_paths
 
-    def build(self) -> List[str]:
+    def build(self) -> list[str]:
         """
         Return the complete ``bwrap`` argument list without the executable name.
 
@@ -511,14 +514,12 @@ class SandboxManager:
     def __init__(
         self,
         profile: SandboxProfile,
-        bubblewrap_path: Optional[Path] = None,
-        executor: Optional["SandboxExecutor"] = None,
+        bubblewrap_path: Path | None = None,
+        executor: SandboxExecutor | None = None,
     ) -> None:
-        from shannot.execution import SandboxExecutor
-
         profile.validate()
         self._profile: SandboxProfile = profile
-        self._executor: Optional[SandboxExecutor] = executor
+        self._executor: SandboxExecutor | None = executor
 
         # Legacy mode: use bubblewrap_path directly
         if executor is None:
@@ -529,7 +530,7 @@ class SandboxManager:
             resolved = bubblewrap_path.resolve()
             if not resolved.exists():
                 raise SandboxError(f"Bubblewrap executable not found at {resolved}")
-            self._bubblewrap_path: Optional[Path] = resolved
+            self._bubblewrap_path: Path | None = resolved
         else:
             # New mode: use executor
             self._bubblewrap_path = bubblewrap_path
@@ -540,7 +541,7 @@ class SandboxManager:
         return self._profile
 
     @property
-    def bubblewrap_path(self) -> Optional[Path]:
+    def bubblewrap_path(self) -> Path | None:
         """Return the resolved Bubblewrap executable path.
 
         Returns None when using an executor instead of direct bubblewrap_path.
@@ -548,11 +549,11 @@ class SandboxManager:
         return self._bubblewrap_path
 
     @property
-    def executor(self) -> Optional["SandboxExecutor"]:
+    def executor(self) -> SandboxExecutor | None:
         """Return the executor if one is configured."""
         return self._executor
 
-    def build_command(self, command: Sequence[str]) -> List[str]:
+    def build_command(self, command: Sequence[str]) -> list[str]:
         """
         Construct the full Bubblewrap invocation for the requested command.
 
@@ -579,7 +580,7 @@ class SandboxManager:
         command: Sequence[str],
         *,
         check: bool = True,
-        env: Optional[Mapping[str, str]] = None,
+        env: Mapping[str, str] | None = None,
     ) -> ProcessResult:
         """
         Execute ``command`` inside the sandbox and return a ``ProcessResult``.

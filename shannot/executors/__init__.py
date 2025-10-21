@@ -28,7 +28,7 @@ __all__ = ["LocalExecutor"]
 
 # SSHExecutor is imported conditionally since it requires asyncssh
 try:
-    from shannot.executors.ssh import SSHExecutor
+    from shannot.executors.ssh import SSHExecutor  # noqa: F401
 
     __all__.append("SSHExecutor")
 except ImportError:

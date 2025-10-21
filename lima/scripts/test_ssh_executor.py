@@ -4,7 +4,7 @@
 import asyncio
 from pathlib import Path
 
-from shannot import SandboxProfile, SandboxBind
+from shannot import SandboxBind, SandboxProfile
 from shannot.executors import SSHExecutor
 
 
@@ -98,7 +98,7 @@ async def main():
         print(f"   Command: {' '.join(result.command)}")
         print(f"   Exit code: {result.returncode}")
         print(f"   Lines of output: {len(result.stdout.splitlines())}")
-        print(f"   First few lines:")
+        print("   First few lines:")
         for line in result.stdout.splitlines()[:5]:
             print(f"     {line}")
         print(f"   Duration: {result.duration:.2f}s")

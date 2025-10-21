@@ -26,14 +26,13 @@ Example:
 import asyncio
 import shlex
 from pathlib import Path
-from typing import Optional
 
 try:
     import asyncssh
 except ImportError:
     raise ImportError(
         "asyncssh required for SSH execution. Install with: pip install shannot[remote]"
-    )
+    ) from None
 
 from shannot.execution import SandboxExecutor
 from shannot.process import ProcessResult
@@ -80,11 +79,11 @@ class SSHExecutor(SandboxExecutor):
     def __init__(
         self,
         host: str,
-        username: Optional[str] = None,
-        key_file: Optional[Path] = None,
+        username: str | None = None,
+        key_file: Path | None = None,
         port: int = 22,
         connection_pool_size: int = 5,
-        known_hosts_file: Optional[Path] = None,
+        known_hosts_file: Path | None = None,
     ):
         """Initialize SSH executor.
 
@@ -228,10 +227,27 @@ class SSHExecutor(SandboxExecutor):
                 check=False,  # Don't raise on non-zero exit
             )
 
+            # Convert stdout/stderr to strings (asyncssh can return bytes or None)
+            stdout_str = ""
+            if result.stdout is not None:
+                stdout_str = (
+                    result.stdout
+                    if isinstance(result.stdout, str)
+                    else result.stdout.decode("utf-8")
+                )
+
+            stderr_str = ""
+            if result.stderr is not None:
+                stderr_str = (
+                    result.stderr
+                    if isinstance(result.stderr, str)
+                    else result.stderr.decode("utf-8")
+                )
+
             return ProcessResult(
                 command=tuple(command),
-                stdout=result.stdout,
-                stderr=result.stderr,
+                stdout=stdout_str,
+                stderr=stderr_str,
                 returncode=result.exit_status or 0,
                 duration=0.0,  # asyncssh doesn't track timing
             )

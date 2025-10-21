@@ -5,9 +5,10 @@ This module tests the SandboxExecutor interface and its implementations
 """
 
 import platform
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from shannot.execution import SandboxExecutor
 from shannot.process import ProcessResult
@@ -107,8 +108,8 @@ class TestLocalExecutor:
     @pytest.mark.requires_bwrap
     async def test_local_executor_run_command(self):
         """Test running a command with LocalExecutor."""
-        from shannot.executors import LocalExecutor
         from shannot import SandboxBind
+        from shannot.executors import LocalExecutor
 
         executor = LocalExecutor()
         profile = SandboxProfile(
@@ -212,7 +213,6 @@ class TestSSHExecutor:
         """Test SSH timeout handling."""
         try:
             from shannot.executors import SSHExecutor
-            import asyncssh
         except ImportError:
             pytest.skip("asyncssh not installed")
 
@@ -250,7 +250,6 @@ class TestSSHExecutor:
         """Test SSH connection failure handling."""
         try:
             from shannot.executors import SSHExecutor
-            import asyncssh
         except ImportError:
             pytest.skip("asyncssh not installed")
 

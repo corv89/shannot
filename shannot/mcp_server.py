@@ -21,11 +21,9 @@ from shannot.tools import (
     SandboxDeps,
     check_disk_usage,
     check_memory,
-    grep_content,
     list_directory,
     read_file,
     run_command,
-    search_files,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,7 +82,6 @@ class ShannotMCPServer:
 
     def _register_profile_tools(self, profile_name: str) -> None:
         """Register tools for a specific profile."""
-        deps = self.deps_by_profile[profile_name]
 
         # Generic command execution tool
         @self.server.list_tools()
@@ -231,7 +228,7 @@ class ShannotMCPServer:
             for name in self.deps_by_profile.keys():
                 resources.append(
                     Resource(
-                        uri=f"sandbox://profiles/{name}",
+                        uri=f"sandbox://profiles/{name}",  # type: ignore[arg-type]
                         name=f"Sandbox Profile: {name}",
                         mimeType="application/json",
                         description=f"Configuration for {name} sandbox profile",
@@ -240,7 +237,7 @@ class ShannotMCPServer:
 
             return resources
 
-        @self.server.read_resource()
+        @self.server.read_resource()  # type: ignore[arg-type]
         async def read_resource(uri: str) -> str:
             """Read resource content."""
             if uri.startswith("sandbox://profiles/"):
@@ -297,7 +294,7 @@ class ShannotMCPServer:
 
     async def run(self) -> None:
         """Run the MCP server."""
-        await self.server.run()
+        await self.server.run()  # type: ignore[call-arg]
 
 
 # Export

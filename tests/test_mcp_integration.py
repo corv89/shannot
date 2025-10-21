@@ -6,11 +6,9 @@ These tests require Linux and bubblewrap to be installed.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
-from shannot import ProcessResult, load_profile_from_path
 from shannot.mcp_server import ShannotMCPServer
 from shannot.tools import (
     CommandInput,
