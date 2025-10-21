@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Topic :: Security",
     "Topic :: System :: Systems Administration",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
