@@ -20,11 +20,12 @@ from shannot.cli import (  # type: ignore[reportPrivateUsage]
 class CLIParserTests(unittest.TestCase):
     """Tests for command-line argument parsing."""
 
-    def test_parser_requires_subcommand(self) -> None:
-        """Parser should require a subcommand."""
+    def test_parser_allows_direct_commands(self) -> None:
+        """Parser should allow commands without 'run' keyword."""
         parser = _build_parser()
-        with self.assertRaises(SystemExit):
-            _ = parser.parse_args([])
+        # Empty args should not raise - they get smart-parsed to run subcommand
+        _ = parser.parse_args([])
+        # The smart parsing in main() handles converting this to a run command
 
     def test_run_subcommand(self) -> None:
         """Run subcommand should parse correctly."""

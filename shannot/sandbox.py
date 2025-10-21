@@ -104,7 +104,7 @@ def _coerce_string_sequence(value: object, *, field_name: str) -> tuple[str, ...
     """Convert ``value`` into a tuple of non-empty strings."""
     if value is None:
         return tuple()
-    if isinstance(value, (str, bytes)):
+    if isinstance(value, str | bytes):
         raise SandboxError(f"{field_name} must be a sequence of strings.")
     if not isinstance(value, Sequence):
         raise SandboxError(f"{field_name} must be a sequence of strings.")
@@ -165,7 +165,7 @@ def _coerce_path_sequence(
     """Convert ``value`` into a tuple of absolute paths."""
     if value is None:
         return tuple()
-    if isinstance(value, (str, bytes)):
+    if isinstance(value, str | bytes):
         raise SandboxError(f"{field_name} must be a sequence of paths.")
     if not isinstance(value, Sequence):
         raise SandboxError(f"{field_name} must be a sequence of paths.")
@@ -198,7 +198,7 @@ def _coerce_binds(value: object, *, base_path: Path | None) -> tuple[SandboxBind
     """Convert ``value`` into a tuple of ``SandboxBind`` entries."""
     if value is None:
         return tuple()
-    if isinstance(value, (str, bytes)):
+    if isinstance(value, str | bytes):
         raise SandboxError("binds must be a sequence of mappings.")
     if not isinstance(value, Sequence):
         raise SandboxError("binds must be a sequence of mappings.")
