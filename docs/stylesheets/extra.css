@@ -1,0 +1,20 @@
+/* Custom styles for Shannot documentation */
+
+/* Optional: Adjust link colors to match the orange theme */
+:root {
+  --md-primary-fg-color: #ff6e40;
+  --md-primary-fg-color--light: #ff9e80;
+  --md-primary-fg-color--dark: #dd2c00;
+}
+
+/* Optional: Custom styling for code blocks */
+.highlight {
+  border-radius: 0.2rem;
+}
+
+/* Optional: Adjust admonition colors if needed */
+.md-typeset .admonition.warning,
+.md-typeset .admonition.versionchanged,
+.md-typeset .admonition.deprecated {
+  border-color: var(--md-primary-fg-color);
+}
