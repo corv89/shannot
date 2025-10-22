@@ -1,0 +1,114 @@
+site_name: Shannot Documentation
+site_description: Secure read-only sandboxing for LLM agents and system diagnostics
+site_author: corv89
+site_url: https://corv89.github.io/shannot/
+repo_url: https://github.com/corv89/shannot
+repo_name: corv89/shannot
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            group_by_category: true
+            show_category_heading: true
+            show_if_no_docstring: false
+            inherited_members: false
+            filters:
+              - "!^_" # Exclude private members
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: installation.md
+      - Usage Guide: usage.md
+      - Profile Configuration: profiles.md
+  - Advanced:
+      - Configuration: configuration.md
+      - Deployment: deployment.md
+      - Seccomp Filters: seccomp.md
+  - Integrations:
+      - MCP/Claude Desktop: mcp.md
+  - Development:
+      - Testing: testing.md
+      - Troubleshooting: troubleshooting.md
+  - API Reference:
+      - Overview: api.md
+      - Core:
+          - Sandbox: reference/sandbox.md
+          - Process: reference/process.md
+          - Config: reference/config.md
+      - Executors:
+          - Local Executor: reference/executors/local.md
+          - SSH Executor: reference/executors/ssh.md
+      - Execution: reference/execution.md
+      - CLI: reference/cli.md
+      - MCP Server: reference/mcp_server.md
+      - MCP Main: reference/mcp_main.md
+      - Tools: reference/tools.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/corv89/shannot
+  version:
+    provider: mike
