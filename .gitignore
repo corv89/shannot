@@ -52,6 +52,8 @@ dmypy.json
 
 # Documentation builds
 docs/_build/
+docs/api/
+docs/html/
 
 # Distribution
 *.tar.gz
