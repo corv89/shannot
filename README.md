@@ -17,7 +17,8 @@
 * Control exactly which commands are allowed
 
 🤖 **Works with Claude Desktop**
-Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/) - give Claude safe read-only access to your servers
+* Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/)
+* Give Claude safe read-only access to your servers
 
 🌐 **Control Remote Systems**
 * Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
