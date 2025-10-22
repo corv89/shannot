@@ -109,9 +109,6 @@ nav:
       - MCP Main: reference/mcp_main.md
       - Tools: reference/tools.md
 
-extra_css:
-  - stylesheets/extra.css
-
 extra:
   social:
     - icon: fontawesome/brands/github
