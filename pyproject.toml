@@ -46,7 +46,9 @@ dev = [
     "ruff>=0.1.0",
     "basedpyright>=1.0",
     "types-setuptools",
-    "pdoc3>=0.11.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
 ]
 mcp = [
     "mcp>=1.0.0",
