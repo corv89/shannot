@@ -34,22 +34,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system pdoc3
+          uv pip install --system mkdocs mkdocs-material "mkdocstrings[python]"
           uv pip install --system -e .
 
-      - name: Generate documentation
-        run: |
-          pdoc --html --output-dir docs/api --force shannot
-          if [ -d docs/api/shannot ]; then
-            mv docs/api/shannot/* docs/api/
-            rmdir docs/api/shannot
-          fi
-          cp docs/*.md docs/api/ 2>/dev/null || true
+      - name: Build documentation
+        run: mkdocs build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/api
+          path: site
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
