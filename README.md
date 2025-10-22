@@ -12,24 +12,27 @@
 ## Features
 
 🔒 **Run Untrusted Commands Safely**
-Let LLM agents explore your system without risk of modification • Network-isolated execution • Control exactly which commands are allowed
+* Let LLM agents explore your system without risk of modification
+* Network-isolated execution
+* Control exactly which commands are allowed
 
 🤖 **Works with Claude Desktop**
 Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/) - give Claude safe read-only access to your servers
 
 🌐 **Control Remote Systems**
-Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
+* Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
 
 ⚡ **Deploy in Minutes**
-Python client + bubblewrap on target • No containers, VMs, or complex setup required
+* Python client + bubblewrap on target
+* No containers, VMs, or complex setup required
 
 
 ## Quick Start
 
 ### Installation
 
-**Client** (any platform): Python 3.10+
-**Target** (Linux only): bubblewrap
+- **Client** (any platform): Python 3.10+
+- **Target** (Linux only): bubblewrap
 
 #### Install on Client (any platform)
 
@@ -223,13 +226,7 @@ basedpyright
 
 ## Documentation
 
-Full documentation is available at **https://corv89.github.io/shannot/**
-
-Or build locally:
-```bash
-make docs          # Build documentation
-make docs-serve    # Start local server at http://127.0.0.1:8000
-```
+**[Full documentation](https://corv89.github.io/shannot/)**
 
 Quick links:
 - **[Installation Guide](https://corv89.github.io/shannot/installation/)** - Install Shannot on any platform
@@ -253,7 +250,7 @@ Shannot provides strong isolation but **is not a security boundary**:
 - No built-in CPU/memory limits (use systemd/cgroups)
 - Don't run as root unless necessary
 
-For production, combine with SELinux/AppArmor, seccomp filters ([docs](docs/seccomp.md)), and resource limits.
+For production, combine with SELinux/AppArmor, seccomp filters ([seccomp](https://corv89.github.io/shannot/seccomp.md)), and resource limits.
 
 ## License
 
