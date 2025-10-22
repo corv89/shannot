@@ -179,7 +179,7 @@ Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
 }
 ```
 
-See [docs/profiles.md](docs/profiles.md) for complete documentation.
+See [profiles](https://corv89.github.io/shannot/profiles) for complete documentation.
 
 ## How It Works
 
@@ -204,7 +204,7 @@ print(f"Output: {result.stdout}")
 print(f"Duration: {result.duration:.2f}s")
 ```
 
-See [docs/api.md](docs/api.md) for complete documentation.
+See [api](https://corv89.github.io/shannot/api) for complete documentation.
 
 ## Development
 
@@ -250,7 +250,7 @@ Shannot provides strong isolation but **is not a security boundary**:
 - No built-in CPU/memory limits (use systemd/cgroups)
 - Don't run as root unless necessary
 
-For production, combine with SELinux/AppArmor, seccomp filters ([seccomp](https://corv89.github.io/shannot/seccomp.md)), and resource limits.
+For production, combine with SELinux/AppArmor, seccomp filters ([seccomp](https://corv89.github.io/shannot/seccomp)), and resource limits.
 
 ## License
 
