@@ -1,6 +1,28 @@
-# Testing Guide for Shannot
+# Testing Guide
 
-This document describes how to run and write tests for the Shannot project, including the MCP integration.
+Complete guide to testing Shannot - running tests, writing new tests, and ensuring code quality.
+
+## Quick Start
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev,mcp]"
+
+# Run all tests
+pytest
+
+# Run only unit tests (works on any platform)
+pytest -m "not linux_only and not requires_bwrap"
+
+# Run with coverage
+pytest --cov=shannot --cov-report=term
+
+# Run specific test file
+pytest tests/test_tools.py -v
+
+# Get help
+pytest --help
+```
 
 ## Test Structure
 
@@ -187,11 +209,11 @@ async def test_my_new_feature(sandbox_deps):
         duration=0.1,
     )
     sandbox_deps.manager.run.return_value = mock_result
-    
+
     # Act
     cmd_input = CommandInput(command=["ls"])
     result = await run_command(sandbox_deps, cmd_input)
-    
+
     # Assert
     assert result.succeeded is True
     assert result.stdout == "output"
@@ -210,10 +232,10 @@ from shannot.tools import CommandInput, SandboxDeps, run_command
 async def test_real_execution(profile_json_minimal, bwrap_path):
     """Test with real sandbox execution."""
     deps = SandboxDeps(profile_path=profile_json_minimal, bwrap_path=bwrap_path)
-    
+
     cmd_input = CommandInput(command=["echo", "hello"])
     result = await run_command(deps, cmd_input)
-    
+
     assert result.succeeded is True
     assert "hello" in result.stdout
 ```
@@ -232,7 +254,7 @@ async def test_command_injection_blocked(security_test_deps):
     # Try to inject second command
     cmd_input = CommandInput(command=["ls", "/; rm -rf /"])
     result = await run_command(security_test_deps, cmd_input)
-    
+
     # Semicolon should be treated as literal argument
     assert "rm" not in result.stdout
 ```
@@ -411,6 +433,6 @@ When adding new features:
 
 ---
 
-**Last Updated**: 2025-10-20  
-**Test Count**: 112 (63 passing, 49 skipped on macOS)  
+**Last Updated**: 2025-10-20
+**Test Count**: 112 (63 passing, 49 skipped on macOS)
 **Coverage**: ~85% for MCP code

@@ -112,6 +112,9 @@ pip install --user "shannot[all]"  # All optional features
 # Run a command in the sandbox
 shannot ls /
 
+# Check version
+shannot --version
+
 # Verify the sandbox is working
 shannot verify
 
@@ -119,7 +122,7 @@ shannot verify
 shannot export
 
 # Use a custom profile
-shannot --profile /path/to/profile.json run cat /etc/os-release
+shannot --profile /path/to/profile.json cat /etc/os-release
 
 # Get help
 shannot --help
