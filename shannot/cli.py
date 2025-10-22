@@ -28,6 +28,7 @@ from . import (
     SandboxError,
     SandboxManager,
     SandboxProfile,
+    __version__,
     load_profile_from_path,
 )
 from .process import ProcessResult, ensure_tool_available
@@ -276,6 +277,12 @@ def _build_parser() -> argparse.ArgumentParser:
             "  shannot remote list            # List configured targets"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _ = parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show version and exit.",
     )
     _ = parser.add_argument(
         "--verbose",

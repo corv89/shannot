@@ -63,3 +63,6 @@ docs/_build/
 # Local development
 .env
 .local/
+
+# Local planning
+plans

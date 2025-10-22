@@ -1,78 +1,137 @@
 # Installation Guide
 
-This guide covers installing Shannot on various Linux distributions.
+Complete installation guide for Shannot on all supported platforms.
 
 ## Prerequisites
 
 ### System Requirements
 
-- **Operating System**: Linux with kernel 3.8 or newer
-- **Python**: 3.9 or newer
-- **Required Package**: bubblewrap
+**Client** (any platform):
+- Python 3.10 or newer
+
+**Target** (Linux only):
+- Linux with kernel 3.8 or newer
+- bubblewrap package
 
 ### Check Your System
 
 ```bash
-# Check Linux kernel version
-uname -r
-
 # Check Python version
 python3 --version
 
-# Check if bubblewrap is installed
+# Check Linux kernel version (Linux only)
+uname -r
+
+# Check if bubblewrap is installed (Linux only)
 which bwrap
 bwrap --version
 ```
 
-## Installing Bubblewrap
+## Installation
 
-Bubblewrap must be installed before using Shannot.
+### Client Installation (Any Platform)
 
-### Fedora / RHEL / CentOS
-
-```bash
-sudo dnf install bubblewrap
-```
-
-### Debian / Ubuntu
+#### Recommended: UV (Cross-platform)
 
 ```bash
-sudo apt update
-sudo apt install bubblewrap
+# Install UV (works on macOS, Linux, Windows)
+curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
+# Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
+
+# Install shannot
+uv tool install shannot
+
+# Or with MCP support for Claude Desktop
+uv tool install "shannot[mcp]"
 ```
 
-### Arch Linux
+#### Alternative: pipx (Ubuntu/Debian)
+
+Ubuntu and Debian mark system Python as "externally managed" (PEP 668). Use `pipx`:
 
 ```bash
-sudo pacman -S bubblewrap
+# Install pipx
+sudo apt install pipx
+pipx ensurepath
+
+# Install shannot
+pipx install shannot
+
+# Or with optional dependencies
+pipx install "shannot[mcp]"  # MCP/Claude Desktop support
+pipx install "shannot[all]"  # All optional features
 ```
 
-## Installing Shannot
+#### Traditional: pip
 
-### Direct from GitHub
 ```bash
-pip install --user git+https://github.com/corv89/shannot.git
+# Basic installation
+pip install --user shannot
+
+# With optional dependencies
+pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
+pip install --user "shannot[all]"  # All optional features
+
+# Note: On Ubuntu/Debian, you may need --break-system-packages
+# (not recommended, use pipx or uv instead)
 ```
 
-### From Source
+#### From Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/corv89/shannot.git
 cd shannot
 
-# Install
-pip install --user .
+# Install with UV
+uv tool install .
 
-# Or use the installation script
-./install.sh
+# Or with pip
+pip install --user .
 ```
 
-### From PyPi (once published)
+### Target Installation (Linux Only)
+
+If your target is a remote Linux system, only bubblewrap is required (Python not needed):
+
+#### Debian / Ubuntu
 
 ```bash
-# Install for current user
-pip install --user shannot
+sudo apt install bubblewrap
+```
+
+#### Fedora / RHEL / CentOS
+
+```bash
+sudo dnf install bubblewrap
+```
+
+#### openSUSE
+
+```bash
+sudo zypper install bubblewrap
+```
+
+#### Arch Linux
+
+```bash
+sudo pacman -S bubblewrap
+```
+
+### Optional Dependencies
+
+```bash
+# MCP server for Claude Desktop
+pip install --user "shannot[mcp]"
+
+# Remote execution via SSH
+pip install --user "shannot[remote]"
+
+# Development tools (testing, linting)
+pip install --user "shannot[dev]"
+
+# Everything
+pip install --user "shannot[all]"
 ```
 
 ## Post-Installation
@@ -82,6 +141,8 @@ pip install --user shannot
 ```bash
 # Check that shannot command is available
 which shannot
+
+# Check version
 shannot --version
 
 # Run verification test
