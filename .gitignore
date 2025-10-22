@@ -51,7 +51,9 @@ dmypy.json
 .pytype/
 
 # Documentation builds
+site/
 docs/_build/
+.mkdocs_cache/
 
 # Distribution
 *.tar.gz

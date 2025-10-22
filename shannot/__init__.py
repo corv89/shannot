@@ -30,7 +30,9 @@ Main Components
 - SandboxBind: Define filesystem bind mounts
 - BubblewrapCommandBuilder: Low-level bwrap command construction
 
-For more information, see: https://github.com/corv89/shannot
+---
+
+.. include:: ../docs/README.md
 """
 
 from .process import ProcessResult, ensure_tool_available, run_process

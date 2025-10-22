@@ -10,14 +10,15 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        args: ["--allow-multiple-documents", "--unsafe"]
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
-        args: ['--fix=lf']
+        args: ["--fix=lf"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.9
@@ -37,4 +38,4 @@ repos:
         language: python
         types: [python]
         require_serial: true
-        additional_dependencies: ['basedpyright>=1.0']
+        additional_dependencies: ["basedpyright>=1.0"]

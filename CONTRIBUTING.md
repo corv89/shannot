@@ -93,6 +93,11 @@ pytest tests/ -v
 
 # Run tests with coverage
 pytest tests/ --cov=shannot --cov-report=term
+
+# Build documentation
+make docs
+# Or serve documentation locally at http://127.0.0.1:8000
+make docs-serve
 ```
 
 ### 4. Commit Your Changes
@@ -194,8 +199,9 @@ def process_command(args: Sequence[str], *, timeout: float | None = None) -> Pro
 ### Documentation
 
 - All public functions, classes, and methods must have docstrings
-- Use Google-style docstrings
+- Use Google-style docstrings or NumPy-style docstrings
 - Include type information in docstrings for clarity
+- Documentation supports Markdown formatting
 
 Example:
 
@@ -220,6 +226,58 @@ def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
         If the file cannot be read or contains invalid configuration.
     """
 ```
+
+### Generating Documentation
+
+The project uses [MkDocs](https://www.mkdocs.org/) with [Material theme](https://squidfunk.github.io/mkdocs-material/) and [mkdocstrings](https://mkdocstrings.github.io/) to generate beautiful documentation that combines narrative guides with API references.
+
+#### Quick Start
+
+```bash
+# Build documentation (output to site/)
+make docs
+
+# Start a local documentation server at http://127.0.0.1:8000
+make docs-serve
+
+# Clean generated documentation
+make docs-clean
+```
+
+#### Manual Commands
+
+If you prefer not to use the Makefile:
+
+```bash
+# Build documentation
+mkdocs build
+
+# Start development server with live reload
+mkdocs serve
+```
+
+#### Documentation Structure
+
+- **`docs/*.md`** - Narrative documentation (guides, tutorials)
+- **`docs/reference/*.md`** - API reference pages (auto-generated from docstrings)
+- **`mkdocs.yml`** - MkDocs configuration and navigation
+
+#### Adding New Pages
+
+To add a new documentation page:
+
+1. Create a markdown file in `docs/` (e.g., `docs/new-guide.md`)
+2. Add it to the `nav` section in `mkdocs.yml`
+3. Run `make docs-serve` to preview
+
+#### Documentation Best Practices
+
+1. **Keep docstrings up-to-date** - Update docstrings when changing function signatures
+2. **Include examples** - Add code examples in docstrings for complex functions
+3. **Document exceptions** - List all exceptions that can be raised
+4. **Use Markdown** - Leverage Markdown formatting for better readability
+5. **Link to related items** - Reference related functions/classes in docstrings
+6. **Test your changes** - Run `make docs-serve` to preview before committing
 
 ## Pull Request Guidelines
 
@@ -286,7 +344,7 @@ shannot/
 
 - **Issues**: [GitHub Issues](https://github.com/corv89/shannot/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/corv89/shannot/discussions)
-- **Documentation**: [docs/](docs/)
+- **Documentation**: [https://corv89.github.io/shannot/](https://corv89.github.io/shannot/)
 
 ## Code of Conduct
 

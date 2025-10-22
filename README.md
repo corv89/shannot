@@ -17,7 +17,7 @@
 * Control exactly which commands are allowed
 
 🤖 **Works with Claude Desktop**
-* Plug-and-play [MCP integration](docs/mcp.md) - give Claude safe read-only access to your servers
+Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/) - give Claude safe read-only access to your servers
 
 🌐 **Control Remote Systems**
 * Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
@@ -68,7 +68,7 @@ sudo pacman -S bubblewrap
 
 If client and target are the same Linux machine, install both shannot and bubblewrap.
 
-See [docs/deployment.md](docs/deployment.md) for remote execution setup via SSH.
+See [Deployment Guide](https://corv89.github.io/shannot/deployment/) for remote execution setup via SSH.
 
 <details>
 <summary><b>Alternative installation methods</b></summary>
@@ -179,7 +179,7 @@ Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
 }
 ```
 
-See [docs/profiles.md](docs/profiles.md) for complete documentation.
+See [profiles](https://corv89.github.io/shannot/profiles) for complete documentation.
 
 ## How It Works
 
@@ -204,7 +204,7 @@ print(f"Output: {result.stdout}")
 print(f"Duration: {result.duration:.2f}s")
 ```
 
-See [docs/api.md](docs/api.md) for complete documentation.
+See [api](https://corv89.github.io/shannot/api) for complete documentation.
 
 ## Development
 
@@ -226,11 +226,16 @@ basedpyright
 
 ## Documentation
 
-- **[profiles.md](docs/profiles.md)** - Profile configuration reference
-- **[api.md](docs/api.md)** - Python API documentation
-- **[deployment.md](docs/deployment.md)** - Remote execution, Ansible, systemd
-- **[mcp.md](docs/mcp.md)** - Claude Desktop integration
-- **[troubleshooting.md](docs/troubleshooting.md)** - Common issues and solutions
+**[Full documentation](https://corv89.github.io/shannot/)**
+
+Quick links:
+- **[Installation Guide](https://corv89.github.io/shannot/installation/)** - Install Shannot on any platform
+- **[Usage Guide](https://corv89.github.io/shannot/usage/)** - Learn basic commands and workflows
+- **[Profile Configuration](https://corv89.github.io/shannot/profiles/)** - Configure sandbox behavior
+- **[API Reference](https://corv89.github.io/shannot/api/)** - Python API documentation
+- **[Deployment Guide](https://corv89.github.io/shannot/deployment/)** - Remote execution, Ansible, systemd
+- **[MCP Integration](https://corv89.github.io/shannot/mcp/)** - Claude Desktop integration
+- **[Troubleshooting](https://corv89.github.io/shannot/troubleshooting/)** - Common issues and solutions
 
 ## Contributing
 
@@ -245,7 +250,7 @@ Shannot provides strong isolation but **is not a security boundary**:
 - No built-in CPU/memory limits (use systemd/cgroups)
 - Don't run as root unless necessary
 
-For production, combine with SELinux/AppArmor, seccomp filters ([docs](docs/seccomp.md)), and resource limits.
+For production, combine with SELinux/AppArmor, seccomp filters ([seccomp](https://corv89.github.io/shannot/seccomp)), and resource limits.
 
 ## License
 
