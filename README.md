@@ -15,7 +15,7 @@
 Let LLM agents explore your system without risk of modification • Network-isolated execution • Control exactly which commands are allowed
 
 🤖 **Works with Claude Desktop**
-Plug-and-play [MCP integration](docs/mcp.md) - give Claude safe read-only access to your servers
+Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/) - give Claude safe read-only access to your servers
 
 🌐 **Control Remote Systems**
 Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
@@ -65,7 +65,7 @@ sudo pacman -S bubblewrap
 
 If client and target are the same Linux machine, install both shannot and bubblewrap.
 
-See [docs/deployment.md](docs/deployment.md) for remote execution setup via SSH.
+See [Deployment Guide](https://corv89.github.io/shannot/deployment/) for remote execution setup via SSH.
 
 <details>
 <summary><b>Alternative installation methods</b></summary>
@@ -232,13 +232,13 @@ make docs-serve    # Start local server at http://127.0.0.1:8000
 ```
 
 Quick links:
-- **[Installation Guide](docs/installation.md)** - Install Shannot on any platform
-- **[Usage Guide](docs/usage.md)** - Learn basic commands and workflows
-- **[Profile Configuration](docs/profiles.md)** - Configure sandbox behavior
-- **[API Reference](docs/api.md)** - Python API documentation
-- **[Deployment Guide](docs/deployment.md)** - Remote execution, Ansible, systemd
-- **[MCP Integration](docs/mcp.md)** - Claude Desktop integration
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
+- **[Installation Guide](https://corv89.github.io/shannot/installation/)** - Install Shannot on any platform
+- **[Usage Guide](https://corv89.github.io/shannot/usage/)** - Learn basic commands and workflows
+- **[Profile Configuration](https://corv89.github.io/shannot/profiles/)** - Configure sandbox behavior
+- **[API Reference](https://corv89.github.io/shannot/api/)** - Python API documentation
+- **[Deployment Guide](https://corv89.github.io/shannot/deployment/)** - Remote execution, Ansible, systemd
+- **[MCP Integration](https://corv89.github.io/shannot/mcp/)** - Claude Desktop integration
+- **[Troubleshooting](https://corv89.github.io/shannot/troubleshooting/)** - Common issues and solutions
 
 ## Contributing
 

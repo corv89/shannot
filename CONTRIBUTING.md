@@ -344,7 +344,7 @@ shannot/
 
 - **Issues**: [GitHub Issues](https://github.com/corv89/shannot/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/corv89/shannot/discussions)
-- **Documentation**: [docs/](docs/)
+- **Documentation**: [https://corv89.github.io/shannot/](https://corv89.github.io/shannot/)
 
 ## Code of Conduct
 

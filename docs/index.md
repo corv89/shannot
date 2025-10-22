@@ -87,7 +87,7 @@ See [Installation Guide](installation.md) for detailed instructions.
 
 ```bash
 # Run a command in read-only sandbox
-shannot run ls /
+shannot ls /
 
 # Verify bubblewrap is available
 shannot verify

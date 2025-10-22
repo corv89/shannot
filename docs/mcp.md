@@ -272,9 +272,9 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 > **You**: My disk is filling up, can you help me figure out what's taking up space?
 
 > **Claude**: I'll check your disk usage.
-> 
+>
 > *[Uses sandbox_diagnostics_check_disk]*
-> 
+>
 > Your /home partition is 87% full. Let me find the largest directories...
 >
 > *[Uses sandbox_diagnostics tool to run `du`]*
@@ -312,7 +312,6 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 
 - **[See profiles.md](profiles.md)** to learn about creating custom profiles
 - **[See api.md](api.md)** to use Shannot programmatically
-- **[See LLM.md](../LLM.md)** for advanced Pydantic-AI integration
 
 ## Getting Help
 
