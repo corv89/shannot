@@ -93,6 +93,11 @@ pytest tests/ -v
 
 # Run tests with coverage
 pytest tests/ --cov=shannot --cov-report=term
+
+# Generate API documentation
+make docs
+# Or serve documentation locally at http://localhost:8080
+make docs-serve
 ```
 
 ### 4. Commit Your Changes
@@ -194,8 +199,9 @@ def process_command(args: Sequence[str], *, timeout: float | None = None) -> Pro
 ### Documentation
 
 - All public functions, classes, and methods must have docstrings
-- Use Google-style docstrings
+- Use Google-style docstrings or NumPy-style docstrings
 - Include type information in docstrings for clarity
+- Documentation supports Markdown formatting
 
 Example:
 
@@ -220,6 +226,43 @@ def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
         If the file cannot be read or contains invalid configuration.
     """
 ```
+
+### Generating Documentation
+
+The project uses [pdoc3](https://pdoc3.github.io/pdoc/) to automatically generate API documentation from docstrings.
+
+#### Quick Start
+
+```bash
+# Generate HTML documentation (output to docs/api/)
+make docs
+
+# Start a local documentation server at http://localhost:8080
+make docs-serve
+
+# Clean generated documentation
+make docs-clean
+```
+
+#### Manual Generation
+
+If you prefer not to use the Makefile:
+
+```bash
+# Generate HTML documentation
+pdoc --html --output-dir docs/api --force shannot
+
+# Start local server
+pdoc --http localhost:8080 shannot
+```
+
+#### Documentation Best Practices
+
+1. **Keep docstrings up-to-date** - Update docstrings when changing function signatures
+2. **Include examples** - Add code examples in docstrings for complex functions
+3. **Document exceptions** - List all exceptions that can be raised
+4. **Use Markdown** - Leverage Markdown formatting for better readability
+5. **Link to related items** - Reference related functions/classes in docstrings
 
 ## Pull Request Guidelines
 
