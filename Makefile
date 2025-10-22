@@ -2,7 +2,7 @@
 
 help:
 	@echo "Available commands:"
-	@echo "  make docs          - Generate API documentation with pdoc3"
+	@echo "  make docs          - Build documentation with MkDocs"
 	@echo "  make docs-serve    - Start local documentation server"
 	@echo "  make docs-clean    - Clean generated documentation"
 	@echo "  make install       - Install package"
@@ -13,24 +13,18 @@ help:
 	@echo "  make type-check    - Run type checker"
 
 docs:
-	@echo "Generating API documentation..."
-	@mkdir -p docs/api
-	@pdoc --html --output-dir docs/api --config show_source_code=True --config latex_math=True --force shannot
-	@if [ -d docs/api/shannot ]; then \
-		mv docs/api/shannot/* docs/api/ && rmdir docs/api/shannot; \
-	fi
-	@echo "Copying markdown documentation..."
-	@cp docs/*.md docs/api/ 2>/dev/null || true
-	@echo "Documentation generated in docs/api/"
-	@echo "Open docs/api/index.html in your browser to view"
+	@echo "Building documentation with MkDocs..."
+	@mkdocs build
+	@echo "Documentation built in site/"
+	@echo "Open site/index.html in your browser to view"
 
 docs-serve:
-	@echo "Starting documentation server on http://localhost:8080"
-	@pdoc --http localhost:8080 shannot
+	@echo "Starting documentation server on http://127.0.0.1:8000"
+	@mkdocs serve
 
 docs-clean:
 	@echo "Cleaning generated documentation..."
-	@rm -rf docs/api docs/html docs/_build
+	@rm -rf site .mkdocs_cache
 	@echo "Documentation cleaned"
 
 install:
