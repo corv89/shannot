@@ -223,11 +223,22 @@ basedpyright
 
 ## Documentation
 
-**[profiles.md](docs/profiles.md)** - Profile configuration reference
-**[api.md](docs/api.md)** - Python API documentation
-**[deployment.md](docs/deployment.md)** - Remote execution, Ansible, systemd
-**[mcp.md](docs/mcp.md)** - Claude Desktop integration
-**[troubleshooting.md](docs/troubleshooting.md)** - Common issues and solutions
+Full documentation is available at **https://corv89.github.io/shannot/**
+
+Or build locally:
+```bash
+make docs          # Build documentation
+make docs-serve    # Start local server at http://127.0.0.1:8000
+```
+
+Quick links:
+- **[Installation Guide](docs/installation.md)** - Install Shannot on any platform
+- **[Usage Guide](docs/usage.md)** - Learn basic commands and workflows
+- **[Profile Configuration](docs/profiles.md)** - Configure sandbox behavior
+- **[API Reference](docs/api.md)** - Python API documentation
+- **[Deployment Guide](docs/deployment.md)** - Remote execution, Ansible, systemd
+- **[MCP Integration](docs/mcp.md)** - Claude Desktop integration
+- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 
 ## Contributing
 

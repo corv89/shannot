@@ -94,9 +94,9 @@ pytest tests/ -v
 # Run tests with coverage
 pytest tests/ --cov=shannot --cov-report=term
 
-# Generate API documentation
+# Build documentation
 make docs
-# Or serve documentation locally at http://localhost:8080
+# Or serve documentation locally at http://127.0.0.1:8000
 make docs-serve
 ```
 
@@ -229,32 +229,46 @@ def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
 
 ### Generating Documentation
 
-The project uses [pdoc3](https://pdoc3.github.io/pdoc/) to automatically generate API documentation from docstrings.
+The project uses [MkDocs](https://www.mkdocs.org/) with [Material theme](https://squidfunk.github.io/mkdocs-material/) and [mkdocstrings](https://mkdocstrings.github.io/) to generate beautiful documentation that combines narrative guides with API references.
 
 #### Quick Start
 
 ```bash
-# Generate HTML documentation (output to docs/api/)
+# Build documentation (output to site/)
 make docs
 
-# Start a local documentation server at http://localhost:8080
+# Start a local documentation server at http://127.0.0.1:8000
 make docs-serve
 
 # Clean generated documentation
 make docs-clean
 ```
 
-#### Manual Generation
+#### Manual Commands
 
 If you prefer not to use the Makefile:
 
 ```bash
-# Generate HTML documentation
-pdoc --html --output-dir docs/api --force shannot
+# Build documentation
+mkdocs build
 
-# Start local server
-pdoc --http localhost:8080 shannot
+# Start development server with live reload
+mkdocs serve
 ```
+
+#### Documentation Structure
+
+- **`docs/*.md`** - Narrative documentation (guides, tutorials)
+- **`docs/reference/*.md`** - API reference pages (auto-generated from docstrings)
+- **`mkdocs.yml`** - MkDocs configuration and navigation
+
+#### Adding New Pages
+
+To add a new documentation page:
+
+1. Create a markdown file in `docs/` (e.g., `docs/new-guide.md`)
+2. Add it to the `nav` section in `mkdocs.yml`
+3. Run `make docs-serve` to preview
 
 #### Documentation Best Practices
 
@@ -263,6 +277,7 @@ pdoc --http localhost:8080 shannot
 3. **Document exceptions** - List all exceptions that can be raised
 4. **Use Markdown** - Leverage Markdown formatting for better readability
 5. **Link to related items** - Reference related functions/classes in docstrings
+6. **Test your changes** - Run `make docs-serve` to preview before committing
 
 ## Pull Request Guidelines
 
