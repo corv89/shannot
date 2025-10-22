@@ -7,8 +7,11 @@ Practical deployment scenarios for Shannot in production environments.
 ### Direct SSH Install
 
 ```bash
-# Transfer and install in one command
-ssh user@remote "bash -s" < install.sh
+# Install on remote system via SSH using pipx
+ssh user@remote "sudo apt install -y bubblewrap pipx && pipx install shannot && pipx ensurepath"
+
+# Or using uv (fastest)
+ssh user@remote "curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.cargo/bin/uv tool install shannot"
 ```
 
 ## Configuration Management
