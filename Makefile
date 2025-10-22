@@ -19,6 +19,8 @@ docs:
 	@if [ -d docs/api/shannot ]; then \
 		mv docs/api/shannot/* docs/api/ && rmdir docs/api/shannot; \
 	fi
+	@echo "Copying markdown documentation..."
+	@cp docs/*.md docs/api/ 2>/dev/null || true
 	@echo "Documentation generated in docs/api/"
 	@echo "Open docs/api/index.html in your browser to view"
 
