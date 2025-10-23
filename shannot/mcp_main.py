@@ -8,11 +8,14 @@ It can be invoked via:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
+from shannot.config import create_executor, load_config
 from shannot.mcp_server import ShannotMCPServer
 
 
@@ -26,43 +29,129 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
-async def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="shannot-mcp",
+        add_help=True,
+        description="Run the Shannot MCP server.",
+    )
+    parser.add_argument(
+        "--profile",
+        action="append",
+        dest="profiles",
+        help="Path or name of sandbox profile to expose (can be specified multiple times).",
+    )
+    parser.add_argument(
+        "--target",
+        "-t",
+        help="Target executor name from shannot/config.toml (enables remote execution).",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose logging.",
+    )
+    return parser
+
+
+def _coerce_profile_spec(value: str) -> Path | str:
+    """Convert profile CLI value into path or name."""
+    expanded = Path(value).expanduser()
+    if expanded.exists():
+        return expanded
+
+    if any(sep in value for sep in ("/", "\\")) or value.endswith(".json") or value.startswith("."):
+        return expanded
+
+    return value
+
+
+def _resolve_profiles(
+    cli_profiles: Sequence[str] | None,
+    executor_profile: str | None,
+) -> list[Path | str] | None:
+    """Determine profile specs to load."""
+    if cli_profiles:
+        return [_coerce_profile_spec(item) for item in cli_profiles]
+
+    if executor_profile:
+        return [_coerce_profile_spec(executor_profile)]
+
+    return None
+
+
+async def main(argv: Sequence[str] | None = None) -> None:
     """Main entry point for MCP server."""
-    # Parse simple command line args
-    verbose = "--verbose" in sys.argv or "-v" in sys.argv
-    setup_logging(verbose)
+    if argv is None:
+        argv = sys.argv[1:]
+
+    parser = _build_parser()
+    args = parser.parse_args(list(argv))
+
+    setup_logging(args.verbose)
 
     logger = logging.getLogger(__name__)
     logger.info("Starting Shannot MCP server")
 
-    # Discover profiles
-    profile_paths: list[Path] = []
+    executor = None
+    executor_profile: str | None = None
 
-    # Check if specific profiles were requested
-    if "--profile" in sys.argv:
-        idx = sys.argv.index("--profile")
-        if idx + 1 < len(sys.argv):
-            profile_path = Path(sys.argv[idx + 1])
-            if profile_path.exists():
-                profile_paths.append(profile_path)
-            else:
-                logger.error(f"Profile not found: {profile_path}")
-                sys.exit(1)
+    if args.target:
+        logger.info("Using executor target: %s", args.target)
+        try:
+            config = load_config()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Failed to load configuration: %s", exc)
+            raise SystemExit(1) from exc
+
+        if args.target not in config.executor:
+            logger.error("Target '%s' not found in configuration", args.target)
+            logger.info("List targets with: shannot remote list")
+            raise SystemExit(1)
+
+        executor_config = config.executor[args.target]
+        executor_profile = executor_config.profile
+
+        try:
+            executor = create_executor(config, args.target)
+        except Exception as exc:
+            logger.error("Failed to create executor '%s': %s", args.target, exc)
+            if "pip install shannot[remote]" in str(exc):
+                logger.info("Install remote support with: pip install shannot[remote]")
+            raise SystemExit(1) from exc
+
+    profile_specs = _resolve_profiles(args.profiles, executor_profile)
 
     # Create and run server
+    server = None
     try:
-        server = ShannotMCPServer(profile_paths if profile_paths else None)
-        logger.info(f"Loaded {len(server.deps_by_profile)} profiles")
+        server = ShannotMCPServer(profile_specs, executor, executor_label=args.target)
+        logger.info("Loaded %s profiles", len(server.deps_by_profile))
         for name in server.deps_by_profile.keys():
-            logger.info(f"  - {name}")
+            logger.info("  - %s", name)
 
         await server.run()
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
+    except SystemExit:
+        raise
     except Exception as e:
-        logger.error(f"Server error: {e}", exc_info=True)
-        sys.exit(1)
+        logger.error("Server error: %s", e, exc_info=True)
+        raise SystemExit(1) from e
+    finally:
+        if server is not None:
+            try:
+                await server.cleanup()
+            except Exception as exc:  # pragma: no cover - best effort cleanup
+                logger.debug("Failed to cleanup server resources: %s", exc)
+
+
+def entrypoint() -> None:
+    """Synchronous entrypoint for console_scripts."""
+
+    asyncio.run(main())
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    entrypoint()

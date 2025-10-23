@@ -3,10 +3,60 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+
+pytest.importorskip("pydantic")
+
+# Provide lightweight stubs for optional dependencies when not installed.
+if "mcp.server" not in sys.modules:
+    mcp_module = types.ModuleType("mcp")
+    server_module = types.ModuleType("mcp.server")
+
+    class _DummyServer:
+        def __init__(self, _name: str):
+            self._name = _name
+
+        def list_tools(self):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        def call_tool(self):
+            return self.list_tools()
+
+        def list_resources(self):
+            return self.list_tools()
+
+        def read_resource(self):
+            return self.list_tools()
+
+        async def run(self):
+            return None
+
+    server_module.Server = _DummyServer
+    sys.modules["mcp"] = mcp_module
+    sys.modules["mcp.server"] = server_module
+    mcp_module.server = server_module
+
+if "mcp.types" not in sys.modules:
+    types_module = types.ModuleType("mcp.types")
+
+    class _SimpleType:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    types_module.Resource = _SimpleType
+    types_module.TextContent = _SimpleType
+    types_module.Tool = _SimpleType
+
+    sys.modules["mcp.types"] = types_module
+    sys.modules["mcp"].types = types_module
 
 from shannot import ProcessResult, SandboxProfile
 from shannot.mcp_server import ShannotMCPServer
@@ -96,6 +146,18 @@ class TestShannotMCPServerInit:
             assert "test1" in server.deps_by_profile
             assert len(server.deps_by_profile) == 1
 
+    def test_init_with_profile_name(self):
+        """Profiles can be provided by name as well as path."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "minimal"
+            mock_deps_class.return_value = mock_deps
+
+            ShannotMCPServer(profile_paths=["minimal"])
+
+            mock_deps_class.assert_called_with(profile_name="minimal", executor=None)
+
     def test_init_with_invalid_profile(self, tmp_path):
         """Test server initialization with invalid profile."""
         invalid_profile = tmp_path / "invalid.json"
@@ -104,6 +166,20 @@ class TestShannotMCPServerInit:
         # Should not raise, just log error
         server = ShannotMCPServer(profile_paths=[invalid_profile])
         assert len(server.deps_by_profile) == 0
+
+    def test_executor_passed_through(self, mock_profile_paths):
+        """Executor passed to server is injected into SandboxDeps."""
+        executor = Mock()
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "test1"
+            mock_deps_class.return_value = mock_deps
+
+            ShannotMCPServer(profile_paths=[mock_profile_paths[0]], executor=executor)
+
+            kwargs = mock_deps_class.call_args.kwargs
+            assert kwargs["executor"] is executor
 
     def test_discover_profiles(self):
         """Test profile discovery from default locations."""
@@ -118,20 +194,54 @@ class TestMCPServerToolRegistration:
 
     def test_list_tools(self, mcp_server):
         """Test that tools are registered for each profile."""
-        # Tools should be registered for both profiles
         assert "test1" in mcp_server.deps_by_profile
         assert "test2" in mcp_server.deps_by_profile
 
+        tool_names = set(mcp_server.server._tool_cache.keys())
+        assert tool_names == {"sandbox_test1", "sandbox_test2"}
+
     def test_tool_name_format(self, mcp_server):
         """Test that tool names follow expected format."""
-        # Expected tool names:
-        # - sandbox_test1
-        # - sandbox_test1_read_file
-        # - sandbox_test1_list_directory
-        # - sandbox_test1_check_disk
-        # - sandbox_test1_check_memory
-        # (same for test2)
-        pass  # Actual testing would require accessing registered tools
+        for name in mcp_server.server._tool_cache.keys():
+            assert name.startswith("sandbox_")
+
+    def test_tool_names_include_executor_label(self, mock_profile_paths):
+        """When executor label provided, tool names include it."""
+        executor = Mock()
+        executor.host = "example.com"
+        with patch("shannot.mcp_server.SandboxDeps") as deps_class:
+            mock_deps1 = Mock()
+            mock_deps1.profile = SandboxProfile(
+                name="test1",
+                allowed_commands=["ls"],
+                binds=[],
+                tmpfs_paths=[Path("/tmp")],
+                environment={},
+                network_isolation=True,
+            )
+            mock_deps1.manager = Mock()
+            mock_deps1.executor = executor
+            mock_deps2 = Mock()
+            mock_deps2.profile = SandboxProfile(
+                name="test2",
+                allowed_commands=["df"],
+                binds=[],
+                tmpfs_paths=[Path("/tmp")],
+                environment={},
+                network_isolation=True,
+            )
+            mock_deps2.manager = Mock()
+            mock_deps2.executor = executor
+            deps_class.side_effect = [mock_deps1, mock_deps2]
+
+            server = ShannotMCPServer(
+                profile_paths=mock_profile_paths,
+                executor=executor,
+                executor_label="lima",
+            )
+
+            tool_names = set(server.server._tool_cache.keys())
+            assert tool_names == {"sandbox_lima_test1", "sandbox_lima_test2"}
 
 
 class TestMCPServerToolDescriptions:
@@ -145,6 +255,36 @@ class TestMCPServerToolDescriptions:
         assert "test1" in description
         assert "ls" in description or "cat" in description
         assert "read-only" in description
+        assert "local sandbox" in description
+        assert "Allowed commands include" in description
+
+    def test_description_includes_remote_host(self, mock_profile_paths):
+        """Descriptions reference remote host when executor provided."""
+        executor = Mock()
+        executor.host = "lima.local"
+
+        with patch("shannot.mcp_server.SandboxDeps") as deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = SandboxProfile(
+                name="remote",
+                allowed_commands=["nproc"],
+                binds=[],
+                tmpfs_paths=[Path("/tmp")],
+                environment={},
+                network_isolation=True,
+            )
+            mock_deps.manager = Mock()
+            mock_deps.executor = executor
+            deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(
+                profile_paths=[mock_profile_paths[0]],
+                executor=executor,
+                executor_label="lima",
+            )
+
+            description = server._generate_tool_description(mock_deps)
+            assert "remote host lima.local" in description
 
     def test_description_truncates_long_command_list(self, mcp_server):
         """Test that long command lists are truncated in descriptions."""
@@ -213,8 +353,7 @@ class TestMCPServerCommandFormatting:
 class TestMCPServerResources:
     """Test MCP resource handling."""
 
-    @pytest.mark.asyncio
-    async def test_list_resources(self, mcp_server):
+    def test_list_resources(self, mcp_server):
         """Test listing available resources."""
         # Resources should be registered for profile inspection
         assert len(mcp_server.deps_by_profile) == 2
@@ -234,8 +373,7 @@ class TestMCPServerResources:
 class TestMCPServerToolExecution:
     """Test tool execution (requires more integration-style setup)."""
 
-    @pytest.mark.asyncio
-    async def test_execute_command_tool(self, mcp_server):
+    def test_execute_command_tool(self, mcp_server):
         """Test executing a command tool."""
         # Mock the manager run method
         mock_result = ProcessResult(

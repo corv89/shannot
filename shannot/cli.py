@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import asdict
@@ -505,9 +506,26 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
     if "mcpServers" not in config:
         config["mcpServers"] = {}
 
-    server_config = {"command": "shannot-mcp", "args": []}
+    command_args: list[str] = []
+    resolved_command = shutil.which("shannot-mcp")
+    if resolved_command is None:
+        resolved_command = sys.executable
+        command_args = ["-m", "shannot.mcp_main"]
+        _LOGGER.info("shannot-mcp not found on PATH; using Python module fallback.")
+    else:
+        _LOGGER.info("Using MCP server binary at %s", resolved_command)
+
+    server_args = list(command_args)
     if target_name:
-        server_config["args"] = ["--target", target_name]
+        server_args.extend(["--target", target_name])
+
+    server_config = {"command": resolved_command, "args": server_args}
+
+    # Pass through SSH agent environment so remote targets work when spawned by MCP clients.
+    agent_env_keys = ["SSH_AUTH_SOCK", "SSH_AGENT_PID"]
+    env_vars = {key: os.environ[key] for key in agent_env_keys if key in os.environ}
+    if env_vars:
+        server_config["env"] = env_vars
 
     config["mcpServers"]["shannot"] = server_config
 
