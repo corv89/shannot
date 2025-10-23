@@ -198,12 +198,15 @@ key_file = "~/.ssh/id_rsa"           # Optional (uses SSH agent)
 port = 22                             # Optional (default: 22)
 connection_pool_size = 5              # Optional (default: 5)
 profile = "diagnostics"               # Optional (default profile)
+known_hosts = "~/.ssh/known_hosts"    # Optional (defaults to SSH config)
+strict_host_key = true                # Optional (default true; disable only for throwaway hosts)
 ```
 
 **Requirements**:
 - SSH access to remote system
 - bubblewrap installed on remote
 - SSH key-based authentication
+ - Valid host key entry in `known_hosts` (unless `strict_host_key = false`)
 
 ## CLI Commands
 
@@ -243,6 +246,12 @@ shannot --target local cat /etc/os-release
 # Without --target, uses default_executor from config
 shannot df -h
 ```
+
+## Host Key Verification
+
+Shannot enforces strict SSH host-key validation by default (matching OpenSSH). Make sure each remote's host key is present in your `known_hosts` file before using it via Shannot or Claude. You can point at a specific file with `known_hosts = "~/.ssh/known_hosts"`.
+
+If you set `strict_host_key = false`, host keys will not be checked—this is insecure and should only be used for disposable lab environments.
 
 ### MCP Integration
 
