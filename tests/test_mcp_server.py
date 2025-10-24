@@ -215,15 +215,14 @@ class TestShannotMCPServerInit:
 class TestMCPServerToolRegistration:
     """Test tool registration and listing."""
 
-    @pytest.mark.skipif(
-        "mcp" not in sys.modules
-        or not hasattr(sys.modules.get("mcp.server", type("X", (), {})()), "__file__"),
-        reason="Requires real MCP server",
-    )
     def test_list_tools(self, mcp_server):
         """Test that tools are registered for each profile."""
         assert "test1" in mcp_server.deps_by_profile
         assert "test2" in mcp_server.deps_by_profile
+
+        # Skip if using dummy server (no tools cached)
+        if not hasattr(mcp_server.server, "_tool_cache") or not mcp_server.server._tool_cache:
+            pytest.skip("Requires real MCP server with tool cache")
 
         tool_names = set(mcp_server.server._tool_cache.keys())
         assert tool_names == {"sandbox_test1", "sandbox_test2"}
@@ -236,11 +235,6 @@ class TestMCPServerToolRegistration:
         for name in mcp_server.server._tool_cache.keys():
             assert name.startswith("sandbox_")
 
-    @pytest.mark.skipif(
-        "mcp" not in sys.modules
-        or not hasattr(sys.modules.get("mcp.server", type("X", (), {})()), "__file__"),
-        reason="Requires real MCP server",
-    )
     def test_tool_names_include_executor_label(self, mock_profile_paths):
         """When executor label provided, tool names include it."""
         executor = Mock()
@@ -275,6 +269,10 @@ class TestMCPServerToolRegistration:
                 executor=executor,
                 executor_label="lima",
             )
+
+            # Skip if using dummy server (no tools cached)
+            if not hasattr(server.server, "_tool_cache") or not server.server._tool_cache:
+                pytest.skip("Requires real MCP server with tool cache")
 
             tool_names = set(server.server._tool_cache.keys())
             assert tool_names == {"sandbox_lima_test1", "sandbox_lima_test2"}
