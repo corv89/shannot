@@ -1,28 +1,38 @@
 # Configuration Guide
 
-This guide covers Shannot's configuration system for managing local and remote executors.
+Shannot's configuration system lets you manage multiple execution targets - run sandboxed commands locally or on remote Linux servers via SSH.
 
 ## Overview
 
-Shannot uses a TOML configuration file to manage executors - the backends that run sandbox commands. You can define multiple executors (local, SSH remotes) and switch between them easily.
+Shannot uses a TOML configuration file to manage **executors** - the backends that run sandbox commands. Define multiple executors (local Linux, SSH remotes) and switch between them seamlessly.
 
-**Configuration file location**:
-- Linux: `~/.config/shannot/config.toml`
-- macOS: `~/Library/Application Support/shannot/config.toml`
-- Windows: `%APPDATA%\Local\shannot\config.toml`
+### Configuration File Location
+
+Platform-specific locations (auto-detected):
+
+- **Linux**: `~/.config/shannot/config.toml`
+- **macOS**: `~/Library/Application Support/shannot/config.toml`
+- **Windows**: `%APPDATA%\Local\shannot\config.toml`
+
+No configuration file needed for basic local usage - Shannot works out-of-the-box on Linux!
 
 ## Quick Start
 
 ### Add a Remote Server
 
 ```bash
-# Add an SSH remote
+# Add an SSH remote with all options
 shannot remote add prod \
   --host prod-server.example.com \
   --user admin \
-  --key ~/.ssh/id_rsa
+  --key ~/.ssh/id_rsa \
+  --port 22 \
+  --profile diagnostics
 
-# List configured remotes
+# Simple remote (uses SSH config and defaults)
+shannot remote add staging staging.internal
+
+# List all configured remotes
 shannot remote list
 
 # Test the connection
@@ -32,11 +42,109 @@ shannot remote test prod
 ### Use the Remote
 
 ```bash
-# Run command on remote
+# Run commands on remote system
 shannot --target prod df -h
+shannot --target prod cat /etc/os-release
+shannot -t staging ls /var/log
 
-# Use with Claude Desktop
+# Use different profile for specific command
+shannot --target prod --profile minimal.json ls /
+
+# Set as default target (via environment)
+export SHANNOT_TARGET=prod
+shannot df -h  # Runs on prod
+
+# Use with Claude Desktop (MCP)
 shannot mcp install --target prod
+```
+
+## Complete Examples
+
+### Example 1: Simple Setup
+
+```bash
+# 1. Add remote server
+shannot remote add webserver web1.company.com
+
+# 2. Test connection
+shannot remote test webserver
+
+# 3. Run commands
+shannot -t webserver df -h
+shannot -t webserver free -h
+shannot -t webserver uptime
+```
+
+### Example 2: Multiple Environments
+
+```bash
+# Add production server (restricted access)
+shannot remote add prod \
+  --host prod.example.com \
+  --user readonly \
+  --key ~/.ssh/prod_readonly_key \
+  --profile minimal
+
+# Add staging server (more access)
+shannot remote add staging \
+  --host staging.example.com \
+  --user developer \
+  --profile diagnostics
+
+# Add dev VM (local)
+shannot remote add dev \
+  --host localhost \
+  --user devuser \
+  --port 2222
+
+# List all remotes
+shannot remote list
+
+# Use them
+shannot -t prod cat /etc/os-release      # Minimal commands only
+shannot -t staging df -h                  # Full diagnostics
+shannot -t dev ps aux                     # Dev environment
+```
+
+### Example 3: Team Configuration
+
+Share this configuration with your team by committing `~/.config/shannot/config.toml`:
+
+```toml
+default_executor = "local"
+
+[executor.local]
+type = "local"
+
+[executor.prod]
+type = "ssh"
+host = "prod.company.internal"
+username = "monitoring"
+key_file = "~/.ssh/company_monitoring_key"
+profile = "minimal"
+
+[executor.staging]
+type = "ssh"
+host = "staging.company.internal"
+username = "monitoring"
+key_file = "~/.ssh/company_monitoring_key"
+profile = "diagnostics"
+
+[executor.dev]
+type = "ssh"
+host = "dev.company.internal"
+username = "developer"
+key_file = "~/.ssh/company_dev_key"
+profile = "diagnostics"
+port = 2222
+```
+
+Team members can then:
+```bash
+# Everyone uses the same remote names
+shannot -t prod df -h
+shannot -t staging cat /var/log/app.log
+shannot -t dev ps aux
 ```
 
 ## Configuration File Format
@@ -90,12 +198,15 @@ key_file = "~/.ssh/id_rsa"           # Optional (uses SSH agent)
 port = 22                             # Optional (default: 22)
 connection_pool_size = 5              # Optional (default: 5)
 profile = "diagnostics"               # Optional (default profile)
+known_hosts = "~/.ssh/known_hosts"    # Optional (defaults to SSH config)
+strict_host_key = true                # Optional (default true; disable only for throwaway hosts)
 ```
 
 **Requirements**:
 - SSH access to remote system
 - bubblewrap installed on remote
 - SSH key-based authentication
+ - Valid host key entry in `known_hosts` (unless `strict_host_key = false`)
 
 ## CLI Commands
 
@@ -135,6 +246,12 @@ shannot --target local cat /etc/os-release
 # Without --target, uses default_executor from config
 shannot df -h
 ```
+
+## Host Key Verification
+
+Shannot enforces strict SSH host-key validation by default (matching OpenSSH). Make sure each remote's host key is present in your `known_hosts` file before using it via Shannot or Claude. You can point at a specific file with `known_hosts = "~/.ssh/known_hosts"`.
+
+If you set `strict_host_key = false`, host keys will not be checked—this is insecure and should only be used for disposable lab environments.
 
 ### MCP Integration
 

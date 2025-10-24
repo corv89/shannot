@@ -6,16 +6,25 @@ Practical deployment scenarios for Shannot in production environments.
 
 ### Direct SSH Install
 
+Install Shannot on a remote Linux system via SSH:
+
 ```bash
-# Transfer and install in one command
-ssh user@remote "bash -s" < install.sh
+# Using UV (recommended - fastest)
+ssh user@remote "curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install shannot"
+
+# Or using pipx (if already available)
+ssh user@remote "sudo apt install -y bubblewrap && pipx install shannot"
+
+# Install only bubblewrap (if client is elsewhere)
+ssh user@remote "sudo apt install -y bubblewrap"  # Debian/Ubuntu
+ssh user@remote "sudo dnf install -y bubblewrap"  # Fedora/RHEL
 ```
 
 ## Configuration Management
 
 ### Ansible
 
-Basic Ansible playbook for installing shannot:
+Ansible playbook for deploying Shannot:
 
 ```yaml
 # playbook.yml
@@ -25,19 +34,22 @@ Basic Ansible playbook for installing shannot:
   become: yes
 
   tasks:
-    - name: Install dependencies
+    - name: Install bubblewrap
       package:
-        name:
-          - python3
-          - python3-pip
-          - bubblewrap
+        name: bubblewrap
         state: present
 
-    - name: Install shannot
-      pip:
-        name: shannot
+    - name: Install pipx (Debian/Ubuntu)
+      package:
+        name: pipx
         state: present
-        executable: pip3
+      when: ansible_os_family == "Debian"
+
+    - name: Install shannot with pipx
+      become_user: "{{ deploy_user | default('shannot') }}"
+      command: pipx install shannot
+      args:
+        creates: "~/.local/bin/shannot"
 
     - name: Create system config directory
       file:
@@ -58,6 +70,7 @@ Basic Ansible playbook for installing shannot:
         mode: '0644'
 
     - name: Verify installation
+      become_user: "{{ deploy_user | default('shannot') }}"
       command: shannot verify
       register: verify_result
       changed_when: false
@@ -71,41 +84,148 @@ ansible-playbook -i inventory.ini playbook.yml
 
 ## SSH Integration
 
-### Restricted Shell for Specific Users
+### Restricted Shell for Read-Only Access
 
-Create a dedicated user that can only run sandboxed commands:
+Give SSH users read-only access by forcing all their commands through the sandbox:
 
 ```bash
-# Create monitoring user
-sudo useradd -m -s /bin/bash monitoring
+# 1. Create dedicated user
+sudo useradd -m -s /usr/local/bin/shannot-shell readonly-user
 
-# Create wrapper script
-sudo cat > /usr/local/bin/shannot-shell << 'EOF'
+# 2. Create the wrapper shell script
+sudo tee /usr/local/bin/shannot-shell > /dev/null << 'EOF'
 #!/bin/bash
-# Wrapper that runs all commands in sandbox
+# Force all SSH commands through shannot sandbox
 
 if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
-    exec /usr/bin/shannot run $SSH_ORIGINAL_COMMAND
+    # Run the user's command in the sandbox
+    exec shannot $SSH_ORIGINAL_COMMAND
 else
-    echo "This account can only run specific commands"
-    echo "Usage: ssh monitoring@host 'command'"
+    # Interactive login not allowed
+    echo "Error: This account only accepts SSH commands"
+    echo "Usage: ssh readonly-user@host 'ls /var/log'"
     exit 1
 fi
 EOF
 
 sudo chmod +x /usr/local/bin/shannot-shell
 
-# Set as user's shell
-sudo usermod -s /usr/local/bin/shannot-shell monitoring
+# 3. Test it
+ssh readonly-user@host 'df -h'           # Works - runs in sandbox
+ssh readonly-user@host 'cat /etc/passwd' # Works - read-only
+ssh readonly-user@host 'rm /tmp/test'    # Fails - sandbox blocks writes
 ```
 
-### SSH Forced Command
+**How it works:**
+- User SSHs in with a command: `ssh user@host 'df -h'`
+- SSH sets `$SSH_ORIGINAL_COMMAND` to `df -h`
+- The wrapper script runs `shannot df -h` instead
+- Command executes in read-only sandbox
+- User cannot get an interactive shell
 
-Restrict SSH keys to sandboxed commands only:
+### SSH Forced Command for Specific Keys
+
+Restrict a specific SSH key to only run certain commands:
 
 ```bash
 # /home/monitoring/.ssh/authorized_keys
-command="/usr/bin/shannot run /usr/local/bin/diagnostics.sh" ssh-rsa AAAA...
+
+# Allow only disk diagnostics with this key
+command="shannot df -h" ssh-rsa AAAAB3NzaC1yc2E... user@laptop
+
+# Allow a specific script with this key
+command="shannot /usr/local/bin/system-health-check.sh" ssh-rsa AAAAB3NzaC1... monitoring@server
+```
+
+**How it works:**
+- Regardless of what command the user tries to run, SSH forces the `command=` value
+- The forced command runs through shannot automatically
+- User cannot run anything else with that key
+
+**Example:**
+```bash
+# User has key configured with: command="shannot df -h"
+
+# User tries:
+ssh -i monitoring.key user@host 'rm -rf /'
+
+# SSH actually runs:
+shannot df -h  # Ignores the 'rm -rf /' completely
+```
+
+## Remote Execution Setup
+
+Control remote Linux systems from your macOS or Windows laptop.
+
+### Quick Remote Setup
+
+```bash
+# 1. Ensure remote has bubblewrap installed
+ssh user@remote "which bwrap || sudo apt install -y bubblewrap"
+
+# 2. Add remote to shannot
+shannot remote add myserver \
+  --host remote.example.com \
+  --user myuser \
+  --key ~/.ssh/id_rsa
+
+# 3. Test connection
+shannot remote test myserver
+
+# 4. Run commands
+shannot -t myserver df -h
+shannot -t myserver cat /etc/os-release
+```
+
+### Multi-Server Monitoring
+
+Set up monitoring for multiple servers:
+
+```bash
+# Add all your servers
+shannot remote add web1 web1.company.com --user monitoring
+shannot remote add web2 web2.company.com --user monitoring
+shannot remote add db1 db1.company.com --user monitoring --profile minimal
+
+# Create monitoring script
+cat > check-servers.sh << 'EOF'
+#!/bin/bash
+for server in web1 web2 db1; do
+  echo "=== $server ==="
+  echo "Disk:"
+  shannot -t $server df -h / | tail -1
+  echo "Memory:"
+  shannot -t $server free -h | grep Mem:
+  echo "Uptime:"
+  shannot -t $server uptime
+  echo
+done
+EOF
+
+chmod +x check-servers.sh
+./check-servers.sh
+```
+
+### Claude Desktop with Remote Access
+
+Give Claude read-only access to your production servers:
+
+```bash
+# 1. Add production server
+shannot remote add prod \
+  --host prod.company.com \
+  --user readonly \
+  --key ~/.ssh/prod_readonly_key \
+  --profile minimal
+
+# 2. Test it works
+shannot -t prod df -h
+
+# 3. Install MCP with remote target
+shannot mcp install --target prod
+
+# 4. Restart Claude Desktop
+# Now ask Claude: "Check disk space on the prod server"
 ```
 
 ## User-Specific Deployments
@@ -132,29 +252,34 @@ Users can have custom profiles:
 
 ```bash
 # Default: ~/.config/shannot/profile.json
-shannot run ls /
+shannot ls /
 
 # Custom profile
-shannot --profile ~/.config/shannot/diagnostics.json run df -h
+shannot --profile ~/.config/shannot/diagnostics.json df -h
 
 # Via environment variable
 export SANDBOX_PROFILE=~/.config/shannot/custom.json
-shannot run cat /etc/os-release
+shannot cat /etc/os-release
 ```
 
 ## Troubleshooting Deployments
 
-### Verify Permissions
+### Verify Bubblewrap Installation
 
-Check bubblewrap permissions:
+Check that bubblewrap is properly installed:
 
 ```bash
-ls -la $(which bwrap)
-# Should be: -rwsr-xr-x (setuid root)
+# Check if bwrap is installed
+which bwrap
 
-# If not, fix:
-sudo chmod u+s $(which bwrap)
+# Check version
+bwrap --version
+
+# Test basic functionality (should fail with "No permissions" - this is expected)
+bwrap --ro-bind / / --dev /dev --proc /proc ls / 2>&1 | grep -q "unshare" && echo "Needs user namespace support - see troubleshooting.md"
 ```
+
+**Note:** Bubblewrap uses unprivileged user namespaces, not setuid. If you see permission errors, see [troubleshooting.md](troubleshooting.md) for platform-specific fixes.
 
 ### Test Profile
 
@@ -165,7 +290,7 @@ Verify profile is valid:
 shannot --profile /etc/shannot/profile.json export > /dev/null
 
 # Test basic command
-shannot --profile /etc/shannot/profile.json run ls /
+shannot --profile /etc/shannot/profile.json ls /
 
 # Verbose mode for debugging
 shannot --verbose --profile /etc/shannot/profile.json verify
@@ -176,11 +301,11 @@ shannot --verbose --profile /etc/shannot/profile.json verify
 Test that network is properly isolated:
 
 ```bash
-# Should fail (network isolated)
-shannot run ping -c 1 8.8.8.8
+# Should fail (network isolated by default)
+shannot ping -c 1 8.8.8.8
 
 # Should succeed (reading local file)
-shannot run cat /etc/resolv.conf
+shannot cat /etc/resolv.conf
 ```
 
 ### Profile Path Issues
@@ -188,15 +313,15 @@ shannot run cat /etc/resolv.conf
 If profile isn't found:
 
 ```bash
-# Check search order
-shannot --verbose run ls / 2>&1 | grep profile
+# Check search order (verbose mode shows which profiles are tried)
+shannot --verbose ls / 2>&1 | grep profile
 
-# Specify explicitly
+# Specify explicitly with environment variable
 export SANDBOX_PROFILE=/etc/shannot/profile.json
-shannot run ls /
+shannot ls /
 
-# Or use command line
-shannot --profile /etc/shannot/profile.json run ls /
+# Or use command line flag
+shannot --profile /etc/shannot/profile.json ls /
 ```
 
 ## Security Considerations

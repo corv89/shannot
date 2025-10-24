@@ -58,7 +58,7 @@ class LocalExecutor(SandboxExecutor):
             RuntimeError: If bubblewrap not found in PATH
         """
         self._validate_platform()
-        self.bwrap_path = bwrap_path or self._find_bwrap()
+        self.bwrap_path: Path = bwrap_path or self._find_bwrap()
 
         # Validate bwrap_path exists and is executable
         if not self.bwrap_path.exists():

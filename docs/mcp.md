@@ -19,7 +19,7 @@ MCP (Model Context Protocol) is Anthropic's standard protocol for connecting AI 
 ### 1. Install Shannot with MCP support
 
 ```bash
-# Install with MCP dependencies
+# Install with MCP dependencies (includes remote SSH support)
 pip install shannot[mcp]
 
 # Or install from source
@@ -31,6 +31,9 @@ pip install -e ".[mcp]"
 
 ```bash
 shannot mcp install
+
+# Use a configured remote target
+shannot mcp install --target prod
 ```
 
 This automatically adds Shannot to your Claude Desktop configuration.
@@ -70,18 +73,17 @@ You → Claude Desktop → MCP Protocol → Shannot Server → bubblewrap → Li
 Shannot exposes different tool sets based on **profiles**:
 
 ### Minimal Profile (Default)
-- `sandbox_minimal` - Run basic commands
-- `sandbox_minimal_read_file` - Read a specific file
-- `sandbox_minimal_list_directory` - List directory contents
+- Local install: `sandbox_minimal` – run any command allowed by the profile (pass `{"command": ["ls", "/"]}`)
+- Remote install (`--target prod`): tool name becomes `sandbox_prod_minimal` so Claude can distinguish hosts.
 
 **Allowed commands**: ls, cat, grep, find
 
 ### Readonly Profile
-Same as minimal, plus:
+Same base tool with a broader allowlist:
 - head, tail, file, stat, wc, du
 
 ### Diagnostics Profile
-Same as readonly, plus:
+Same tool with an extended allowlist:
 - df, free, ps, uptime, hostname, uname, env, id
 
 **Best for**: System monitoring and health checks
@@ -115,6 +117,31 @@ EOF
 ```
 
 The MCP server automatically discovers profiles in `~/.config/shannot/`.
+
+### Remote Targets
+
+To run Claude's commands on a remote Linux host:
+
+1. **Add the remote target (once):**
+   ```bash
+   shannot remote add prod --host prod.example.com --user admin --profile diagnostics
+   shannot remote test prod
+   ```
+2. **Install the MCP server for that target:**
+   ```bash
+   shannot mcp install --target prod
+   ```
+3. **Run the server manually (optional):**
+   ```bash
+   shannot-mcp --target prod --verbose
+   ```
+
+When you specify `--target`, the MCP server loads the matching executor from
+`~/.config/shannot/config.toml` and reuses the associated profile (if set).
+Claude's requests now execute on the remote host through the SSH executor.
+
+> Tip: Run `ssh user@host` once outside of Claude to record the host key in your
+> `known_hosts` file before installing the MCP server. This keeps connections secure.
 
 ### Manual Configuration
 
@@ -272,9 +299,9 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 > **You**: My disk is filling up, can you help me figure out what's taking up space?
 
 > **Claude**: I'll check your disk usage.
-> 
+>
 > *[Uses sandbox_diagnostics_check_disk]*
-> 
+>
 > Your /home partition is 87% full. Let me find the largest directories...
 >
 > *[Uses sandbox_diagnostics tool to run `du`]*
@@ -312,7 +339,6 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 
 - **[See profiles.md](profiles.md)** to learn about creating custom profiles
 - **[See api.md](api.md)** to use Shannot programmatically
-- **[See LLM.md](../LLM.md)** for advanced Pydantic-AI integration
 
 ## Getting Help
 

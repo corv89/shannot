@@ -151,7 +151,7 @@ Environment variables to set inside the sandbox.
 
 ### seccomp_profile (optional)
 
-**Type**: `string` (path)  
+**Type**: `string` (path)
 **Default**: `null` (no seccomp filtering)
 
 Path to a compiled seccomp BPF profile. Provides syscall-level filtering for additional security.

@@ -8,23 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
-from mcp.server import Server
-from mcp.types import Resource, TextContent, Tool
+from mcp.server import InitializationOptions, Server
+from mcp.server.stdio import stdio_server
+from mcp.types import Resource, ServerCapabilities, TextContent, Tool
 
-from shannot.tools import (
-    CommandInput,
-    DirectoryListInput,
-    FileReadInput,
-    SandboxDeps,
-    check_disk_usage,
-    check_memory,
-    list_directory,
-    read_file,
-    run_command,
-)
+from shannot import __version__
+from shannot.execution import SandboxExecutor
+from shannot.tools import CommandInput, CommandOutput, SandboxDeps, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -32,26 +25,33 @@ logger = logging.getLogger(__name__)
 class ShannotMCPServer:
     """MCP server exposing sandbox profiles as tools."""
 
-    def __init__(self, profile_paths: list[Path] | None = None):
+    def __init__(
+        self,
+        profile_paths: Sequence[Path | str] | None = None,
+        executor: SandboxExecutor | None = None,
+        executor_label: str | None = None,
+    ):
         """Initialize the MCP server.
 
         Args:
             profile_paths: List of profile paths to load. If None, loads from default locations.
+            executor: Optional executor used to run sandbox commands (local or remote).
         """
-        self.server = Server("shannot-sandbox")
+        self.server: Server = Server("shannot-sandbox")
         self.deps_by_profile: dict[str, SandboxDeps] = {}
+        self._executor_label: str | None = executor_label
 
         # Load profiles
         if profile_paths is None:
             profile_paths = self._discover_profiles()
 
-        for path in profile_paths:
+        for spec in profile_paths:
             try:
-                deps = SandboxDeps(profile_path=path)
+                deps = self._create_deps_from_spec(spec, executor)
                 self.deps_by_profile[deps.profile.name] = deps
-                logger.info(f"Loaded profile: {deps.profile.name} from {path}")
+                logger.info(f"Loaded profile: {deps.profile.name}")
             except Exception as e:
-                logger.error(f"Failed to load profile from {path}: {e}")
+                logger.error(f"Failed to load profile {spec}: {e}")
 
         # Register handlers
         self._register_tools()
@@ -73,6 +73,31 @@ class ShannotMCPServer:
 
         return paths
 
+    def _create_deps_from_spec(
+        self,
+        spec: Path | str,
+        executor: SandboxExecutor | None,
+    ) -> SandboxDeps:
+        """Create SandboxDeps from a profile specification.
+
+        Args:
+            spec: Path to profile JSON or profile name string.
+            executor: Optional executor to attach.
+
+        Returns:
+            SandboxDeps configured for the requested profile.
+        """
+        if isinstance(spec, Path):
+            return SandboxDeps(profile_path=spec, executor=executor)
+
+        # Accept either path-like strings or profile names
+        possible_path = Path(spec).expanduser()
+        if possible_path.exists() or "/" in spec or spec.endswith(".json") or "\\" in spec:
+            return SandboxDeps(profile_path=possible_path, executor=executor)
+
+        # Treat as profile name.
+        return SandboxDeps(profile_name=spec, executor=executor)
+
     def _register_tools(self) -> None:
         """Register MCP tools for each profile."""
 
@@ -90,10 +115,11 @@ class ShannotMCPServer:
             tools: list[Tool] = []
 
             for pname, pdeps in self.deps_by_profile.items():
+                tool_name = self._make_tool_name(pname)
                 # Main command tool
                 tools.append(
                     Tool(
-                        name=f"sandbox_{pname}",
+                        name=tool_name,
                         description=self._generate_tool_description(pdeps),
                         inputSchema={
                             "type": "object",
@@ -109,108 +135,32 @@ class ShannotMCPServer:
                     )
                 )
 
-                # Specialized tools
-                tools.extend(
-                    [
-                        Tool(
-                            name=f"sandbox_{pname}_read_file",
-                            description=f"Read a file using {pname} sandbox (read-only)",
-                            inputSchema={
-                                "type": "object",
-                                "properties": {
-                                    "path": {
-                                        "type": "string",
-                                        "description": "Absolute path to file",
-                                    }
-                                },
-                                "required": ["path"],
-                            },
-                        ),
-                        Tool(
-                            name=f"sandbox_{pname}_list_directory",
-                            description=f"List directory contents using {pname} sandbox",
-                            inputSchema={
-                                "type": "object",
-                                "properties": {
-                                    "path": {
-                                        "type": "string",
-                                        "description": "Directory path",
-                                    },
-                                    "long_format": {
-                                        "type": "boolean",
-                                        "description": "Show detailed info (ls -l)",
-                                        "default": False,
-                                    },
-                                    "show_hidden": {
-                                        "type": "boolean",
-                                        "description": "Show hidden files (ls -a)",
-                                        "default": False,
-                                    },
-                                },
-                                "required": ["path"],
-                            },
-                        ),
-                        Tool(
-                            name=f"sandbox_{pname}_check_disk",
-                            description=f"Check disk usage using {pname} sandbox",
-                            inputSchema={"type": "object", "properties": {}},
-                        ),
-                        Tool(
-                            name=f"sandbox_{pname}_check_memory",
-                            description=f"Check memory usage using {pname} sandbox",
-                            inputSchema={"type": "object", "properties": {}},
-                        ),
-                    ]
-                )
-
             return tools
 
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+        async def call_tool(name: str, arguments: dict[str, object]) -> list[TextContent]:  # type: ignore[misc]
             """Handle MCP tool calls."""
             # Parse tool name to extract profile and action
-            if not name.startswith("sandbox_"):
+            profile_name = None
+            for pname in self.deps_by_profile.keys():
+                if name == self._make_tool_name(pname):
+                    profile_name = pname
+                    break
+
+            if profile_name is None:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
-            parts = name.split("_", 2)  # ['sandbox', 'profilename', 'action']
-            if len(parts) < 2:
-                return [TextContent(type="text", text=f"Invalid tool name format: {name}")]
-
-            pname = parts[1]
-            action = parts[2] if len(parts) > 2 else "command"
-
-            if pname not in self.deps_by_profile:
-                return [TextContent(type="text", text=f"Unknown profile: {pname}")]
-
-            pdeps = self.deps_by_profile[pname]
+            pdeps = self.deps_by_profile[profile_name]
 
             try:
-                # Route to appropriate tool
-                if action == "command":
-                    cmd_input = CommandInput(**arguments)
-                    result = await run_command(pdeps, cmd_input)
-                    return [
-                        TextContent(
-                            type="text",
-                            text=self._format_command_output(result),
-                        )
-                    ]
-                elif action == "read" and len(parts) > 3 and parts[3] == "file":
-                    file_input = FileReadInput(**arguments)
-                    content = await read_file(pdeps, file_input)
-                    return [TextContent(type="text", text=content)]
-                elif action == "list" and len(parts) > 3 and parts[3] == "directory":
-                    dir_input = DirectoryListInput(**arguments)
-                    listing = await list_directory(pdeps, dir_input)
-                    return [TextContent(type="text", text=listing)]
-                elif action == "check" and len(parts) > 3 and parts[3] == "disk":
-                    usage = await check_disk_usage(pdeps)
-                    return [TextContent(type="text", text=usage)]
-                elif action == "check" and len(parts) > 3 and parts[3] == "memory":
-                    usage = await check_memory(pdeps)
-                    return [TextContent(type="text", text=usage)]
-                else:
-                    return [TextContent(type="text", text=f"Unknown action: {action}")]
+                cmd_input = CommandInput(**arguments)  # type: ignore[arg-type]
+                result = await run_command(pdeps, cmd_input)
+                return [
+                    TextContent(
+                        type="text",
+                        text=self._format_command_output(result),
+                    )
+                ]
 
             except Exception as e:
                 logger.error(f"Tool execution failed: {e}", exc_info=True)
@@ -237,11 +187,12 @@ class ShannotMCPServer:
 
             return resources
 
-        @self.server.read_resource()  # type: ignore[arg-type]
-        async def read_resource(uri: str) -> str:
+        @self.server.read_resource()
+        async def read_resource(uri: object) -> str:  # type: ignore[misc]
             """Read resource content."""
-            if uri.startswith("sandbox://profiles/"):
-                profile_name = uri.split("/")[-1]
+            uri_str = str(uri)
+            if uri_str.startswith("sandbox://profiles/"):
+                profile_name = uri_str.split("/")[-1]
                 if profile_name in self.deps_by_profile:
                     deps = self.deps_by_profile[profile_name]
                     return json.dumps(
@@ -261,18 +212,40 @@ class ShannotMCPServer:
 
     def _generate_tool_description(self, deps: SandboxDeps) -> str:
         """Generate a description for a profile's tool."""
-        commands = ", ".join(deps.profile.allowed_commands[:5])
+        commands_list = deps.profile.allowed_commands[:5]
+        commands = ", ".join(commands_list)
         if len(deps.profile.allowed_commands) > 5:
             commands += f", ... ({len(deps.profile.allowed_commands)} total)"
+        if not commands:
+            commands = "commands permitted by the profile rules"
 
-        return (
-            f"Execute commands in read-only '{deps.profile.name}' sandbox. "
-            f"Allowed commands: {commands}. "
-            f"Network isolation: {deps.profile.network_isolation}. "
-            f"All file modifications are ephemeral (tmpfs)."
+        executor = getattr(deps, "executor", None)
+        if executor is None:
+            host_info = "local sandbox"
+        else:
+            host = getattr(executor, "host", None)
+            if host:
+                host_info = f"remote host {host}"
+            else:
+                host_info = f"{executor.__class__.__name__}"
+
+        network_note = (
+            "network isolated" if deps.profile.network_isolation else "network access allowed"
         )
 
-    def _format_command_output(self, result: Any) -> str:
+        return (
+            f"Execute read-only commands in '{deps.profile.name}' sandbox on {host_info}. "
+            f"Allowed commands include: {commands}. "
+            f'{network_note}. Provide arguments as {{"command": ["ls", "/"]}}.'
+        )
+
+    def _make_tool_name(self, profile_name: str) -> str:
+        """Create deterministic tool names optionally including executor label."""
+        if self._executor_label:
+            return f"sandbox_{self._executor_label}_{profile_name}"
+        return f"sandbox_{profile_name}"
+
+    def _format_command_output(self, result: CommandOutput) -> str:
         """Format command output for MCP response."""
         output = f"Exit code: {result.returncode}\n"
         output += f"Duration: {result.duration:.2f}s\n\n"
@@ -294,7 +267,22 @@ class ShannotMCPServer:
 
     async def run(self) -> None:
         """Run the MCP server."""
-        await self.server.run()  # type: ignore[call-arg]
+        options = InitializationOptions(
+            server_name="shannot-sandbox",
+            server_version=__version__,
+            capabilities=ServerCapabilities(),
+        )
+
+        async with stdio_server() as (read_stream, write_stream):
+            await self.server.run(read_stream, write_stream, options)
+
+    async def cleanup(self) -> None:
+        """Cleanup resources associated with the server."""
+        for deps in self.deps_by_profile.values():
+            try:
+                await deps.cleanup()
+            except Exception as exc:
+                logger.debug("Failed to cleanup sandbox dependencies: %s", exc)
 
 
 # Export

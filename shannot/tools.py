@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from shannot import SandboxManager, load_profile_from_path
 from shannot.process import ProcessResult
+from shannot.sandbox import SandboxProfile
 
 if TYPE_CHECKING:
     from shannot.execution import SandboxExecutor
@@ -86,7 +87,7 @@ class SandboxDeps:
 
         # Load profile
         if profile_path:
-            self.profile = load_profile_from_path(profile_path)
+            self.profile: SandboxProfile = load_profile_from_path(profile_path)
         else:
             # Try user config first
             user_profile = Path.home() / ".config" / "shannot" / f"{profile_name}.json"
@@ -98,12 +99,12 @@ class SandboxDeps:
                 self.profile = load_profile_from_path(bundled_profile)
 
         # Store executor for later use
-        self.executor = executor
+        self.executor: SandboxExecutor | None = executor
 
         # Create manager
         if executor is not None:
             # New mode: use executor
-            self.manager = SandboxManager(self.profile, executor=executor)
+            self.manager: SandboxManager = SandboxManager(self.profile, executor=executor)
         else:
             # Legacy mode: use bwrap_path
             if bwrap_path is None:
