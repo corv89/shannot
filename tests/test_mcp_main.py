@@ -38,27 +38,27 @@ if "mcp.server" not in sys.modules:
         async def run(self):
             return None
 
-    server_module.Server = _DummyServer
+    server_module.Server = _DummyServer  # type: ignore[attr-defined]
     sys.modules["mcp"] = mcp_module
     sys.modules["mcp.server"] = server_module
-    mcp_module.server = server_module
+    mcp_module.server = server_module  # type: ignore[attr-defined]
 
 if "mcp.types" not in sys.modules:
     types_module = types.ModuleType("mcp.types")
 
     class _SimpleType:
-        def __init__(self, **kwargs):
+        def __init__(self, **kwargs: object):
             self.__dict__.update(kwargs)
 
-    types_module.Resource = _SimpleType
-    types_module.TextContent = _SimpleType
-    types_module.Tool = _SimpleType
+    types_module.Resource = _SimpleType  # type: ignore[attr-defined]
+    types_module.TextContent = _SimpleType  # type: ignore[attr-defined]
+    types_module.Tool = _SimpleType  # type: ignore[attr-defined]
 
     sys.modules["mcp.types"] = types_module
-    sys.modules["mcp"].types = types_module
+    sys.modules["mcp"].types = types_module  # type: ignore[attr-defined]
 
-from shannot import SandboxProfile
-from shannot.mcp_main import main as mcp_main
+from shannot import SandboxProfile  # noqa: E402
+from shannot.mcp_main import main as mcp_main  # noqa: E402
 
 
 class DummyServer:
