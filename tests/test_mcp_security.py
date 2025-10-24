@@ -13,9 +13,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from pydantic import ValidationError
 
-from shannot.tools import (
+pytest.importorskip("pydantic")
+
+from pydantic import ValidationError  # noqa: E402
+
+from shannot.tools import (  # noqa: E402
     CommandInput,
     DirectoryListInput,
     FileReadInput,
