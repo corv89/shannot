@@ -9,8 +9,11 @@ import json
 
 import pytest
 
-from shannot.mcp_server import ShannotMCPServer
-from shannot.tools import (
+pytest.importorskip("mcp")
+pytest.importorskip("pydantic")
+
+from shannot.mcp_server import ShannotMCPServer  # noqa: E402
+from shannot.tools import (  # noqa: E402
     CommandInput,
     DirectoryListInput,
     FileReadInput,

@@ -51,7 +51,9 @@ dmypy.json
 .pytype/
 
 # Documentation builds
+site/
 docs/_build/
+.mkdocs_cache/
 
 # Distribution
 *.tar.gz
@@ -63,3 +65,6 @@ docs/_build/
 # Local development
 .env
 .local/
+
+# Local planning
+plans

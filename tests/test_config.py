@@ -1,10 +1,13 @@
 """Tests for configuration management."""
 
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+pytest.importorskip("pydantic")
 
 from shannot.config import (
     LocalExecutorConfig,
@@ -40,6 +43,8 @@ class TestExecutorConfig:
             username="user",
             key_file=Path("~/.ssh/id_rsa"),
             port=22,
+            known_hosts=Path("~/.ssh/known_hosts"),
+            strict_host_key=False,
         )
         assert config.type == "ssh"
         assert config.host == "example.com"
@@ -47,6 +52,8 @@ class TestExecutorConfig:
         assert config.port == 22
         # Key file should be expanded
         assert config.key_file == Path.home() / ".ssh" / "id_rsa"
+        assert config.known_hosts == Path.home() / ".ssh" / "known_hosts"
+        assert config.strict_host_key is False
 
     def test_ssh_executor_config_defaults(self):
         """Test SSH executor with default values."""
@@ -55,11 +62,19 @@ class TestExecutorConfig:
         assert config.key_file is None
         assert config.port == 22
         assert config.connection_pool_size == 5
+        assert config.known_hosts is None
+        assert config.strict_host_key is True
 
     def test_ssh_executor_config_path_expansion(self):
         """Test that paths are expanded."""
-        config = SSHExecutorConfig(type="ssh", host="example.com", key_file=Path("~/test/key"))
+        config = SSHExecutorConfig(
+            type="ssh",
+            host="example.com",
+            key_file=Path("~/test/key"),
+            known_hosts=Path("~/test/known_hosts"),
+        )
         assert config.key_file == Path.home() / "test" / "key"
+        assert config.known_hosts == Path.home() / "test" / "known_hosts"
 
 
 class TestShannotConfig:
@@ -169,6 +184,8 @@ class TestLoadSaveConfig:
                     username="admin",
                     key_file=Path("/home/user/.ssh/id_rsa"),
                     port=22,
+                    known_hosts=Path("/home/user/.ssh/known_hosts"),
+                    strict_host_key=False,
                 ),
             },
         )
@@ -187,6 +204,8 @@ class TestLoadSaveConfig:
         assert prod_config.type == "ssh"
         assert prod_config.host == "prod.example.com"
         assert prod_config.username == "admin"
+        assert prod_config.known_hosts == Path("/home/user/.ssh/known_hosts")
+        assert prod_config.strict_host_key is False
 
     def test_save_config_creates_directory(self, tmp_path):
         """Test that save_config creates parent directories."""
@@ -274,6 +293,31 @@ class TestCreateExecutor:
             create_executor(config, "prod")
 
 
+class TestCreateExecutorErrors:
+    """Test error handling when creating executors."""
+
+    def test_create_ssh_executor_missing_asyncssh(self, monkeypatch):
+        """Ensure helpful message when asyncssh is unavailable."""
+        config = ShannotConfig(
+            default_executor="local",
+            executor={
+                "prod": SSHExecutorConfig(
+                    type="ssh",
+                    host="prod.example.com",
+                ),
+            },
+        )
+
+        fake_module = types.ModuleType("shannot.executors")
+        fake_module.__file__ = "shannot/executors/__init__.py"
+        monkeypatch.setitem(sys.modules, "shannot.executors", fake_module)
+
+        with pytest.raises(RuntimeError, match="pip install shannot\\[remote\\]"):
+            create_executor(config, "prod")
+
+        monkeypatch.delitem(sys.modules, "shannot.executors", raising=False)
+
+
 class TestConfigRoundTrip:
     """Tests for configuration round-trip (save → load → save)."""
 
@@ -293,10 +337,13 @@ class TestConfigRoundTrip:
                     port=2222,
                     connection_pool_size=10,
                     profile="diagnostics",
+                    known_hosts=Path("/home/user/.ssh/known_hosts"),
+                    strict_host_key=False,
                 ),
                 "staging": SSHExecutorConfig(
                     type="ssh",
                     host="staging.example.com",
+                    strict_host_key=True,
                 ),
             },
         )
@@ -318,12 +365,15 @@ class TestConfigRoundTrip:
         assert prod.port == 2222
         assert prod.connection_pool_size == 10
         assert prod.profile == "diagnostics"
+        assert prod.known_hosts == Path("/home/user/.ssh/known_hosts")
+        assert prod.strict_host_key is False
 
         staging = loaded.executor["staging"]
         assert isinstance(staging, SSHExecutorConfig)
         assert staging.host == "staging.example.com"
         assert staging.username is None
         assert staging.port == 22  # default
+        assert staging.strict_host_key is True
 
     def test_roundtrip_toml_format(self, tmp_path):
         """Test that generated TOML is well-formatted."""

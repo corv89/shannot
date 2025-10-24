@@ -30,7 +30,9 @@ Main Components
 - SandboxBind: Define filesystem bind mounts
 - BubblewrapCommandBuilder: Low-level bwrap command construction
 
-For more information, see: https://github.com/corv89/shannot
+---
+
+.. include:: ../docs/README.md
 """
 
 from .process import ProcessResult, ensure_tool_available, run_process
@@ -44,7 +46,7 @@ from .sandbox import (
     load_profile_from_path,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = [
     "BubblewrapCommandBuilder",
     "SandboxBind",
