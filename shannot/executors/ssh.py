@@ -83,7 +83,8 @@ class SSHExecutor(SandboxExecutor):
         key_file: Path | None = None,
         port: int = 22,
         connection_pool_size: int = 5,
-        known_hosts_file: Path | None = None,
+        known_hosts: Path | None = None,
+        strict_host_key: bool = True,
     ):
         """Initialize SSH executor.
 
@@ -93,8 +94,9 @@ class SSHExecutor(SandboxExecutor):
             key_file: Path to SSH private key (None = use SSH agent/config)
             port: SSH port (default: 22)
             connection_pool_size: Maximum pooled connections (default: 5)
-            known_hosts_file: Path to known_hosts file (None = use default)
-                             Set to None to disable host key checking (insecure!)
+            known_hosts: Path to known_hosts file (default: SSH config)
+            strict_host_key: Enforce host key validation (default: True).
+                             Set to False to disable validation (insecure).
 
         Example:
             >>> # Use SSH config defaults
@@ -108,14 +110,15 @@ class SSHExecutor(SandboxExecutor):
             ...     port=2222
             ... )
         """
-        self.host = host
-        self.username = username
-        self.key_file = key_file
-        self.port = port
+        self.host: str = host
+        self.username: str | None = username
+        self.key_file: Path | None = key_file
+        self.port: int = port
         self._connection_pool: list[asyncssh.SSHClientConnection] = []
-        self._pool_size = connection_pool_size
-        self._lock = asyncio.Lock()
-        self._known_hosts = known_hosts_file
+        self._pool_size: int = connection_pool_size
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._known_hosts: Path | None = known_hosts
+        self._strict_host_key: bool = strict_host_key
 
     async def _get_connection(self) -> asyncssh.SSHClientConnection:
         """Get or create SSH connection from pool.
@@ -138,12 +141,16 @@ class SSHExecutor(SandboxExecutor):
             # Create new connection
             try:
                 # Prepare connection options
-                connect_kwargs = {
+                connect_kwargs: dict[str, str | int | None | list[str]] = {
                     "host": self.host,
                     "port": self.port,
                     "username": self.username,
-                    "known_hosts": str(self._known_hosts) if self._known_hosts else None,
                 }
+
+                if self._known_hosts is not None:
+                    connect_kwargs["known_hosts"] = str(self._known_hosts)
+                elif not self._strict_host_key:
+                    connect_kwargs["known_hosts"] = None
 
                 # Configure authentication
                 if self.key_file:

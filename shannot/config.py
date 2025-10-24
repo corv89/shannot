@@ -12,11 +12,11 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     try:
-        import tomli as tomllib  # type: ignore
-    except ImportError:
-        raise ImportError(
+        import tomli as tomllib  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise ImportError(  # type: ignore[unreachable]
             "tomli is required for Python < 3.11. Install with: pip install tomli"
-        ) from None
+        ) from exc
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -48,6 +48,8 @@ class SSHExecutorConfig(ExecutorConfig):
     key_file: Path | None = None
     port: int = 22
     connection_pool_size: int = 5
+    known_hosts: Path | None = None
+    strict_host_key: bool = True
 
     @field_validator("key_file", mode="before")
     @classmethod
@@ -57,6 +59,14 @@ class SSHExecutorConfig(ExecutorConfig):
             return None
         path = Path(v)
         return path.expanduser()
+
+    @field_validator("known_hosts", mode="before")
+    @classmethod
+    def expand_known_hosts(cls, v: str | Path | None) -> Path | None:
+        """Expand ~ in known_hosts paths."""
+        if v is None:
+            return None
+        return Path(v).expanduser()
 
 
 class ShannotConfig(BaseModel):
@@ -123,7 +133,7 @@ def load_config(config_path: Path | None = None) -> ShannotConfig:
 
     try:
         with open(config_path, "rb") as f:
-            data = tomllib.load(f)
+            data: dict[str, object] = tomllib.load(f)
     except Exception as e:
         raise ValueError(f"Failed to parse config file {config_path}: {e}") from e
 
@@ -144,7 +154,7 @@ def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
         config_path = get_config_path()
 
     # Ensure directory exists
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = config_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Convert to TOML format manually (Pydantic doesn't have TOML export)
     lines = [
@@ -169,6 +179,10 @@ def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
                 lines.append(f"port = {executor_config.port}")
             if executor_config.connection_pool_size != 5:
                 lines.append(f"connection_pool_size = {executor_config.connection_pool_size}")
+            if executor_config.known_hosts:
+                lines.append(f'known_hosts = "{executor_config.known_hosts}"')
+            if not executor_config.strict_host_key:
+                lines.append("strict_host_key = false")
         elif isinstance(executor_config, LocalExecutorConfig):
             if executor_config.bwrap_path:
                 lines.append(f'bwrap_path = "{executor_config.bwrap_path}"')
@@ -199,7 +213,14 @@ def create_executor(config: ShannotConfig, executor_name: str | None = None) -> 
 
         return LocalExecutor(bwrap_path=executor_config.bwrap_path)
     elif executor_config.type == "ssh":
-        from .executors import SSHExecutor
+        try:
+            from .executors import SSHExecutor
+        except ImportError as exc:
+            message = (
+                "SSH executor requires the 'asyncssh' dependency. "
+                "Install with: pip install shannot[remote]"
+            )
+            raise RuntimeError(message) from exc
 
         return SSHExecutor(
             host=executor_config.host,
@@ -207,6 +228,8 @@ def create_executor(config: ShannotConfig, executor_name: str | None = None) -> 
             key_file=executor_config.key_file,
             port=executor_config.port,
             connection_pool_size=executor_config.connection_pool_size,
+            known_hosts=executor_config.known_hosts,
+            strict_host_key=executor_config.strict_host_key,
         )
     else:
         raise ValueError(f"Unknown executor type: {executor_config.type}")

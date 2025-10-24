@@ -57,7 +57,7 @@ Result object returned by `manager.run()`.
 - `command` - Tuple of the executed command
 - `returncode` - Exit code of the process
 - `stdout` - Standard output as string
-- `stderr` - Standard error as string  
+- `stderr` - Standard error as string
 - `duration` - Execution time in seconds (float)
 
 **Methods:**
@@ -335,13 +335,13 @@ from pathlib import Path
 try:
     # Profile loading error
     profile = load_profile_from_path("missing.json")
-    
+
     # Configuration error
     manager = SandboxManager(profile, Path("/missing/bwrap"))
-    
+
     # Execution error
     result = manager.run(["forbidden_command"], check=True)
-    
+
 except SandboxError as e:
     print(f"Sandbox error: {e}")
 except FileNotFoundError as e:
@@ -487,7 +487,7 @@ def validate_config(config_path):
     """Safely validate a config file."""
     profile = load_profile_from_path("~/.config/shannot/readonly.json")
     manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
-    
+
     try:
         result = manager.run(["cat", config_path], check=True)
         # Perform validation on result.stdout

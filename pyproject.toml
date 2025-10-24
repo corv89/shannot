@@ -27,6 +27,9 @@ classifiers = [
     "Environment :: Console",
     "Typing :: Typed",
 ]
+dependencies = [
+    "pydantic>=2.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
@@ -36,7 +39,7 @@ Documentation = "https://github.com/corv89/shannot/blob/main/README.md"
 
 [project.scripts]
 shannot = "shannot.cli:main"
-shannot-mcp = "shannot.mcp_main:main"
+shannot-mcp = "shannot.mcp_main:entrypoint"
 
 [project.optional-dependencies]
 dev = [
@@ -53,6 +56,7 @@ dev = [
 mcp = [
     "mcp>=1.0.0",
     "pydantic>=2.0.0",
+    "asyncssh>=2.14.0",
 ]
 pydantic-ai = [
     "pydantic-ai>=0.0.1",
