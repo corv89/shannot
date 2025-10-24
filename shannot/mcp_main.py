@@ -35,18 +35,18 @@ def _build_parser() -> argparse.ArgumentParser:
         add_help=True,
         description="Run the Shannot MCP server.",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--profile",
         action="append",
         dest="profiles",
         help="Path or name of sandbox profile to expose (can be specified multiple times).",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--target",
         "-t",
         help="Target executor name from shannot/config.toml (enables remote execution).",
     )
-    parser.add_argument(
+    _ = parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -89,7 +89,8 @@ async def main(argv: Sequence[str] | None = None) -> None:
     parser = _build_parser()
     args = parser.parse_args(list(argv))
 
-    setup_logging(args.verbose)
+    verbose: bool = bool(args.verbose)
+    setup_logging(verbose)
 
     logger = logging.getLogger(__name__)
     logger.info("Starting Shannot MCP server")
@@ -97,36 +98,38 @@ async def main(argv: Sequence[str] | None = None) -> None:
     executor = None
     executor_profile: str | None = None
 
-    if args.target:
-        logger.info("Using executor target: %s", args.target)
+    target: str | None = args.target if args.target else None
+    if target:
+        logger.info("Using executor target: %s", target)
         try:
             config = load_config()
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("Failed to load configuration: %s", exc)
             raise SystemExit(1) from exc
 
-        if args.target not in config.executor:
-            logger.error("Target '%s' not found in configuration", args.target)
+        if target not in config.executor:
+            logger.error("Target '%s' not found in configuration", target)
             logger.info("List targets with: shannot remote list")
             raise SystemExit(1)
 
-        executor_config = config.executor[args.target]
+        executor_config = config.executor[target]
         executor_profile = executor_config.profile
 
         try:
-            executor = create_executor(config, args.target)
+            executor = create_executor(config, target)
         except Exception as exc:
-            logger.error("Failed to create executor '%s': %s", args.target, exc)
+            logger.error("Failed to create executor '%s': %s", target, exc)
             if "pip install shannot[remote]" in str(exc):
                 logger.info("Install remote support with: pip install shannot[remote]")
             raise SystemExit(1) from exc
 
-    profile_specs = _resolve_profiles(args.profiles, executor_profile)
+    profiles: list[str] | None = args.profiles if args.profiles else None
+    profile_specs = _resolve_profiles(profiles, executor_profile)
 
     # Create and run server
     server = None
     try:
-        server = ShannotMCPServer(profile_specs, executor, executor_label=args.target)
+        server = ShannotMCPServer(profile_specs, executor, executor_label=target)
         logger.info("Loaded %s profiles", len(server.deps_by_profile))
         for name in server.deps_by_profile.keys():
             logger.info("  - %s", name)

@@ -110,15 +110,15 @@ class SSHExecutor(SandboxExecutor):
             ...     port=2222
             ... )
         """
-        self.host = host
-        self.username = username
-        self.key_file = key_file
-        self.port = port
+        self.host: str = host
+        self.username: str | None = username
+        self.key_file: Path | None = key_file
+        self.port: int = port
         self._connection_pool: list[asyncssh.SSHClientConnection] = []
-        self._pool_size = connection_pool_size
-        self._lock = asyncio.Lock()
-        self._known_hosts = known_hosts
-        self._strict_host_key = strict_host_key
+        self._pool_size: int = connection_pool_size
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._known_hosts: Path | None = known_hosts
+        self._strict_host_key: bool = strict_host_key
 
     async def _get_connection(self) -> asyncssh.SSHClientConnection:
         """Get or create SSH connection from pool.
@@ -141,7 +141,7 @@ class SSHExecutor(SandboxExecutor):
             # Create new connection
             try:
                 # Prepare connection options
-                connect_kwargs = {
+                connect_kwargs: dict[str, str | int | None | list[str]] = {
                     "host": self.host,
                     "port": self.port,
                     "username": self.username,

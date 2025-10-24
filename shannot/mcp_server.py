@@ -10,7 +10,6 @@ import json
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
@@ -18,7 +17,7 @@ from mcp.types import Resource, ServerCapabilities, TextContent, Tool
 
 from shannot import __version__
 from shannot.execution import SandboxExecutor
-from shannot.tools import CommandInput, SandboxDeps, run_command
+from shannot.tools import CommandInput, CommandOutput, SandboxDeps, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +37,9 @@ class ShannotMCPServer:
             profile_paths: List of profile paths to load. If None, loads from default locations.
             executor: Optional executor used to run sandbox commands (local or remote).
         """
-        self.server = Server("shannot-sandbox")
+        self.server: Server = Server("shannot-sandbox")
         self.deps_by_profile: dict[str, SandboxDeps] = {}
-        self._executor_label = executor_label
+        self._executor_label: str | None = executor_label
 
         # Load profiles
         if profile_paths is None:
@@ -139,7 +138,7 @@ class ShannotMCPServer:
             return tools
 
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
+        async def call_tool(name: str, arguments: dict[str, object]) -> list[TextContent]:  # type: ignore[misc]
             """Handle MCP tool calls."""
             # Parse tool name to extract profile and action
             profile_name = None
@@ -154,7 +153,7 @@ class ShannotMCPServer:
             pdeps = self.deps_by_profile[profile_name]
 
             try:
-                cmd_input = CommandInput(**arguments)
+                cmd_input = CommandInput(**arguments)  # type: ignore[arg-type]
                 result = await run_command(pdeps, cmd_input)
                 return [
                     TextContent(
@@ -188,11 +187,12 @@ class ShannotMCPServer:
 
             return resources
 
-        @self.server.read_resource()  # type: ignore[arg-type]
-        async def read_resource(uri: str) -> str:
+        @self.server.read_resource()
+        async def read_resource(uri: object) -> str:  # type: ignore[misc]
             """Read resource content."""
-            if uri.startswith("sandbox://profiles/"):
-                profile_name = uri.split("/")[-1]
+            uri_str = str(uri)
+            if uri_str.startswith("sandbox://profiles/"):
+                profile_name = uri_str.split("/")[-1]
                 if profile_name in self.deps_by_profile:
                     deps = self.deps_by_profile[profile_name]
                     return json.dumps(
@@ -245,7 +245,7 @@ class ShannotMCPServer:
             return f"sandbox_{self._executor_label}_{profile_name}"
         return f"sandbox_{profile_name}"
 
-    def _format_command_output(self, result: Any) -> str:
+    def _format_command_output(self, result: CommandOutput) -> str:
         """Format command output for MCP response."""
         output = f"Exit code: {result.returncode}\n"
         output += f"Duration: {result.duration:.2f}s\n\n"

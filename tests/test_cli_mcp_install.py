@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,11 +15,11 @@ pytest.importorskip("pydantic")
 from shannot.cli import _handle_mcp_install
 
 
-class DummyArgs:
+class DummyArgs(Namespace):
     """Simple namespace mimicking argparse Namespace."""
 
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
+    def __init__(self, **kwargs: object):
+        super().__init__(**kwargs)
 
 
 def _patch_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

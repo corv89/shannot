@@ -12,11 +12,11 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     try:
-        import tomli as tomllib  # type: ignore
-    except ImportError:
-        raise ImportError(
+        import tomli as tomllib  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise ImportError(  # type: ignore[unreachable]
             "tomli is required for Python < 3.11. Install with: pip install tomli"
-        ) from None
+        ) from exc
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -133,7 +133,7 @@ def load_config(config_path: Path | None = None) -> ShannotConfig:
 
     try:
         with open(config_path, "rb") as f:
-            data = tomllib.load(f)
+            data: dict[str, object] = tomllib.load(f)
     except Exception as e:
         raise ValueError(f"Failed to parse config file {config_path}: {e}") from e
 
@@ -154,7 +154,7 @@ def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
         config_path = get_config_path()
 
     # Ensure directory exists
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = config_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Convert to TOML format manually (Pydantic doesn't have TOML export)
     lines = [
