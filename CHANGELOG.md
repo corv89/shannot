@@ -191,6 +191,94 @@ mocks still result in empty tool cache.
 
 Per PEP 561, this empty file signals that the package supports type checking
 and that inline type hints should be used by static type checkers.
+- Add CHANGELOG.md and git-cliff automation
+
+Implements changelog generation and automation:
+
+CHANGELOG.md:
+- Generated comprehensive changelog from git history
+- Documents all changes since v0.1.0 through current unreleased changes
+- Follows 'Keep a Changelog' format with semantic versioning
+- Organized by release with sections: Features, Bug Fixes, Documentation, etc.
+
+git-cliff configuration (cliff.toml):
+- Custom parsers to categorize commits by message patterns
+- Works with existing commit style (not strictly conventional commits)
+- Automatically links issue references to GitHub
+- Skips merge commits and internal chores
+
+CI automation (.github/workflows/changelog.yml):
+- Checks CHANGELOG.md is up to date on pull requests
+- Auto-comments on PRs if changelog needs updating
+- Ensures changelog stays current with development
+
+Developer tooling (Makefile):
+- Added 'make changelog' target for easy updates
+- Checks for git-cliff installation
+- Provides helpful error messages and instructions
+
+Documentation (CONTRIBUTING.md):
+- Added changelog update step to development workflow
+- Documents commit message guidelines for better changelog entries
+- Explains automatic categorization of commits
+- Updated PR checklist to include changelog verification
+
+Addresses missing CHANGELOG.md issue by providing:
+1. Complete historical changelog
+2. Automated generation from git history
+3. CI verification to keep it current
+4. Developer-friendly tooling
+- Add SECURITY.md with vulnerability reporting and security policy
+
+Implements comprehensive security policy documentation:
+
+Vulnerability Reporting:
+- Private disclosure process via email and GitHub Security Advisory
+- Clear response timeline expectations (48hr ack, 7-30 day fixes)
+- Coordinated disclosure process with security researchers
+
+Supported Versions:
+- Documents which versions receive security updates (0.1.x, 0.2.x)
+- Clear EOL policy for unsupported versions
+
+Security Considerations:
+- Known limitations and risks clearly documented
+- Kernel exploits and sandbox escape possibilities
+- Information disclosure through read-only access
+- Resource exhaustion (no built-in limits)
+- Side-channel attacks and privilege escalation risks
+- Bubblewrap dependency security
+
+Mitigation Strategies:
+- Concrete examples for each risk category
+- Defense-in-depth recommendations
+- Seccomp filter guidance with doc references
+- systemd resource limit configurations
+- SELinux/AppArmor integration suggestions
+
+Security Best Practices:
+- Profile configuration guidance (least privilege)
+- Production deployment patterns
+- SSH remote execution security
+- Monitoring and audit recommendations
+- Update management procedures
+
+Developer Guidelines:
+- Security review process for contributions
+- Testing requirements for security features
+- Secure coding practices
+
+External Resources:
+- Links to Bubblewrap, Linux namespaces, seccomp docs
+- References to existing security documentation
+- Security advisory publication process
+
+Addresses missing SECURITY.md issue by providing:
+1. Responsible disclosure process
+2. Clear security boundaries and limitations
+3. Practical mitigation strategies
+4. Best practices for secure deployment
+5. Links to detailed security documentation
 
 ### Improvements
 
