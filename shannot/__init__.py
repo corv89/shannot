@@ -46,7 +46,20 @@ from .sandbox import (
     load_profile_from_path,
 )
 
-__version__ = "0.1.1"
+try:
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _metadata_version
+except ImportError:  # pragma: no cover - only relevant on very old Python versions
+    PackageNotFoundError = Exception  # type: ignore
+
+    def _metadata_version(distribution_name: str) -> str:  # pragma: no cover
+        return "0.0.0"
+
+
+try:
+    __version__ = _metadata_version("shannot")
+except PackageNotFoundError:  # pragma: no cover - metadata missing in dev tree
+    __version__ = "0.0.0"
 __all__ = [
     "BubblewrapCommandBuilder",
     "SandboxBind",
