@@ -75,6 +75,8 @@ if "mcp.types" not in sys.modules:
     types_module.TextContent = _SimpleType  # type: ignore[attr-defined]
     types_module.Tool = _SimpleType  # type: ignore[attr-defined]
     types_module.ServerCapabilities = _SimpleType  # type: ignore[attr-defined]
+    types_module.ResourcesCapability = _SimpleType  # type: ignore[attr-defined]
+    types_module.ToolsCapability = _SimpleType  # type: ignore[attr-defined]
 
     sys.modules["mcp.types"] = types_module
     sys.modules["mcp"].types = types_module  # type: ignore[attr-defined]

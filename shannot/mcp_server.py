@@ -13,7 +13,14 @@ from pathlib import Path
 
 from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Resource, ServerCapabilities, TextContent, Tool
+from mcp.types import (
+    Resource,
+    ResourcesCapability,
+    ServerCapabilities,
+    TextContent,
+    Tool,
+    ToolsCapability,
+)
 
 from shannot import __version__
 from shannot.execution import SandboxExecutor
@@ -270,7 +277,10 @@ class ShannotMCPServer:
         options = InitializationOptions(
             server_name="shannot-sandbox",
             server_version=__version__,
-            capabilities=ServerCapabilities(),
+            capabilities=ServerCapabilities(
+                tools=ToolsCapability(),  # We provide tools
+                resources=ResourcesCapability(),  # We provide resources
+            ),
         )
 
         async with stdio_server() as (read_stream, write_stream):
