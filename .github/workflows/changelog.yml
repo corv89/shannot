@@ -1,0 +1,57 @@
+name: Changelog Check
+
+on:
+  pull_request:
+    branches: [main, dev]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-changelog:
+    name: Check Changelog is Updated
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        run: |
+          curl -L https://github.com/orhun/git-cliff/releases/download/v2.10.1/git-cliff-2.10.1-x86_64-unknown-linux-gnu.tar.gz -o git-cliff.tar.gz
+          tar -xzf git-cliff.tar.gz
+          sudo mv git-cliff-2.10.1/git-cliff /usr/local/bin/
+          git-cliff --version
+
+      - name: Check if changelog is up to date
+        run: |
+          # Generate what the changelog should be
+          git-cliff --config cliff.toml -o /tmp/expected_changelog.md
+
+          # Compare with current CHANGELOG.md
+          if ! diff -q CHANGELOG.md /tmp/expected_changelog.md > /dev/null 2>&1; then
+            echo "❌ CHANGELOG.md is out of date!"
+            echo ""
+            echo "Please run the following command to update it:"
+            echo "  make changelog"
+            echo ""
+            echo "Or manually run:"
+            echo "  git-cliff --config cliff.toml -o CHANGELOG.md"
+            echo ""
+            echo "Then commit the updated CHANGELOG.md"
+            exit 1
+          else
+            echo "✅ CHANGELOG.md is up to date!"
+          fi
+
+      - name: Comment on PR if changelog is outdated
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **CHANGELOG.md is out of date**\n\nPlease update the changelog by running:\n```bash\nmake changelog\n```\nOr manually:\n```bash\ngit-cliff --config cliff.toml -o CHANGELOG.md\n```\n\nThen commit the updated `CHANGELOG.md` file.'
+            })

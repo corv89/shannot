@@ -113,9 +113,22 @@ make docs
 make docs-serve
 ```
 
-### 4. Commit Your Changes
+### 4. Update the Changelog
 
-Write clear, descriptive commit messages:
+After making your changes, update the changelog:
+
+```bash
+# Automatically regenerate CHANGELOG.md from git history
+make changelog
+```
+
+This uses [git-cliff](https://git-cliff.org/) to generate the changelog from commit messages. The CHANGELOG.md file will be automatically updated to include all commits since the last release.
+
+**Note:** The CI will check that CHANGELOG.md is up to date on pull requests.
+
+### 5. Commit Your Changes
+
+Write clear, descriptive commit messages that will appear in the changelog:
 
 ```bash
 git add .
@@ -128,7 +141,20 @@ Good commit message examples:
 - `Update documentation for profile configuration`
 - `Add integration tests for network isolation`
 
-### 5. Push and Create Pull Request
+**Commit Message Guidelines:**
+- Start with a verb: `Add`, `Fix`, `Update`, `Improve`, `Remove`, etc.
+- Be concise but descriptive
+- Use present tense ("Add feature" not "Added feature")
+- Reference issues when applicable (e.g., "Fix #123: ...")
+
+Your commits are automatically categorized in the changelog:
+- `Add`/`feat` → Features
+- `Fix` → Bug Fixes
+- `Doc`/`Improve doc` → Documentation
+- `Improve`/`Update` → Improvements
+- `Bump`/`Dependency` → Dependencies
+
+### 6. Push and Create Pull Request
 
 ```bash
 git push origin feature/your-feature-name
@@ -298,11 +324,12 @@ To add a new documentation page:
 
 ### Before Submitting
 
-- [ ] All tests pass (`pytest tests/ -v`)
-- [ ] Code is formatted (`ruff format .`)
-- [ ] No linting errors (`ruff check .`)
-- [ ] Type checking passes (`basedpyright`)
-- [ ] Documentation is updated
+- [ ] All tests pass (`make test`)
+- [ ] Code is formatted (`make format`)
+- [ ] No linting errors (`make lint`)
+- [ ] Type checking passes (`make type-check`)
+- [ ] Documentation is updated (`make docs-serve` to preview)
+- [ ] Changelog is updated (`make changelog`)
 - [ ] New features have tests
 - [ ] Commit messages are clear and descriptive
 
