@@ -5,6 +5,10 @@ on:
     branches: [main, dev]
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   check-changelog:
     name: Check Changelog is Updated
