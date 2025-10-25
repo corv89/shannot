@@ -263,12 +263,6 @@ Shannot is designed for legitimate use cases:
 - **✅ LLM agent sandboxing**
 - **✅ Security research and testing**
 
-Please do not use Shannot for:
-- **❌ Circumventing access controls**
-- **❌ Unauthorized system access**
-- **❌ Data exfiltration**
-- **❌ Any illegal activities**
-
 ## Acknowledgments
 
 We thank the security research community for helping keep Shannot secure. Security researchers who responsibly disclose vulnerabilities will be credited in our security advisories.
