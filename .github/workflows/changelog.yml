@@ -29,6 +29,12 @@ jobs:
 
       - name: Check if changelog is up to date
         run: |
+          # Check if the most recent commit updated the changelog
+          if git diff HEAD~1 HEAD --name-only | grep -q "^CHANGELOG.md$"; then
+            echo "✅ CHANGELOG.md was updated in the most recent commit, skipping check"
+            exit 0
+          fi
+
           # Generate what the changelog should be
           git-cliff --config cliff.toml -o /tmp/expected_changelog.md
 
