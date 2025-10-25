@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- Fix changelog workflow permissions for PR comments
+
+### Improvements
+
+- Update changelog
+
 ## [0.2.1] - 2025-10-25
 
 ### Bug Fixes
