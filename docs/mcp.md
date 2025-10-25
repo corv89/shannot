@@ -1,6 +1,7 @@
 # MCP Server Integration
 
-This guide explains how to use Shannot's MCP (Model Context Protocol) server to give Claude Desktop secure, read-only access to your Linux system.
+This guide explains how to use Shannot's MCP (Model Context Protocol) server to give Claude Desktop,
+Claude Code, or Codex CLI secure, read-only access to your Linux system.
 
 ## What is MCP?
 
@@ -14,37 +15,142 @@ MCP (Model Context Protocol) is Anthropic's standard protocol for connecting AI 
 
 **All operations are read-only and sandboxed** - Claude cannot modify your system.
 
-## Quick Start (5 minutes)
+## Quick Start
 
-### 1. Install Shannot with MCP support
+### For macOS/Windows Users (Remote Setup - 10 minutes)
+
+Since Shannot requires Linux, you'll need a remote Linux server:
 
 ```bash
-# Install with MCP dependencies (includes remote SSH support)
-pip install shannot[mcp]
+# 1. Install Shannot with remote support
+pip install shannot[mcp,remote]
 
-# Or install from source
-cd shannot
-pip install -e ".[mcp]"
+# 2. Configure a remote Linux target
+shannot remote add myserver --host your-server.com --user yourname
+
+# 3. Test the connection
+shannot remote test myserver
+
+# 4. Install MCP server for Claude Code
+shannot mcp install --client claude-code --target myserver
+
+# 5. Restart Claude Code
+# Now you can ask: "Check disk space on myserver"
 ```
 
-### 2. Install MCP server config for Claude Desktop
+### For Linux Users (Local Setup - 5 minutes)
 
 ```bash
+# 1. Install Shannot with MCP support
+pip install shannot[mcp]
+
+# 2. Install bubblewrap (if not already installed)
+# Ubuntu/Debian:
+sudo apt install bubblewrap
+# Fedora/RHEL:
+sudo dnf install bubblewrap
+# Arch:
+sudo pacman -S bubblewrap
+
+# 3. Install MCP server for Claude Code
+shannot mcp install --client claude-code
+
+# 4. Restart Claude Code
+# Now you can ask: "Show me /etc/os-release"
+```
+
+## Detailed Installation
+
+### Option A: Using Shannot's installer (Recommended)
+
+```bash
+# Install for Claude Desktop (default)
 shannot mcp install
+
+# Install for Claude Code (user scope - available across all projects)
+shannot mcp install --client claude-code
+
+# Install for Codex CLI
+shannot mcp install --client codex
 
 # Use a configured remote target
 shannot mcp install --target prod
+shannot mcp install --client claude-code --target prod
 ```
 
-This automatically adds Shannot to your Claude Desktop configuration.
+The Claude Code installer uses **user scope** by default, making Shannot available across all your
+projects. It updates both the IDE config and your CLI configuration (e.g., `~/.claude.json`) so
+`/mcp` lists it immediately.
 
-### 3. Restart Claude Desktop
+**Option B: Using Claude Code's CLI directly**
 
-Quit and reopen Claude Desktop. You should now see Shannot tools available!
+If you prefer Claude Code's native MCP management, you have full control over scoping:
 
-### 4. Try it out
+```bash
+# User scope (recommended - available across all your projects)
+claude mcp add --transport stdio shannot --scope user -- shannot-mcp
 
-Open Claude Desktop and ask:
+# With a remote target
+claude mcp add --transport stdio shannot-prod --scope user \
+  --env SSH_AUTH_SOCK="${SSH_AUTH_SOCK}" -- shannot-mcp --target prod
+
+# Local scope (only in current project, private to you)
+claude mcp add --transport stdio shannot --scope local -- shannot-mcp
+
+# Project scope (shared with team via .mcp.json in version control)
+claude mcp add --transport stdio shannot --scope project -- shannot-mcp
+```
+
+**Understanding MCP scopes:**
+- `local` (default): Only you can use it in this project
+- `user`: Available to you across all projects
+- `project`: Shared with your team via `.mcp.json` file (requires approval on first use)
+
+**Note for macOS and Windows users:**
+
+Shannot requires Linux to run locally (bubblewrap is Linux-only). You have two options:
+
+**macOS:**
+1. **Use a remote Linux target** (recommended):
+   ```bash
+   shannot remote add linux-server --host server.example.com --user yourname
+   shannot mcp install --client claude-code --target linux-server
+   ```
+2. **Use a Linux VM** (Parallels, VMware, etc.) and run via SSH
+
+**Windows:**
+1. **Use a remote Linux target** (recommended):
+   ```bash
+   shannot remote add linux-server --host server.example.com --user yourname
+   shannot mcp install --client claude-code --target linux-server
+   ```
+2. **Use WSL2** (Windows Subsystem for Linux) and install directly in WSL:
+   ```bash
+   # From WSL terminal
+   pip install shannot[mcp]
+   shannot mcp install --client claude-code
+   ```
+
+**Why remote is required for macOS/Windows:**
+Shannot uses Linux kernel features (namespaces, seccomp) via bubblewrap for sandboxing.
+These features are not available on macOS or native Windows.
+
+### Verify installation (Claude Code users)
+
+In Claude Code, check that Shannot is available:
+
+```
+> /mcp
+```
+
+You should see `shannot` listed among your MCP servers. You can also use `/mcp` to:
+- View server status and available tools
+- Manage server configurations
+- Remove servers with `claude mcp remove shannot`
+
+## Try it out
+
+Open your client and ask:
 
 > "Can you check how much disk space I have left?"
 
@@ -145,10 +251,21 @@ Claude's requests now execute on the remote host through the SSH executor.
 
 ### Manual Configuration
 
-If `shannot mcp install` doesn't work on your platform, manually edit your Claude Desktop config:
+If `shannot mcp install` doesn't work on your platform, manually edit the client config. Defaults:
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Claude Desktop (Windows)**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Claude Code (macOS)**: `~/Library/Application Support/Claude/claude_code_config.json`
+  - Alternates: `~/Library/Application Support/Claude/claude_config.json`, `~/.claude/config.json`
+- **Claude Code (Linux)**: `~/.config/Claude/claude_code_config.json`
+  - Alternates: `~/.claude/config.json`, `~/.config/claude/config.json`
+- **Claude Code (Windows)**: `%APPDATA%\Claude\claude_code_config.json`
+  - Alternate: `%APPDATA%\Claude\claude_config.json`
+- **Codex CLI (macOS)**: `~/Library/Application Support/OpenAI/Codex/codex_cli_config.json`
+  - Alternate: `~/.config/openai/codex_cli_config.json`
+- **Codex CLI (Linux)**: `~/.config/openai/codex_cli_config.json`
+  - Alternate: `~/.config/codex/config.json`
+- **Codex CLI (Windows)**: `%APPDATA%\OpenAI\Codex\codex_cli_config.json`
 
 Add:
 
@@ -212,6 +329,22 @@ ls $(python -c "import shannot; print(shannot.__file__.rsplit('/',1)[0])")/../pr
    cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
    ```
 3. Look for errors in Claude Desktop logs (Help → View Logs)
+
+### Claude Code doesn't show Shannot tools
+
+1. Reload or restart Claude Code
+2. Use `/mcp` command to check server status
+3. Check that the server is properly configured:
+   ```bash
+   claude mcp list
+   claude mcp get shannot
+   ```
+4. If you used `--scope project`, make sure you approved the `.mcp.json` file when prompted
+5. Try removing and re-adding:
+   ```bash
+   claude mcp remove shannot
+   shannot mcp install --client claude-code
+   ```
 
 ### Commands fail with "not allowed"
 
@@ -288,6 +421,50 @@ You can connect Shannot MCP to remote systems via SSH:
 
 Now Claude can inspect remote systems!
 
+### Team Collaboration (Claude Code)
+
+Share Shannot MCP server with your team using project scope:
+
+1. **Add server at project scope:**
+   ```bash
+   claude mcp add --transport stdio shannot --scope project -- shannot-mcp
+   ```
+
+2. **This creates `.mcp.json` in your project root:**
+   ```json
+   {
+     "mcpServers": {
+       "shannot": {
+         "command": "shannot-mcp",
+         "args": [],
+         "env": {}
+       }
+     }
+   }
+   ```
+
+3. **Commit to version control:**
+   ```bash
+   git add .mcp.json
+   git commit -m "Add Shannot MCP server for team"
+   ```
+
+4. **Team members will be prompted to approve** the server on first use. They can:
+   - Review with `/mcp` command
+   - Approve to enable the server
+   - Reset choices with `claude mcp reset-project-choices` if needed
+
+**For remote targets shared across the team:**
+
+```bash
+# Each team member configures the remote once
+shannot remote add staging --host staging.example.com --user deploy
+
+# Then add to project scope
+claude mcp add --transport stdio shannot-staging --scope project \
+  --env SSH_AUTH_SOCK="${SSH_AUTH_SOCK}" -- shannot-mcp --target staging
+```
+
 ### Custom Tool Names
 
 Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and descriptions.
@@ -334,6 +511,33 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 > - Port: 22 (default)
 > - PasswordAuthentication: yes (consider disabling)
 > - PermitRootLogin: no (good!)
+
+## Quick Reference - Claude Code CLI Commands
+
+```bash
+# Installation
+claude mcp add --transport stdio shannot -- shannot-mcp
+claude mcp add --transport stdio shannot --scope user -- shannot-mcp
+claude mcp add --transport stdio shannot --scope project -- shannot-mcp
+
+# With remote target
+claude mcp add --transport stdio shannot-prod -- shannot-mcp --target prod
+
+# Management
+claude mcp list                    # List all servers
+claude mcp get shannot             # Get server details
+claude mcp remove shannot          # Remove server
+claude mcp reset-project-choices   # Reset approval choices
+
+# In Claude Code
+/mcp                               # View server status
+```
+
+**Alternative: Use Shannot's installer**
+```bash
+shannot mcp install --client claude-code
+shannot mcp install --client claude-code --target prod
+```
 
 ## Next Steps
 
