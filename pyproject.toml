@@ -78,7 +78,7 @@ where = ["."]
 include = ["shannot*"]
 
 [tool.setuptools.package-data]
-shannot = ["py.typed"]
+shannot = ["py.typed", "../profiles/*.json"]
 
 [tool.ruff]
 line-length = 100
