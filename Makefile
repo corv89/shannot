@@ -1,4 +1,4 @@
-.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check
+.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check changelog
 
 UV ?= uv
 VENV ?= .venv
@@ -20,6 +20,7 @@ help:
 	@echo "  make lint          - Run ruff linter"
 	@echo "  make format        - Format code with ruff"
 	@echo "  make type-check    - Run type checker"
+	@echo "  make changelog     - Update CHANGELOG.md from git history"
 
 ensure-venv:
 	@$(UV) venv --allow-existing $(VENV)
@@ -72,3 +73,14 @@ format: sync-dev
 
 type-check: sync-dev
 	@$(UV_RUN) basedpyright
+
+changelog:
+	@echo "Updating CHANGELOG.md from git history..."
+	@if ! command -v git-cliff &> /dev/null; then \
+		echo "Error: git-cliff is not installed"; \
+		echo "Install it with: brew install git-cliff (macOS) or visit https://github.com/orhun/git-cliff"; \
+		exit 1; \
+	fi
+	@git-cliff --config cliff.toml -o CHANGELOG.md
+	@echo "✅ CHANGELOG.md updated successfully"
+	@echo "Remember to commit the updated CHANGELOG.md"

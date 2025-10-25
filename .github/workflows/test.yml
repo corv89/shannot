@@ -99,6 +99,30 @@ jobs:
           which shannot
           shannot --version || echo "No version flag implemented"
 
+      - name: Verify bundled profiles are accessible
+        run: |
+          python -c "
+          import shannot
+          from pathlib import Path
+          import sys
+
+          install_path = Path(shannot.__file__).parent
+          profiles_dir = install_path.parent / 'profiles'
+          expected = ['minimal.json', 'readonly.json', 'diagnostics.json']
+
+          print(f'Checking for bundled profiles in: {profiles_dir}')
+          missing = [p for p in expected if not (profiles_dir / p).exists()]
+
+          if missing:
+              print(f'ERROR: Missing profiles: {missing}')
+              sys.exit(1)
+
+          print(f'SUCCESS: All {len(expected)} bundled profiles found!')
+          for profile in expected:
+              size = (profiles_dir / profile).stat().st_size
+              print(f'  ✓ {profile} ({size} bytes)')
+          "
+
   build:
     name: Build Distribution
     runs-on: ubuntu-latest
