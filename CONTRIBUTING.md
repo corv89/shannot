@@ -15,7 +15,7 @@ Click the badge above to get a fully configured development environment with bub
 ### Prerequisites
 
 - **Linux** - Shannot requires Linux for development and testing (bubblewrap is Linux-only)
-- **Python 3.9+** - The minimum supported version
+- **Python 3.10+ with [uv](https://docs.astral.sh/uv/)** - Manages the project virtual environment
 - **bubblewrap** - The underlying sandboxing tool
 
 ### Local Setup
@@ -24,6 +24,9 @@ Click the badge above to get a fully configured development environment with bub
 # Clone the repository
 git clone https://github.com/corv89/shannot.git
 cd shannot
+
+# Install uv if it's not already available
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install bubblewrap
 # Debian/Ubuntu
@@ -35,8 +38,8 @@ sudo dnf install bubblewrap
 # Arch Linux
 sudo pacman -S bubblewrap
 
-# Install shannot in development mode with all dev dependencies
-pip install -e ".[dev]"
+# Create a local virtual environment, install dev + optional extras, and set up git hooks
+make install-dev
 ```
 
 ### Verify Installation
@@ -45,14 +48,23 @@ pip install -e ".[dev]"
 # Verify bubblewrap is available
 bwrap --version
 
-# Run the test suite
-pytest tests/ -v
+# Run the test suite (integration tests require Linux + bubblewrap)
+make test
 
-# Run linter
-ruff check .
+# Run only unit or integration suites as needed (hooks already installed by make install-dev)
+make test-unit
+make test-integration
+
+# Run linter and formatter
+make lint
+make format
 
 # Run type checker
-basedpyright
+make type-check
+
+# Optional: run tests with coverage or reinstall hooks
+make test-coverage
+make pre-commit-install  # re-install hooks after changing environments
 ```
 
 ## Development Workflow
@@ -80,19 +92,20 @@ Before committing, ensure all checks pass:
 
 ```bash
 # Format code
-ruff format .
+make format
 
 # Check linting
-ruff check .
+make lint
 
 # Run type checker
-basedpyright
+make type-check
 
 # Run tests
-pytest tests/ -v
+make test
 
-# Run tests with coverage
-pytest tests/ --cov=shannot --cov-report=term
+# Run tests with coverage (and re-install hooks if needed)
+make test-coverage
+make pre-commit-install
 
 # Build documentation
 make docs
@@ -140,16 +153,18 @@ We have three types of tests:
 
 ```bash
 # Run all tests
-pytest tests/ -v
+make test  # full suite
 
 # Run only unit tests (skip integration tests)
-pytest tests/ -v -m "not integration"
+make test-unit
 
 # Run only integration tests
-pytest tests/ -v -m "integration"
+make test-integration
 
 # Run with coverage report
-pytest tests/ --cov=shannot --cov-report=html
+make test-coverage
+make pre-commit-install
+uv run --frozen --extra dev --extra all pytest --cov=shannot --cov-report=html
 # Open htmlcov/index.html to view coverage
 ```
 

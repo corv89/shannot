@@ -7,10 +7,14 @@
 - `tests/` groups unit and integration suites with shared fixtures in `tests/conftest.py`.
 
 ## Build, Test, and Development Commands
-- `make install-dev` installs the project in editable mode with `.[dev,all]` extras via `uv`.
-- `make test` (or `pytest -v`) runs the full suite; add `-m "not integration"` locally when bubblewrap is unavailable.
-- `make lint` triggers `ruff check .`; `make format` applies `ruff format .` to enforce spacing and quotes.
-- `make type-check` runs `basedpyright` to catch missing annotations and interface regressions.
+- `make install` hydrates `.venv/` with runtime dependencies via `uv sync --frozen`; use this to match the lockfile exactly.
+- `make install-dev` expands the environment with the `dev` and `all` extras and installs pre-commit hooks so tooling stays consistent.
+- `make test` exercises the full suite inside the managed environment.
+- `make test-unit` skips `@pytest.mark.integration` cases for quicker local iteration.
+- `make test-integration` runs only integration scenarios that require Linux + bubblewrap.
+- `make test-coverage` reports coverage via `pytest --cov=shannot --cov-report=term`.
+- `make lint`/`make format` delegate to `ruff check .` and `ruff format .` inside the UV managed environment.
+- `make type-check` runs `basedpyright` with the same extras; no manual virtualenv activation is required for any target.
 - `make docs` compiles MkDocs output; `make docs-serve` hosts it at `http://127.0.0.1:8000` for live previews.
 
 ## Coding Style & Naming Conventions

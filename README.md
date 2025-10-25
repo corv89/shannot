@@ -213,15 +213,21 @@ See [api](https://corv89.github.io/shannot/api) for complete documentation.
 # Clone and install
 git clone https://github.com/corv89/shannot.git
 cd shannot
-pip install -e ".[dev]"
+make install-dev
 
 # Run tests (integration tests require Linux + bubblewrap)
-pytest tests/ -v
-pytest tests/ -v -m "not integration"  # unit tests only
+make test
+make test-unit  # unit tests only
 
 # Lint and type check
-ruff check . && ruff format .
-basedpyright
+make lint
+make format
+make type-check
+
+# Optional helpers
+make test-integration
+make test-coverage
+make pre-commit-install  # re-install git hooks if needed
 ```
 
 

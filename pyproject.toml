@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shannot"
-version = "0.1.1"
+version = "0.2.0"
 description = "Secure read-only sandboxing for LLM agents and system diagnostics"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,6 +46,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0",
+    "pre-commit>=3.6.0",
     "ruff>=0.1.0",
     "basedpyright>=1.0",
     "types-setuptools",
