@@ -18,6 +18,7 @@ import argparse
 import json
 import logging
 import os
+import platform
 import shutil
 import sys
 from collections.abc import Mapping, MutableMapping, Sequence
@@ -44,6 +45,69 @@ _DEFAULT_PROFILES = [
     Path("/etc/shannot/minimal.json"),  # System-wide
     Path("/etc/shannot/profile.json"),  # Legacy system
 ]
+
+_MCP_CLIENT_LABELS: dict[str, str] = {
+    "claude-desktop": "Claude Desktop",
+    "claude-code": "Claude Code",
+    "codex": "Codex CLI",
+}
+
+_MCP_CLIENT_PATHS: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
+    "claude-desktop": {
+        "Darwin": (("Library", "Application Support", "Claude", "claude_desktop_config.json"),),
+        "Windows": (("AppData", "Roaming", "Claude", "claude_desktop_config.json"),),
+    },
+    "claude-code": {
+        "Darwin": (
+            ("Library", "Application Support", "Claude", "claude_code_config.json"),
+            ("Library", "Application Support", "Claude", "claude_config.json"),
+            (".claude", "config.json"),
+            (".config", "claude", "config.json"),
+        ),
+        "Linux": (
+            (".config", "Claude", "claude_code_config.json"),
+            (".claude", "config.json"),
+            (".config", "claude", "config.json"),
+        ),
+        "Windows": (
+            ("AppData", "Roaming", "Claude", "claude_code_config.json"),
+            ("AppData", "Roaming", "Claude", "claude_config.json"),
+        ),
+    },
+    "codex": {
+        "Darwin": (
+            ("Library", "Application Support", "OpenAI", "Codex", "codex_cli_config.json"),
+            (".config", "openai", "codex_cli_config.json"),
+        ),
+        "Linux": (
+            (".config", "openai", "codex_cli_config.json"),
+            (".config", "codex", "config.json"),
+        ),
+        "Windows": (("AppData", "Roaming", "OpenAI", "Codex", "codex_cli_config.json"),),
+    },
+}
+
+_MCP_CLIENT_SUCCESS_HINTS: dict[str, str] = {
+    "claude-desktop": "Restart Claude Desktop to use Shannot tools",
+    "claude-code": "Reload or restart Claude Code to use Shannot tools",
+    "codex": "Restart Codex CLI sessions to use Shannot tools",
+}
+
+
+def _claude_cli_config_path() -> Path:
+    """Locate Claude Code CLI configuration file."""
+    override_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    base_dir = Path(override_dir).expanduser() if override_dir else Path.home()
+
+    alt_path = Path.home() / ".claude" / ".config.json"
+    if alt_path.exists():
+        return alt_path
+
+    candidates = sorted(base_dir.glob(".claude*.json"))
+    if candidates:
+        return candidates[0]
+
+    return base_dir / ".claude.json"
 
 
 def _get_default_profile() -> Path:
@@ -154,6 +218,71 @@ def _profile_to_serializable(profile: SandboxProfile) -> dict[str, object]:
         "network_isolation": data["network_isolation"],
         "additional_args": additional_args,
     }
+
+
+def _resolve_mcp_config_path(client: str, override: str | None) -> Path:
+    if override:
+        return Path(override).expanduser()
+
+    system_name = platform.system()
+    candidates = _MCP_CLIENT_PATHS.get(client, {}).get(system_name)
+    if not candidates:
+        friendly = _MCP_CLIENT_LABELS.get(client, client)
+        raise ValueError(
+            f"{friendly} config location unknown for platform '{system_name}'. "
+            "Specify the location explicitly with --config-path.",
+        )
+
+    selected_path: Path | None = None
+    for segments in candidates:
+        candidate_path = Path.home().joinpath(*segments)
+        if candidate_path.exists():
+            selected_path = candidate_path
+            break
+
+    if selected_path is None:
+        selected_path = Path.home().joinpath(*candidates[0])
+
+    return selected_path
+
+
+def _update_claude_cli_user_server(
+    server_name: str,
+    command: str,
+    args: list[str],
+    env: dict[str, str] | None,
+) -> tuple[Path, bool] | None:
+    """Write Claude Code CLI user-scope config (available across all projects)."""
+    config_path = _claude_cli_config_path()
+    try:
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as fh:
+                config_data = json.load(fh)
+        else:
+            config_data = {}
+    except json.JSONDecodeError as exc:
+        _LOGGER.warning("Could not parse Claude Code config at %s: %s", config_path, exc)
+        return None
+
+    # User scope: top-level mcpServers (not under projects)
+    mcp_servers = config_data.setdefault("mcpServers", {})
+
+    cli_server_config: dict[str, object] = {
+        "type": "stdio",
+        "command": command,
+        "args": list(args),
+        "env": env or {},
+    }
+
+    changed = mcp_servers.get(server_name) != cli_server_config
+    mcp_servers[server_name] = cli_server_config
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(config_path, "w", encoding="utf-8") as fh:
+        json.dump(config_data, fh, indent=2)
+        fh.write("\n")
+
+    return config_path, changed
 
 
 def _execute_command(manager: SandboxManager, command: Sequence[str]) -> ProcessResult:
@@ -376,12 +505,22 @@ def _build_parser() -> argparse.ArgumentParser:
     # mcp install
     mcp_install_parser = mcp_subparsers.add_parser(
         "install",
-        help="Install MCP server config for Claude Desktop.",
+        help="Install MCP server config for supported clients.",
     )
     _ = mcp_install_parser.add_argument(
         "--target",
         "-t",
         help="Target system to use for MCP server (from config file).",
+    )
+    _ = mcp_install_parser.add_argument(
+        "--client",
+        choices=("claude-desktop", "claude-code", "codex"),
+        default="claude-desktop",
+        help="MCP client to configure (default: claude-desktop).",
+    )
+    _ = mcp_install_parser.add_argument(
+        "--config-path",
+        help="Override the MCP client config file path.",
     )
     mcp_install_parser.set_defaults(handler=_handle_mcp_install)
 
@@ -456,28 +595,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _handle_mcp_install(args: argparse.Namespace) -> int:
-    """Install MCP server configuration for Claude Desktop."""
-    import platform
-
+    """Install MCP server configuration for supported clients."""
+    client = cast(str, getattr(args, "client", "claude-desktop"))
+    config_override = cast(str | None, getattr(args, "config_path", None))
     target_name = cast(str | None, getattr(args, "target", None))
+    client_label = _MCP_CLIENT_LABELS.get(client, client)
 
-    if platform.system() == "Darwin":
-        config_path = (
-            Path.home()
-            / "Library"
-            / "Application Support"
-            / "Claude"
-            / "claude_desktop_config.json"
-        )
-    elif platform.system() == "Windows":
-        config_path = Path.home() / "AppData" / "Roaming" / "Claude" / "claude_desktop_config.json"
-    else:
-        _LOGGER.error("Claude Desktop config location unknown for this platform")
-        _LOGGER.info("Please manually add the following to your Claude Desktop config:")
-        server_config = {"command": "shannot-mcp", "args": []}
-        if target_name:
-            server_config["args"] = ["--target", target_name]
-        _LOGGER.info(json.dumps({"mcpServers": {"shannot": server_config}}, indent=2))
+    try:
+        config_path = _resolve_mcp_config_path(client, config_override)
+    except ValueError as exc:
+        _LOGGER.error(str(exc))
+        if not config_override:
+            _LOGGER.info(
+                "Example: shannot mcp install --client %s --config-path /path/to/config", client
+            )
         return 1
 
     # Validate target if specified
@@ -495,16 +626,14 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
             _LOGGER.error(f"Failed to load config: {e}")
             return 1
 
-    # Check if config file exists
+    # Read existing config if present
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
     else:
         config = {}
 
-    # Add shannot MCP server
-    if "mcpServers" not in config:
-        config["mcpServers"] = {}
+    config.setdefault("mcpServers", {})
 
     command_args: list[str] = []
     resolved_command = shutil.which("shannot-mcp")
@@ -527,17 +656,42 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
     if env_vars:
         server_config["env"] = env_vars
 
+    cli_update_result: tuple[Path, bool] | None = None
+    if client == "claude-code":
+        try:
+            cli_update_result = _update_claude_cli_user_server(
+                "shannot",
+                resolved_command,
+                list(server_args),
+                env_vars if env_vars else None,
+            )
+        except Exception as exc:
+            _LOGGER.warning("Failed to update Claude Code user config: %s", exc)
+
     config["mcpServers"]["shannot"] = server_config
 
     # Write config
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2)
+        f.write("\n")
 
-    _LOGGER.info(f"✓ Installed MCP server config to {config_path}")
+    _LOGGER.info("✓ Installed MCP server config for %s at %s", client_label, config_path)
+    if client == "claude-code":
+        if cli_update_result is not None:
+            path, changed = cli_update_result
+            message = "Added" if changed else "Already configured"
+            _LOGGER.info(
+                "✓ %s Claude Code user config at %s (available across all projects)", message, path
+            )
+        # Helper already logs a warning if it cannot parse existing config
     if target_name:
         _LOGGER.info(f"✓ MCP server will use target: {target_name}")
-    _LOGGER.info("✓ Restart Claude Desktop to use Shannot tools")
+    success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
+    if success_hint:
+        _LOGGER.info("✓ %s", success_hint)
+    else:
+        _LOGGER.info("✓ Client may need a restart to detect new MCP server")
     return 0
 
 
