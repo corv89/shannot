@@ -137,6 +137,9 @@ markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]
 
+[tool.coverage.run]
+relative_files = true
+
 [tool.pdoc]
 # pdoc3 configuration
 template_directory = "docs/templates"
