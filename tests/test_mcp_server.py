@@ -38,6 +38,12 @@ if "mcp.server" not in sys.modules:
         def read_resource(self):
             return self.list_tools()
 
+        def list_prompts(self):
+            return self.list_tools()
+
+        def get_prompt(self):
+            return self.list_tools()
+
         async def run(self, *args, **kwargs):
             return None
 
@@ -77,6 +83,11 @@ if "mcp.types" not in sys.modules:
     types_module.ServerCapabilities = _SimpleType  # type: ignore[attr-defined]
     types_module.ResourcesCapability = _SimpleType  # type: ignore[attr-defined]
     types_module.ToolsCapability = _SimpleType  # type: ignore[attr-defined]
+    types_module.Prompt = _SimpleType  # type: ignore[attr-defined]
+    types_module.PromptArgument = _SimpleType  # type: ignore[attr-defined]
+    types_module.PromptMessage = _SimpleType  # type: ignore[attr-defined]
+    types_module.GetPromptResult = _SimpleType  # type: ignore[attr-defined]
+    types_module.PromptsCapability = _SimpleType  # type: ignore[attr-defined]
 
     sys.modules["mcp.types"] = types_module
     sys.modules["mcp"].types = types_module  # type: ignore[attr-defined]
@@ -464,3 +475,208 @@ class TestMCPServerIntegration:
 
         assert deps1.profile.name != deps2.profile.name
         assert deps1.profile.allowed_commands != deps2.profile.allowed_commands
+
+
+class TestMCPServerPrompts:
+    """Test MCP prompts functionality."""
+
+    def test_get_diagnostics_tool_name_with_diagnostics_profile(self):
+        """Test _get_diagnostics_tool_name finds diagnostics profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "diagnostics"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["diagnostics"])
+            tool_name = server._get_diagnostics_tool_name()
+
+            assert tool_name == "sandbox_diagnostics"
+
+    def test_get_diagnostics_tool_name_with_executor_label(self):
+        """Test _get_diagnostics_tool_name includes executor label."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "diagnostics"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["diagnostics"], executor_label="prod")
+            tool_name = server._get_diagnostics_tool_name()
+
+            assert tool_name == "sandbox_prod_diagnostics"
+
+    def test_get_diagnostics_tool_name_fallback(self):
+        """Test _get_diagnostics_tool_name falls back to first profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "minimal"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["minimal"])
+            tool_name = server._get_diagnostics_tool_name()
+
+            assert tool_name == "sandbox_minimal"
+
+    def test_get_diagnostics_tool_name_no_profiles(self):
+        """Test _get_diagnostics_tool_name with no profiles."""
+        server = ShannotMCPServer(profile_paths=[])
+        tool_name = server._get_diagnostics_tool_name()
+
+        assert tool_name == "sandbox_diagnostics"
+
+    def test_generate_health_check_prompt_default_args(self, mcp_server):
+        """Test health check prompt generation with default arguments."""
+        result = mcp_server._generate_health_check_prompt({})
+
+        assert result.description == "System health check for the system"
+        assert len(result.messages) == 1
+        assert result.messages[0].role == "user"
+        assert "comprehensive health check" in result.messages[0].content.text
+        assert "sandbox_test1" in result.messages[0].content.text
+        assert "df -h" in result.messages[0].content.text
+        assert "free -h" in result.messages[0].content.text
+        assert "uptime" in result.messages[0].content.text
+
+    def test_generate_health_check_prompt_with_target(self, mcp_server):
+        """Test health check prompt generation with target argument."""
+        result = mcp_server._generate_health_check_prompt({"target": "production"})
+
+        assert result.description == "System health check for production"
+        assert "health check of production" in result.messages[0].content.text
+
+    def test_generate_performance_prompt_default_args(self, mcp_server):
+        """Test performance investigation prompt generation."""
+        result = mcp_server._generate_performance_prompt({})
+
+        assert "performance issues" in result.description
+        assert "experiencing performance issues" in result.messages[0].content.text
+        assert "ps aux --sort=-%cpu" in result.messages[0].content.text
+        assert "ps aux --sort=-%mem" in result.messages[0].content.text
+
+    def test_generate_performance_prompt_with_symptom(self, mcp_server):
+        """Test performance prompt with custom symptom."""
+        result = mcp_server._generate_performance_prompt({"symptom": "high memory usage"})
+
+        assert "high memory usage" in result.description
+        assert "experiencing high memory usage" in result.messages[0].content.text
+
+    def test_generate_log_analysis_prompt_default_args(self, mcp_server):
+        """Test log analysis prompt generation."""
+        result = mcp_server._generate_log_analysis_prompt({})
+
+        assert "/var/log/syslog or /var/log/messages" in result.description
+        assert "grep -i error" in result.messages[0].content.text
+        assert "grep -i fail" in result.messages[0].content.text
+        assert "grep -i warn" in result.messages[0].content.text
+
+    def test_generate_log_analysis_prompt_with_args(self, mcp_server):
+        """Test log analysis prompt with custom log path and timeframe."""
+        result = mcp_server._generate_log_analysis_prompt(
+            {"log_path": "/var/log/nginx/error.log", "timeframe": "last hour"}
+        )
+
+        assert "/var/log/nginx/error.log" in result.description
+        assert "last hour" in result.description
+        assert "/var/log/nginx/error.log" in result.messages[0].content.text
+
+    def test_generate_disk_audit_prompt_default_args(self, mcp_server):
+        """Test disk usage audit prompt generation."""
+        result = mcp_server._generate_disk_audit_prompt({})
+
+        assert "threshold: 80%" in result.description
+        assert "df -h" in result.messages[0].content.text
+        assert "find /var -type f -size +100M" in result.messages[0].content.text
+        assert "80%" in result.messages[0].content.text
+
+    def test_generate_disk_audit_prompt_with_threshold(self, mcp_server):
+        """Test disk audit prompt with custom threshold."""
+        result = mcp_server._generate_disk_audit_prompt({"threshold": "90"})
+
+        assert "threshold: 90%" in result.description
+        assert "90%" in result.messages[0].content.text
+
+    def test_generate_process_monitoring_prompt_default_args(self, mcp_server):
+        """Test process monitoring prompt generation."""
+        result = mcp_server._generate_process_monitoring_prompt({})
+
+        assert "sorted by: cpu" in result.description
+        assert "sorted by CPU usage" in result.messages[0].content.text
+        assert "ps aux --sort=-%cpu" in result.messages[0].content.text
+
+    def test_generate_process_monitoring_prompt_sort_by_memory(self, mcp_server):
+        """Test process monitoring prompt with memory sorting."""
+        result = mcp_server._generate_process_monitoring_prompt({"sort_by": "memory"})
+
+        assert "sorted by: memory" in result.description
+        assert "sorted by memory usage" in result.messages[0].content.text
+        assert "ps aux --sort=-%mem" in result.messages[0].content.text
+
+    def test_generate_process_monitoring_prompt_sort_by_time(self, mcp_server):
+        """Test process monitoring prompt with time sorting."""
+        result = mcp_server._generate_process_monitoring_prompt({"sort_by": "time"})
+
+        assert "sorted by: time" in result.description
+        assert "sorted by running time" in result.messages[0].content.text
+        assert "ps aux --sort=-time" in result.messages[0].content.text
+
+    def test_generate_service_check_prompt(self, mcp_server):
+        """Test service status check prompt generation."""
+        result = mcp_server._generate_service_check_prompt({"service_name": "nginx"})
+
+        assert "nginx" in result.description
+        assert "'nginx' service" in result.messages[0].content.text
+        assert "ps aux | grep -i nginx" in result.messages[0].content.text
+        assert "grep -i nginx /var/log/syslog" in result.messages[0].content.text
+
+    def test_generate_service_check_prompt_requires_service_name(self, mcp_server):
+        """Test service check prompt requires service_name argument."""
+        with pytest.raises(ValueError, match="service_name argument is required"):
+            mcp_server._generate_service_check_prompt({})
+
+    def test_generate_service_check_prompt_empty_service_name(self, mcp_server):
+        """Test service check prompt with empty service name."""
+        with pytest.raises(ValueError, match="service_name argument is required"):
+            mcp_server._generate_service_check_prompt({"service_name": ""})
+
+    def test_all_prompts_include_tool_reference(self, mcp_server):
+        """Test that all prompts reference the appropriate tool."""
+        tool_name = mcp_server._get_diagnostics_tool_name()
+
+        # Test each prompt generator
+        prompts = [
+            mcp_server._generate_health_check_prompt({}),
+            mcp_server._generate_performance_prompt({}),
+            mcp_server._generate_log_analysis_prompt({}),
+            mcp_server._generate_disk_audit_prompt({}),
+            mcp_server._generate_process_monitoring_prompt({}),
+            mcp_server._generate_service_check_prompt({"service_name": "test"}),
+        ]
+
+        for prompt in prompts:
+            assert tool_name in prompt.messages[0].content.text
+
+    def test_prompts_have_consistent_structure(self, mcp_server):
+        """Test that all prompts follow consistent structure."""
+        prompts = [
+            mcp_server._generate_health_check_prompt({}),
+            mcp_server._generate_performance_prompt({}),
+            mcp_server._generate_log_analysis_prompt({}),
+            mcp_server._generate_disk_audit_prompt({}),
+            mcp_server._generate_process_monitoring_prompt({}),
+            mcp_server._generate_service_check_prompt({"service_name": "test"}),
+        ]
+
+        for prompt in prompts:
+            # All prompts should have a description
+            assert hasattr(prompt, "description")
+            assert prompt.description
+
+            # All prompts should have exactly one user message
+            assert len(prompt.messages) == 1
+            assert prompt.messages[0].role == "user"
+
+            # Message should have text content
+            assert hasattr(prompt.messages[0].content, "text")
+            assert prompt.messages[0].content.text
