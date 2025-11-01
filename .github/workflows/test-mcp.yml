@@ -35,10 +35,10 @@ jobs:
           ARCH=$(uname -m)
           case $ARCH in
             x86_64)
-              ASSET="mcp-probe-x86_64-unknown-linux-gnu.tar.gz"
+              PLATFORM="x86_64-unknown-linux-gnu"
               ;;
             aarch64)
-              ASSET="mcp-probe-aarch64-unknown-linux-gnu.tar.gz"
+              PLATFORM="aarch64-unknown-linux-gnu"
               ;;
             *)
               echo "Unsupported architecture: $ARCH"
@@ -46,9 +46,19 @@ jobs:
               ;;
           esac
 
-          # Download latest release
-          LATEST_URL=$(curl -s https://api.github.com/repos/conikeec/mcp-probe/releases/latest | grep "browser_download_url.*$ASSET" | cut -d '"' -f 4)
-          curl -L -o mcp-probe.tar.gz "$LATEST_URL"
+          # Get latest version from GitHub API
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/conikeec/mcp-probe/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "Failed to get latest version, using v0.3.0"
+            LATEST_VERSION="v0.3.0"
+          fi
+
+          echo "Installing mcp-probe ${LATEST_VERSION} for ${PLATFORM}"
+
+          # Download and install
+          DOWNLOAD_URL="https://github.com/conikeec/mcp-probe/releases/download/${LATEST_VERSION}/mcp-probe-${PLATFORM}.tar.gz"
+          curl -L -o mcp-probe.tar.gz "$DOWNLOAD_URL"
           tar -xzf mcp-probe.tar.gz
           chmod +x mcp-probe
           mv mcp-probe /usr/local/bin/
@@ -128,10 +138,10 @@ jobs:
           ARCH=$(uname -m)
           case $ARCH in
             x86_64)
-              ASSET="mcp-probe-x86_64-unknown-linux-gnu.tar.gz"
+              PLATFORM="x86_64-unknown-linux-gnu"
               ;;
             aarch64)
-              ASSET="mcp-probe-aarch64-unknown-linux-gnu.tar.gz"
+              PLATFORM="aarch64-unknown-linux-gnu"
               ;;
             *)
               echo "Unsupported architecture: $ARCH"
@@ -139,9 +149,19 @@ jobs:
               ;;
           esac
 
-          # Download latest release
-          LATEST_URL=$(curl -s https://api.github.com/repos/conikeec/mcp-probe/releases/latest | grep "browser_download_url.*$ASSET" | cut -d '"' -f 4)
-          curl -L -o mcp-probe.tar.gz "$LATEST_URL"
+          # Get latest version from GitHub API
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/conikeec/mcp-probe/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "Failed to get latest version, using v0.3.0"
+            LATEST_VERSION="v0.3.0"
+          fi
+
+          echo "Installing mcp-probe ${LATEST_VERSION} for ${PLATFORM}"
+
+          # Download and install
+          DOWNLOAD_URL="https://github.com/conikeec/mcp-probe/releases/download/${LATEST_VERSION}/mcp-probe-${PLATFORM}.tar.gz"
+          curl -L -o mcp-probe.tar.gz "$DOWNLOAD_URL"
           tar -xzf mcp-probe.tar.gz
           chmod +x mcp-probe
           mv mcp-probe /usr/local/bin/
