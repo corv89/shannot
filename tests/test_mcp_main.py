@@ -12,7 +12,15 @@ import pytest
 
 pytest.importorskip("pydantic")
 
-if "mcp.server" not in sys.modules:
+# Check if mcp is actually installed (not just stubbed)
+try:
+    import mcp  # noqa: F401
+
+    _mcp_available = True
+except ImportError:
+    _mcp_available = False
+
+if not _mcp_available and "mcp.server" not in sys.modules:
     mcp_module = types.ModuleType("mcp")
     server_module = types.ModuleType("mcp.server")
     stdio_module = types.ModuleType("mcp.server.stdio")
@@ -63,7 +71,7 @@ if "mcp.server" not in sys.modules:
     mcp_module.server = server_module  # type: ignore[attr-defined]
     server_module.stdio = stdio_module  # type: ignore[attr-defined]
 
-if "mcp.types" not in sys.modules:
+if not _mcp_available and "mcp.types" not in sys.modules:
     types_module = types.ModuleType("mcp.types")
 
     class _SimpleType:

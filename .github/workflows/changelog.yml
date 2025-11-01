@@ -13,6 +13,8 @@ jobs:
   check-changelog:
     name: Check Changelog is Updated
     runs-on: ubuntu-latest
+    # Skip this check for draft PRs
+    if: github.event.pull_request.draft == false
 
     steps:
       - name: Checkout code

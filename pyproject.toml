@@ -55,7 +55,7 @@ dev = [
     "mkdocstrings[python]>=0.24.0",
 ]
 mcp = [
-    "mcp>=1.0.0",
+    "mcp>=1.18.0",
     "pydantic>=2.0.0",
     "asyncssh>=2.14.0",
 ]
@@ -67,7 +67,7 @@ remote = [
     "asyncssh>=2.14.0",
 ]
 all = [
-    "mcp>=1.0.0",
+    "mcp>=1.18.0",
     "pydantic-ai>=0.0.1",
     "pydantic>=2.0.0",
     "asyncssh>=2.14.0",
