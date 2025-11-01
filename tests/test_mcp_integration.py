@@ -159,9 +159,9 @@ class TestMCPProbeIntegration:
         if result.returncode == 0:
             output = result.stdout.decode()
             # Look for evidence of tools in the output
-            assert (
-                "diagnostics" in output.lower() or "sandbox" in output.lower()
-            ), "Expected diagnostic/sandbox tools to be listed"
+            assert "diagnostics" in output.lower() or "sandbox" in output.lower(), (
+                "Expected diagnostic/sandbox tools to be listed"
+            )
 
     def test_prompts_available(
         self, shannot_mcp_command: list[str], mcp_probe_available: bool
@@ -202,9 +202,9 @@ class TestMCPProbeIntegration:
                 "check-service-status",
             ]
             found_prompts = [p for p in expected_prompts if p in output]
-            assert (
-                len(found_prompts) >= 1
-            ), f"Expected to find diagnostic prompts, found: {found_prompts}"
+            assert len(found_prompts) >= 1, (
+                f"Expected to find diagnostic prompts, found: {found_prompts}"
+            )
 
     def test_protocol_validation(
         self, shannot_mcp_command: list[str], mcp_probe_available: bool
