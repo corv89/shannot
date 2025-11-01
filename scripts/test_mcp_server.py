@@ -116,7 +116,8 @@ def get_shannot_mcp_command() -> Path:
         if result.returncode == 0:
             return Path(result.stdout.decode().strip())
     except subprocess.TimeoutExpired:
-        pass
+        # Timeout while searching PATH - continue to raise FileNotFoundError below
+        print_warning("Timeout while searching for shannot-mcp in PATH")
 
     raise FileNotFoundError("shannot-mcp not found. Please install with: pip install -e .[mcp]")
 
