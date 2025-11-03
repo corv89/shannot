@@ -941,7 +941,6 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
     # Install to specific client
     else:
         client = client_arg
-        client_label = _MCP_CLIENT_LABELS.get(client, client)
 
         try:
             config_path = _resolve_mcp_config_path(client, config_override)
