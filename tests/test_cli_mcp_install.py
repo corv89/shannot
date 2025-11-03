@@ -170,7 +170,11 @@ def test_mcp_install_supports_codex_cli(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert _handle_mcp_install(DummyArgs(client="codex")) == 0
 
     # Verify TOML file was created with correct structure
-    import tomllib
+    # Use tomllib (Python 3.11+) or tomli (Python 3.10)
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
 
     with open(config_file, "rb") as f:
         data = tomllib.load(f)
