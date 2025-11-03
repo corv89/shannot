@@ -10,9 +10,10 @@ from types import SimpleNamespace
 
 import pytest
 
+# Skip tests if pydantic is not available (required for MCP install)
 pytest.importorskip("pydantic")
 
-from shannot.cli import _handle_mcp_install
+from shannot.cli import _handle_mcp_install  # noqa: E402
 
 
 class DummyArgs(Namespace):
@@ -38,8 +39,10 @@ def test_mcp_install_uses_absolute_binary(monkeypatch: pytest.MonkeyPatch, tmp_p
     config_file = (
         tmp_path / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     )
+    # Create parent directory so auto-detection works
+    config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    assert _handle_mcp_install(DummyArgs(target=None)) == 0
+    assert _handle_mcp_install(DummyArgs(target=None, client="claude-desktop")) == 0
 
     data = json.loads(config_file.read_text())
     assert data["mcpServers"]["shannot"]["command"] == "/opt/tools/shannot-mcp"
@@ -58,8 +61,10 @@ def test_mcp_install_falls_back_to_python_module(monkeypatch: pytest.MonkeyPatch
     config_file = (
         tmp_path / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     )
+    # Create parent directory so auto-detection works
+    config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    result = _handle_mcp_install(DummyArgs(target=None))
+    result = _handle_mcp_install(DummyArgs(target=None, client="claude-desktop"))
     assert result == 0
 
     data = json.loads(config_file.read_text())
@@ -95,8 +100,10 @@ def test_mcp_install_with_target_appends_flag(monkeypatch: pytest.MonkeyPatch, t
     config_file = (
         tmp_path / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     )
+    # Create parent directory so auto-detection works
+    config_file.parent.mkdir(parents=True, exist_ok=True)
 
-    assert _handle_mcp_install(DummyArgs(target="remote")) == 0
+    assert _handle_mcp_install(DummyArgs(target="remote", client="claude-desktop")) == 0
 
     data = json.loads(config_file.read_text())
     assert data["mcpServers"]["shannot"]["command"] == sys.executable
