@@ -5,15 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2025-11-07
 
-### Bug Fixes
+### Dependencies
 
-- Fix changelog workflow permissions for PR comments
+- Bump actions/github-script from 7 to 8 ([#24](https://github.com/corv89/shannot/pull/24))
+- Bump actions/download-artifact from 5 to 6 ([#26](https://github.com/corv89/shannot/pull/26))
+- Bump actions/upload-pages-artifact from 3 to 4 ([#28](https://github.com/corv89/shannot/pull/28))
+- Bump astral-sh/setup-uv from 5 to 7 ([#27](https://github.com/corv89/shannot/pull/27))
+- Bump actions/checkout from 4 to 5 ([#31](https://github.com/corv89/shannot/pull/31))
+- Bump sigstore/gh-action-sigstore-python from 3.0.1 to 3.1.0 ([#34](https://github.com/corv89/shannot/pull/34))
+- Bump actions/upload-artifact from 4 to 5 ([#33](https://github.com/corv89/shannot/pull/33))
+- Bump actions/setup-python from 5 to 6 ([#32](https://github.com/corv89/shannot/pull/32))
 
-### Improvements
+### Enhancements
 
-- Update changelog
+- Improve Validation ([#38](https://github.com/corv89/shannot/pull/38))
+- MCP QoL improvements ([#36](https://github.com/corv89/shannot/pull/36))
+- Support Claude Code ([#21](https://github.com/corv89/shannot/pull/21))
+
+### Features
+
+- Add security policy and changelog ([#22](https://github.com/corv89/shannot/pull/22))
+- Add Prompts ([#30](https://github.com/corv89/shannot/pull/30))
+- Remove Pydantic ([#37](https://github.com/corv89/shannot/pull/37))
+- Replace Codecov with Coverage.py ([#29](https://github.com/corv89/shannot/pull/29))
 
 ## [0.2.1] - 2025-10-25
 
@@ -28,27 +44,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- Bump github/codeql-action from 3 to 4 ([#5](https://github.com/corv89/shannot/issues/5))
-- Bump actions/setup-python from 5 to 6 ([#3](https://github.com/corv89/shannot/issues/3))
-- Bump version to 0.2.1
+- Bump github/codeql-action from 3 to 4 ([#5](https://github.com/corv89/shannot/pull/5))
+- Bump actions/setup-python from 5 to 6 ([#3](https://github.com/corv89/shannot/pull/3))
 
 ### Documentation
 
 - Improve MCP documentation for Claude Code integration
 - Enhance API reference documentation with usage examples and context
 
+### Enhancements
+
+- Improve developer tooling with UV-backed make targets
+- Improve DX via Makefile ([#20](https://github.com/corv89/shannot/pull/20))
+
 ### Features
 
-- Add remote MCP support ([#14](https://github.com/corv89/shannot/issues/14))
+- Add remote MCP support ([#14](https://github.com/corv89/shannot/pull/14))
 - Add py.typed marker file for PEP 561 compliance
 - Add CHANGELOG.md and git-cliff automation
 - Add SECURITY.md with vulnerability reporting and security policy
-
-### Improvements
-
-- Improve developer tooling with UV-backed make targets
-- Improve DX via Makefile ([#20](https://github.com/corv89/shannot/issues/20))
-- Update CHANGELOG.md for v0.2.1 release
 
 ## [0.2.0] - 2025-10-24
 
@@ -56,30 +70,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix import order in test_config.py (ruff format)
 - Fix type errors in test_config.py by adding isinstance checks
-- Fix: Update license format in pyproject.toml
-- Fix: Complete overhaul of install.sh installation logic
+- Update license format in pyproject.toml
+- Complete overhaul of install.sh installation logic
 - Fix basedpyright type errors
 - Fix basedpyright errors in test files
 - Fix failing tests
 - Fix test skip conditions for tool cache tests
 
+### Code Style
+
+- Fix ruff line length violations in error messages
+
 ### Dependencies
 
 - Dependency & Packaging Updates
-- Bump version to 0.2.0
 
-### Documentation
-
-- Docs: Add comprehensive troubleshooting guide and improve README
-
-### Features
-
-- Add configuration system with TOML and remote execution
-- Feat: Add UV support and improve installation experience
-- Feat: Add configurable user namespace isolation and enhanced error diagnostics
-- Add --version flag to CLI and bump version to 0.1.1
-
-### Improvements
+### Enhancements
 
 - Improve error messages
 - Update GitHub Actions to use pip instead of removed install.sh
@@ -87,13 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improve formatting in README.md
 - Improve README formatting for MCP integration
 
-### Styling
+### Features
 
-- Style: Fix ruff line length violations in error messages
+- Add configuration system with TOML and remote execution
+- Add UV support and improve installation experience
+- Add configurable user namespace isolation and enhanced error diagnostics
+- Add --version flag to CLI and bump version to 0.1.1
 
 ### Testing
 
-- Test: Update tests for granular namespace isolation flags
+- Update tests for granular namespace isolation flags
 
 ## [0.1.1] - 2025-10-20
 
@@ -120,6 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bump sigstore/gh-action-sigstore-python from 2.1.1 to 3.0.1
 
+### Enhancements
+
+- Update Python requirement to 3.10+ and add asyncssh dependency
+- Update GitHub Actions to Python 3.10+
+
 ### Features
 
 - Add CI/CD, Codespaces, enhanced testing infrastructure
@@ -127,10 +141,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add comprehensive executor tests and improve test fixtures
 - Add Lima VM configuration for testing
 - Add manual SSH executor test script for Lima VM
-
-### Improvements
-
-- Update Python requirement to 3.10+ and add asyncssh dependency
-- Update GitHub Actions to Python 3.10+
 
 <!-- generated by git-cliff -->
