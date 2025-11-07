@@ -17,7 +17,6 @@ from shannot.validation import (
     ValidationError,
     validate_bool,
     validate_list_of_strings,
-    validate_type,
 )
 
 if TYPE_CHECKING:

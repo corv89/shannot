@@ -12,7 +12,6 @@ from pathlib import Path
 from shannot import (
     BubblewrapCommandBuilder,
     SandboxBind,
-    SandboxError,
     SandboxProfile,
     load_profile_from_path,
 )

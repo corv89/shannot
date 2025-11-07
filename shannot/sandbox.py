@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .process import ProcessResult, run_process
-from .validation import ValidationError, validate_bool, validate_type
+from .validation import ValidationError
 
 if TYPE_CHECKING:
     from shannot.execution import SandboxExecutor
