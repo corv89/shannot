@@ -18,7 +18,6 @@ from shannot.validation import (
     validate_bool,
     validate_list_of_strings,
     validate_safe_path,
-    validate_type,
 )
 
 if TYPE_CHECKING:
