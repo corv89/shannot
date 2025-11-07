@@ -23,6 +23,7 @@ class DummyArgs(Namespace):
             "target": None,
             "client": "claude-desktop",
             "config_path": None,
+            "yes": False,
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
@@ -114,20 +115,21 @@ def test_mcp_install_with_target_appends_flag(monkeypatch: pytest.MonkeyPatch, t
 
 
 def test_mcp_install_supports_claude_code(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Installing for Claude Code should target the IDE config path."""
+    """Installing for Claude Code should target the CLI user config."""
     _patch_home(monkeypatch, tmp_path)
     monkeypatch.setattr("platform.system", lambda: "Darwin")
     monkeypatch.setattr("shannot.cli.shutil.which", lambda _: "/opt/tools/shannot-mcp")
     monkeypatch.delenv("SSH_AUTH_SOCK", raising=False)
     monkeypatch.delenv("SSH_AGENT_PID", raising=False)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
-    config_file = (
-        tmp_path / "Library" / "Application Support" / "Claude" / "claude_code_config.json"
-    )
+    # Claude Code uses CLI user config at ~/.claude.json
+    config_file = tmp_path / ".claude.json"
 
     assert _handle_mcp_install(DummyArgs(client="claude-code")) == 0
 
     data = json.loads(config_file.read_text())
+    assert data["mcpServers"]["shannot"]["type"] == "stdio"
     assert data["mcpServers"]["shannot"]["command"] == "/opt/tools/shannot-mcp"
     assert data["mcpServers"]["shannot"]["args"] == []
 
@@ -135,41 +137,50 @@ def test_mcp_install_supports_claude_code(monkeypatch: pytest.MonkeyPatch, tmp_p
 def test_mcp_install_claude_code_prefers_existing_alternate(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
-    """Existing alternate config locations should be reused."""
+    """Claude Code CLI config preserves existing configuration."""
     _patch_home(monkeypatch, tmp_path)
     monkeypatch.setattr("platform.system", lambda: "Darwin")
     monkeypatch.setattr("shannot.cli.shutil.which", lambda _: "/opt/tools/shannot-mcp")
     monkeypatch.delenv("SSH_AUTH_SOCK", raising=False)
     monkeypatch.delenv("SSH_AGENT_PID", raising=False)
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
 
-    primary = tmp_path / "Library" / "Application Support" / "Claude" / "claude_code_config.json"
-    alternate = tmp_path / "Library" / "Application Support" / "Claude" / "claude_config.json"
-    alternate.parent.mkdir(parents=True, exist_ok=True)
-    alternate.write_text(json.dumps({"existing": True}))
+    # Create existing CLI config with some data
+    cli_config = tmp_path / ".claude.json"
+    cli_config.write_text(json.dumps({"existingKey": "existingValue"}))
 
     assert _handle_mcp_install(DummyArgs(client="claude-code")) == 0
 
-    assert not primary.exists()
-    data = json.loads(alternate.read_text())
-    assert data["existing"] is True
+    data = json.loads(cli_config.read_text())
+    assert data["existingKey"] == "existingValue"  # Preserved
     assert data["mcpServers"]["shannot"]["command"] == "/opt/tools/shannot-mcp"
 
 
 def test_mcp_install_supports_codex_cli(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Installing for Codex CLI should target the CLI config path."""
+    """Installing for Codex CLI should use TOML config."""
     _patch_home(monkeypatch, tmp_path)
     monkeypatch.setattr("platform.system", lambda: "Linux")
     monkeypatch.setattr("shannot.cli.shutil.which", lambda _: "/opt/tools/shannot-mcp")
     monkeypatch.delenv("SSH_AUTH_SOCK", raising=False)
     monkeypatch.delenv("SSH_AGENT_PID", raising=False)
 
-    config_file = tmp_path / ".config" / "openai" / "codex_cli_config.json"
+    # Codex now prefers TOML config
+    config_file = tmp_path / ".codex" / "config.toml"
 
     assert _handle_mcp_install(DummyArgs(client="codex")) == 0
 
-    data = json.loads(config_file.read_text())
-    assert data["mcpServers"]["shannot"]["command"] == "/opt/tools/shannot-mcp"
-    assert data["mcpServers"]["shannot"]["args"] == []
+    # Verify TOML file was created with correct structure
+    # Use tomllib (Python 3.11+) or tomli (Python 3.10)
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    with open(config_file, "rb") as f:
+        data = tomllib.load(f)
+    assert data["mcp_servers"]["shannot"]["command"] == "/opt/tools/shannot-mcp"
+    assert data["mcp_servers"]["shannot"]["args"] == []
+    assert data["mcp_servers"]["shannot"]["enabled"] is True
 
 
 def test_mcp_install_updates_claude_code_user_config(

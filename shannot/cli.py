@@ -26,6 +26,21 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
+# TOML support: tomllib is built-in for Python 3.11+, else use tomli
+try:
+    import tomllib
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        tomllib = None  # type: ignore[assignment]
+
+# TOML writing support
+try:
+    import tomli_w
+except ModuleNotFoundError:
+    tomli_w = None  # type: ignore[assignment]
+
 from . import (
     SandboxError,
     SandboxManager,
@@ -51,6 +66,7 @@ _MCP_CLIENT_LABELS: dict[str, str] = {
     "claude-desktop": "Claude Desktop",
     "claude-code": "Claude Code",
     "codex": "Codex CLI",
+    "lmstudio": "LM Studio",
 }
 
 _MCP_CLIENT_PATHS: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
@@ -77,21 +93,27 @@ _MCP_CLIENT_PATHS: dict[str, dict[str, tuple[tuple[str, ...], ...]]] = {
     },
     "codex": {
         "Darwin": (
+            (".codex", "config.toml"),
             ("Library", "Application Support", "OpenAI", "Codex", "codex_cli_config.json"),
-            (".config", "openai", "codex_cli_config.json"),
         ),
-        "Linux": (
-            (".config", "openai", "codex_cli_config.json"),
-            (".config", "codex", "config.json"),
+        "Linux": ((".codex", "config.toml"),),
+        "Windows": (
+            (".codex", "config.toml"),
+            ("AppData", "Roaming", "OpenAI", "Codex", "codex_cli_config.json"),
         ),
-        "Windows": (("AppData", "Roaming", "OpenAI", "Codex", "codex_cli_config.json"),),
+    },
+    "lmstudio": {
+        "Darwin": ((".lmstudio", "mcp.json"),),
+        "Linux": ((".lmstudio", "mcp.json"),),
+        "Windows": ((".lmstudio", "mcp.json"),),
     },
 }
 
 _MCP_CLIENT_SUCCESS_HINTS: dict[str, str] = {
     "claude-desktop": "Restart Claude Desktop to use Shannot tools",
-    "claude-code": "Reload or restart Claude Code to use Shannot tools",
+    "claude-code": "Restart Claude Code to use Shannot tools",
     "codex": "Restart Codex CLI sessions to use Shannot tools",
+    "lmstudio": "Restart LM Studio to use Shannot tools",
 }
 
 
@@ -221,9 +243,49 @@ def _profile_to_serializable(profile: SandboxProfile) -> dict[str, object]:
     }
 
 
+def _detect_available_mcp_clients() -> list[tuple[str, Path]]:
+    """
+    Detect which MCP clients are installed on the system.
+
+    Returns:
+        List of tuples (client_name, config_path) for detected clients.
+    """
+    system_name = platform.system()
+    detected: list[tuple[str, Path]] = []
+
+    for client_name, platform_paths in _MCP_CLIENT_PATHS.items():
+        # Special handling for Claude Code - use CLI config path
+        if client_name == "claude-code":
+            cli_path = _claude_cli_config_path()
+            # Check if Claude Code is installed by looking for the parent directory
+            if cli_path.parent.exists():
+                detected.append((client_name, cli_path))
+            continue
+
+        candidates = platform_paths.get(system_name)
+        if not candidates:
+            continue
+
+        for segments in candidates:
+            candidate_path = Path.home().joinpath(*segments)
+            if candidate_path.exists():
+                detected.append((client_name, candidate_path))
+                break
+            # Also check parent directory exists as indicator of installation
+            if candidate_path.parent.exists() and client_name not in [c[0] for c in detected]:
+                detected.append((client_name, candidate_path))
+                break
+
+    return detected
+
+
 def _resolve_mcp_config_path(client: str, override: str | None) -> Path:
     if override:
         return Path(override).expanduser()
+
+    # Special handling for Claude Code - use CLI config path
+    if client == "claude-code":
+        return _claude_cli_config_path()
 
     system_name = platform.system()
     candidates = _MCP_CLIENT_PATHS.get(client, {}).get(system_name)
@@ -569,15 +631,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "-t",
         help="Target system to use for MCP server (from config file).",
     )
+
     _ = mcp_install_parser.add_argument(
         "--client",
-        choices=("claude-desktop", "claude-code", "codex"),
-        default="claude-desktop",
-        help="MCP client to configure (default: claude-desktop).",
+        choices=("claude-desktop", "claude-code", "codex", "lmstudio", "all", "auto"),
+        help=(
+            "MCP client to configure. Use 'auto' to detect and choose, 'all' to install to all "
+            "detected clients, or specify: claude-desktop (macOS/Windows only), claude-code "
+            "(all platforms), codex (all platforms), lmstudio (all platforms). "
+            "Default: auto-detect."
+        ),
     )
     _ = mcp_install_parser.add_argument(
         "--config-path",
-        help="Override the MCP client config file path.",
+        help="Override the MCP client config file path (only works with specific --client).",
+    )
+    _ = mcp_install_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip confirmation prompts and install to all detected clients.",
     )
     mcp_install_parser.set_defaults(handler=_handle_mcp_install)
 
@@ -651,22 +724,117 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _handle_mcp_install(args: argparse.Namespace) -> int:
-    """Install MCP server configuration for supported clients."""
-    client = getattr(args, "client", "claude-desktop")
-    config_override = getattr(args, "config_path", None)
-    target_name = getattr(args, "target", None)
+def _install_to_client(
+    client: str,
+    config_path: Path,
+    target_name: str | None,
+    resolved_command: str,
+    command_args: list[str],
+    env_vars: dict[str, str],
+) -> bool:
+    """Install MCP server config to a specific client. Returns True on success."""
     client_label = _MCP_CLIENT_LABELS.get(client, client)
+    is_toml = config_path.suffix == ".toml"
 
     try:
-        config_path = _resolve_mcp_config_path(client, config_override)
-    except ValueError as exc:
-        _LOGGER.error(str(exc))
-        if not config_override:
-            _LOGGER.info(
-                "Example: shannot mcp install --client %s --config-path /path/to/config", client
+        # For Claude Code, use the CLI config directly (available across all projects)
+        if client == "claude-code":
+            server_args = list(command_args)
+            if target_name:
+                server_args.extend(["--target", target_name])
+
+            cli_result = _update_claude_cli_user_server(
+                "shannot",
+                resolved_command,
+                server_args,
+                env_vars if env_vars else None,
             )
-        return 1
+            if cli_result is not None:
+                path, changed = cli_result
+                status = "Configured" if changed else "Already configured"
+                _LOGGER.info(
+                    "✓ %s %s at %s (available across all projects)", status, client_label, path
+                )
+                success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
+                if success_hint:
+                    _LOGGER.info("✓ %s", success_hint)
+                return True
+            else:
+                return False
+
+        # Check if TOML libraries are available when needed
+        if is_toml and (tomllib is None or tomli_w is None):
+            _LOGGER.error(
+                f"TOML support required for {client_label} but not installed. "
+                "Install with: pip install tomli tomli-w"
+            )
+            return False
+
+        # Read existing config if present
+        if config_path.exists():
+            if is_toml:
+                assert tomllib is not None  # Already checked above
+                with open(config_path, "rb") as f:
+                    config = tomllib.load(f)
+            else:
+                with open(config_path) as f:
+                    config = json.load(f)
+        else:
+            config = {}
+
+        server_args = list(command_args)
+        if target_name:
+            server_args.extend(["--target", target_name])
+
+        # Handle different config formats
+        if client == "codex" and is_toml:
+            # Codex uses [mcp_servers.shannot] format in TOML
+            mcp_servers = config.setdefault("mcp_servers", {})
+            server_config = {
+                "command": resolved_command,
+                "args": server_args,
+                "enabled": True,
+            }
+            if env_vars:
+                server_config["env"] = env_vars
+            mcp_servers["shannot"] = server_config
+        else:
+            # Claude Desktop, LM Studio use JSON with mcpServers
+            config.setdefault("mcpServers", {})
+            server_config = {"command": resolved_command, "args": server_args}
+            if env_vars:
+                server_config["env"] = env_vars
+            config["mcpServers"]["shannot"] = server_config
+
+        # Write config
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        if is_toml:
+            assert tomli_w is not None  # Already checked above
+            with open(config_path, "wb") as f:
+                tomli_w.dump(config, f)
+        else:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+                f.write("\n")
+
+        _LOGGER.info("✓ Installed MCP server config for %s at %s", client_label, config_path)
+
+        success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
+        if success_hint:
+            _LOGGER.info("✓ %s", success_hint)
+
+        return True
+    except Exception as e:
+        _LOGGER.error(f"Failed to install to {client_label}: {e}")
+        return False
+
+
+def _handle_mcp_install(args: argparse.Namespace) -> int:
+    """Install MCP server configuration for supported clients."""
+    client_arg = cast(str | None, getattr(args, "client", None))
+    config_override = cast(str | None, getattr(args, "config_path", None))
+    target_name = cast(str | None, getattr(args, "target", None))
+    auto_yes = cast(bool, getattr(args, "yes", False))
 
     # Validate target if specified
     if target_name:
@@ -683,15 +851,7 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
             _LOGGER.error(f"Failed to load config: {e}")
             return 1
 
-    # Read existing config if present
-    if config_path.exists():
-        with open(config_path) as f:
-            config = json.load(f)
-    else:
-        config = {}
-
-    config.setdefault("mcpServers", {})
-
+    # Prepare command and environment
     command_args: list[str] = []
     resolved_command = shutil.which("shannot-mcp")
     if resolved_command is None:
@@ -701,55 +861,162 @@ def _handle_mcp_install(args: argparse.Namespace) -> int:
     else:
         _LOGGER.info("Using MCP server binary at %s", resolved_command)
 
-    server_args = list(command_args)
-    if target_name:
-        server_args.extend(["--target", target_name])
-
-    server_config = {"command": resolved_command, "args": server_args}
-
     # Pass through SSH agent environment so remote targets work when spawned by MCP clients.
     agent_env_keys = ["SSH_AUTH_SOCK", "SSH_AGENT_PID"]
     env_vars = {key: os.environ[key] for key in agent_env_keys if key in os.environ}
-    if env_vars:
-        server_config["env"] = env_vars
 
-    cli_update_result: tuple[Path, bool] | None = None
-    if client == "claude-code":
-        try:
-            cli_update_result = _update_claude_cli_user_server(
-                "shannot",
-                resolved_command,
-                list(server_args),
-                env_vars if env_vars else None,
-            )
-        except Exception as exc:
-            _LOGGER.warning("Failed to update Claude Code user config: %s", exc)
+    # Auto-detection mode
+    if client_arg is None or client_arg == "auto":
+        detected = _detect_available_mcp_clients()
 
-    config["mcpServers"]["shannot"] = server_config
+        if not detected:
+            _LOGGER.error("No MCP clients detected on this system")
+            _LOGGER.info("Supported clients: claude-desktop, claude-code, codex, lmstudio")
+            _LOGGER.info("Specify a client manually with: shannot mcp install --client <name>")
+            return 1
 
-    # Write config
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-        f.write("\n")
+        _LOGGER.info(f"Detected {len(detected)} MCP client(s):")
+        for client_name, client_path in detected:
+            client_label = _MCP_CLIENT_LABELS.get(client_name, client_name)
+            exists_msg = "✓" if client_path.exists() else "○"
+            _LOGGER.info(f"  {exists_msg} {client_label}: {client_path}")
 
-    _LOGGER.info("✓ Installed MCP server config for %s at %s", client_label, config_path)
-    if client == "claude-code":
-        if cli_update_result is not None:
-            path, changed = cli_update_result
-            message = "Added" if changed else "Already configured"
-            _LOGGER.info(
-                "✓ %s Claude Code user config at %s (available across all projects)", message, path
-            )
-        # Helper already logs a warning if it cannot parse existing config
-    if target_name:
-        _LOGGER.info(f"✓ MCP server will use target: {target_name}")
-    success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
-    if success_hint:
-        _LOGGER.info("✓ %s", success_hint)
+        # If only one detected, install to it
+        if len(detected) == 1:
+            client, config_path = detected[0]
+            _LOGGER.info(f"\nInstalling to {_MCP_CLIENT_LABELS.get(client, client)}...")
+        else:
+            # Multiple detected, ask user
+            if auto_yes:
+                _LOGGER.info("\nInstalling to all detected clients...")
+                success_count = 0
+                for client, config_path in detected:
+                    if _install_to_client(
+                        client, config_path, target_name, resolved_command, command_args, env_vars
+                    ):
+                        success_count += 1
+
+                if success_count > 0:
+                    if target_name:
+                        _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+                    return 0
+                else:
+                    return 1
+            else:
+                _LOGGER.info("\nWhich client(s) would you like to configure?")
+                _LOGGER.info("  1) All detected clients")
+                for idx, (client_name, _) in enumerate(detected, start=2):
+                    client_label = _MCP_CLIENT_LABELS.get(client_name, client_name)
+                    _LOGGER.info(f"  {idx}) {client_label}")
+
+                try:
+                    choice = input(f"\nEnter choice (1-{len(detected) + 1}, or comma-separated): ")
+                    choice = choice.strip()
+
+                    if choice == "1":
+                        # Install to all
+                        success_count = 0
+                        for client, config_path in detected:
+                            if _install_to_client(
+                                client,
+                                config_path,
+                                target_name,
+                                resolved_command,
+                                command_args,
+                                env_vars,
+                            ):
+                                success_count += 1
+
+                        if success_count > 0:
+                            if target_name:
+                                _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+                            return 0
+                        else:
+                            return 1
+                    else:
+                        # Parse comma-separated choices
+                        choices = [
+                            int(c.strip()) - 2 for c in choice.split(",") if c.strip().isdigit()
+                        ]
+                        success_count = 0
+                        for idx in choices:
+                            if 0 <= idx < len(detected):
+                                client, config_path = detected[idx]
+                                if _install_to_client(
+                                    client,
+                                    config_path,
+                                    target_name,
+                                    resolved_command,
+                                    command_args,
+                                    env_vars,
+                                ):
+                                    success_count += 1
+
+                        if success_count > 0:
+                            if target_name:
+                                _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+                            return 0
+                        else:
+                            return 1
+                except (ValueError, KeyboardInterrupt):
+                    _LOGGER.info("\nInstallation cancelled")
+                    return 1
+
+        # Single client installation
+        if _install_to_client(
+            client, config_path, target_name, resolved_command, command_args, env_vars
+        ):
+            if target_name:
+                _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+            return 0
+        else:
+            return 1
+
+    # Install to all detected clients
+    elif client_arg == "all":
+        detected = _detect_available_mcp_clients()
+
+        if not detected:
+            _LOGGER.error("No MCP clients detected on this system")
+            return 1
+
+        _LOGGER.info(f"Installing to {len(detected)} detected client(s)...")
+        success_count = 0
+        for client, config_path in detected:
+            if _install_to_client(
+                client, config_path, target_name, resolved_command, command_args, env_vars
+            ):
+                success_count += 1
+
+        if success_count > 0:
+            if target_name:
+                _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+            return 0
+        else:
+            return 1
+
+    # Install to specific client
     else:
-        _LOGGER.info("✓ Client may need a restart to detect new MCP server")
-    return 0
+        client = client_arg
+
+        try:
+            config_path = _resolve_mcp_config_path(client, config_override)
+        except ValueError as exc:
+            _LOGGER.error(str(exc))
+            if not config_override:
+                _LOGGER.info(
+                    "Example: shannot mcp install --client %s --config-path /path/to/config", client
+                )
+            return 1
+
+        if _install_to_client(
+            client, config_path, target_name, resolved_command, command_args, env_vars
+        ):
+            if target_name:
+                _LOGGER.info(f"\n✓ MCP server will use target: {target_name}")
+            return 0
+        else:
+            return 1
 
 
 def _handle_mcp_test(args: argparse.Namespace) -> int:

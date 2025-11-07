@@ -17,6 +17,8 @@ from shannot.validation import (
     ValidationError,
     validate_bool,
     validate_list_of_strings,
+    validate_safe_path,
+    validate_type,
 )
 
 if TYPE_CHECKING:
@@ -197,8 +199,6 @@ class FileReadInput:
             raise ValidationError("path is required", "path")
 
         # Validate path is safe (no path traversal)
-        from shannot.validation import validate_safe_path
-
         validated_path = validate_safe_path(path, "path")
         return cls(path=validated_path)
 
@@ -229,8 +229,6 @@ class DirectoryListInput:
             raise ValidationError("path is required", "path")
 
         # Validate path is safe (no path traversal)
-        from shannot.validation import validate_safe_path
-
         validated_path = validate_safe_path(path, "path")
 
         long_format = data.get("long_format", False)

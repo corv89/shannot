@@ -27,7 +27,10 @@ classifiers = [
     "Environment :: Console",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "tomli>=2.0.0; python_version < '3.11'",
+    "tomli-w>=1.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
@@ -53,14 +56,14 @@ dev = [
     "mkdocstrings[python]>=0.24.0",
 ]
 mcp = [
-    "mcp>=1.0.0",
+    "mcp>=1.18.0",
     "asyncssh>=2.14.0",
 ]
 remote = [
     "asyncssh>=2.14.0",
 ]
 all = [
-    "mcp>=1.0.0",
+    "mcp>=1.18.0",
     "asyncssh>=2.14.0",
 ]
 
@@ -130,10 +133,3 @@ markers = [
 
 [tool.coverage.run]
 relative_files = true
-
-[tool.pdoc]
-# pdoc3 configuration
-template_directory = "docs/templates"
-show_source_code = true
-# Use markdown for docstrings
-docformat = "markdown"
