@@ -284,12 +284,14 @@ class TestCreateExecutor:
 
     def test_create_executor_not_found(self):
         """Test creating non-existent executor."""
+        from shannot.validation import ValidationError
+
         config = ShannotConfig(
             default_executor="local",
             executor={"local": LocalExecutorConfig(type="local")},
         )
 
-        with pytest.raises(ValueError, match="Executor 'prod' not found"):
+        with pytest.raises(ValidationError, match="'prod' not found"):
             create_executor(config, "prod")
 
 
