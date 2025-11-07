@@ -63,12 +63,6 @@ remote = [
     "tomli>=2.0.0; python_version < '3.11'",
     "tomli-w>=1.0.0",
 ]
-all = [
-    "mcp>=1.18.0",
-    "asyncssh>=2.14.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "tomli-w>=1.0.0",
-]
 
 [tool.setuptools.packages.find]
 where = ["."]
