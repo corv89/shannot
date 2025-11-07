@@ -12,10 +12,10 @@ from pathlib import Path
 from shannot import (
     BubblewrapCommandBuilder,
     SandboxBind,
-    SandboxError,
     SandboxProfile,
     load_profile_from_path,
 )
+from shannot.validation import ValidationError
 
 
 class SandboxProfileTests(unittest.TestCase):
@@ -50,13 +50,13 @@ class SandboxProfileTests(unittest.TestCase):
     def test_validate_requires_non_empty_name(self) -> None:
         """Profiles must define a non-empty name."""
         profile = self._make_profile(name="")
-        with self.assertRaises(SandboxError):
+        with self.assertRaises(ValidationError):
             profile.validate()
 
     def test_validate_rejects_relative_tmpfs_paths(self) -> None:
         """Relative tmpfs paths should be rejected."""
         profile = self._make_profile(tmpfs_paths=(Path("tmp"),))
-        with self.assertRaises(SandboxError):
+        with self.assertRaises(ValidationError):
             profile.validate()
 
     def test_from_mapping_resolves_relative_paths(self) -> None:
@@ -210,14 +210,14 @@ class SandboxBindTests(unittest.TestCase):
             source=Path("relative"),
             target=Path("/target"),
         )
-        with self.assertRaises(SandboxError):
+        with self.assertRaises(ValidationError):
             bind_relative_source.validate()
 
         bind_relative_target = SandboxBind(
             source=Path("/source"),
             target=Path("relative"),
         )
-        with self.assertRaises(SandboxError):
+        with self.assertRaises(ValidationError):
             bind_relative_target.validate()
 
 

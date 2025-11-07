@@ -198,8 +198,8 @@ class ShannotConfig:
 
         if executor_name not in self.executor:
             available = ", ".join(self.executor.keys())
-            raise ValueError(
-                f"Executor '{executor_name}' not found in config. Available executors: {available}"
+            raise ValidationError(
+                f"'{executor_name}' not found. Available executors: {available}", "executor"
             )
 
         return self.executor[executor_name]
@@ -394,7 +394,7 @@ def create_executor(config: ShannotConfig, executor_name: str | None = None) -> 
             strict_host_key=executor_config.strict_host_key,
         )
     else:
-        raise ValueError(f"Unknown executor type: {executor_config.type}")
+        raise ValidationError(f"Unknown executor type: {executor_config.type}", "type")
 
 
 def get_executor(

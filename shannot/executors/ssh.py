@@ -37,6 +37,14 @@ except ImportError:
 from shannot.execution import SandboxExecutor
 from shannot.process import ProcessResult
 from shannot.sandbox import BubblewrapCommandBuilder, SandboxProfile
+from shannot.validation import (
+    ValidationError,
+    validate_command,
+    validate_int_range,
+    validate_path,
+    validate_timeout,
+    validate_type,
+)
 
 
 class SSHExecutor(SandboxExecutor):
@@ -98,6 +106,9 @@ class SSHExecutor(SandboxExecutor):
             strict_host_key: Enforce host key validation (default: True).
                              Set to False to disable validation (insecure).
 
+        Raises:
+            ValidationError: If parameters are invalid
+
         Example:
             >>> # Use SSH config defaults
             >>> executor = SSHExecutor(host="example.com")
@@ -110,14 +121,32 @@ class SSHExecutor(SandboxExecutor):
             ...     port=2222
             ... )
         """
-        self.host: str = host
-        self.username: str | None = username
-        self.key_file: Path | None = key_file
-        self.port: int = port
+        # Validate inputs
+        validated_host = validate_type(host, str, "host")
+        if not validated_host or not validated_host.strip():
+            raise ValidationError("must be non-empty", "host")
+
+        validated_username: str | None = None
+        if username is not None:
+            validated_username = validate_type(username, str, "username")
+
+        validated_key_file = validate_path(key_file, "key_file", expand=True)
+        validated_known_hosts = validate_path(known_hosts, "known_hosts", expand=True)
+
+        validated_port = validate_int_range(port, "port", min_val=1, max_val=65535)
+        validated_pool_size = validate_int_range(
+            connection_pool_size, "connection_pool_size", min_val=1, max_val=100
+        )
+
+        # Store validated values
+        self.host: str = validated_host
+        self.username: str | None = validated_username
+        self.key_file: Path | None = validated_key_file
+        self.port: int = validated_port
         self._connection_pool: list[asyncssh.SSHClientConnection] = []
-        self._pool_size: int = connection_pool_size
+        self._pool_size: int = validated_pool_size
         self._lock: asyncio.Lock = asyncio.Lock()
-        self._known_hosts: Path | None = known_hosts
+        self._known_hosts: Path | None = validated_known_hosts
         self._strict_host_key: bool = strict_host_key
 
     async def _get_connection(self) -> asyncssh.SSHClientConnection:
@@ -194,6 +223,7 @@ class SSHExecutor(SandboxExecutor):
             ProcessResult with stdout, stderr, returncode, duration
 
         Raises:
+            ValidationError: If command or timeout are invalid
             TimeoutError: Command exceeded timeout
             RuntimeError: SSH connection or execution error
 
@@ -211,11 +241,15 @@ class SSHExecutor(SandboxExecutor):
             >>> assert result.returncode == 0
             >>> assert "hello" in result.stdout
         """
+        # Validate inputs
+        validated_command = validate_command(command, "command")
+        validated_timeout = validate_timeout(timeout, "timeout", max_val=3600)
+
         # Validate profile before building command
         profile.validate()
 
         # Build bubblewrap command locally (disable path validation for remote execution)
-        builder = BubblewrapCommandBuilder(profile, command, validate_paths=False)
+        builder = BubblewrapCommandBuilder(profile, validated_command, validate_paths=False)
         bwrap_args = builder.build()
 
         # Prepend 'bwrap' command (assumes bwrap is in PATH on remote)
@@ -230,7 +264,7 @@ class SSHExecutor(SandboxExecutor):
         try:
             result = await conn.run(
                 shell_cmd,
-                timeout=timeout,
+                timeout=validated_timeout,
                 check=False,  # Don't raise on non-zero exit
             )
 
@@ -252,14 +286,16 @@ class SSHExecutor(SandboxExecutor):
                 )
 
             return ProcessResult(
-                command=tuple(command),
+                command=tuple(validated_command),
                 stdout=stdout_str,
                 stderr=stderr_str,
                 returncode=result.exit_status or 0,
                 duration=0.0,  # asyncssh doesn't track timing
             )
         except asyncssh.TimeoutError as e:
-            raise TimeoutError(f"Command timed out after {timeout}s: {' '.join(command)}") from e
+            raise TimeoutError(
+                f"Command timed out after {validated_timeout}s: {' '.join(validated_command)}"
+            ) from e
         except asyncssh.Error as e:
             raise RuntimeError(f"SSH execution error on {self.host}: {e}") from e
         finally:

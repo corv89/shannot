@@ -49,6 +49,7 @@ from . import (
     load_profile_from_path,
 )
 from .process import ProcessResult, ensure_tool_available
+from .validation import ValidationError, validate_port, validate_type
 
 _LOGGER = logging.getLogger("shannot")
 
@@ -362,14 +363,38 @@ def _handle_run(args: argparse.Namespace) -> int:
     """Handle 'run' subcommand - execute command in sandbox."""
     import asyncio
 
-    profile_path = cast(str | None, args.profile) or _get_default_profile()
-    profile = _load_profile(str(profile_path))
-    command = list(cast(Sequence[str], args.command))
-    if not command:
-        raise SandboxError("No command specified. Usage: shannot COMMAND [ARGS...]")
+    # Validate inputs
+    try:
+        # Validate profile path (argparse provides str or None)
+        profile_path_arg = getattr(args, "profile", None)
+        if profile_path_arg is not None:
+            profile_path = validate_type(profile_path_arg, str, "profile")
+        else:
+            profile_path = _get_default_profile()
+        profile = _load_profile(str(profile_path))
 
-    # Check if target flag is specified
-    target_name = cast(str | None, getattr(args, "target", None))
+        # Validate command (argparse provides list)
+        command_raw = getattr(args, "command", [])
+        if not command_raw:
+            raise ValidationError("No command specified", "command")
+
+        # Validate command is list of strings
+        from .validation import validate_list_of_strings
+
+        command = validate_list_of_strings(list(command_raw), "command")
+
+        # Validate target name if specified
+        target_name_raw = getattr(args, "target", None)
+        target_name = None
+        if target_name_raw is not None:
+            target_name = validate_type(target_name_raw, str, "target")
+            if not target_name.strip():
+                raise ValidationError("must be non-empty", "target")
+    except ValidationError as e:
+        _LOGGER.error(f"Invalid argument: {e}")
+        return 1
+
+    # Check if target flag is specified (after validation)
 
     if target_name:
         # Use executor from config
@@ -393,18 +418,23 @@ def _handle_run(args: argparse.Namespace) -> int:
             return 1
     else:
         # Use local execution (legacy)
-        bubblewrap = _resolve_bubblewrap_path(cast(str | None, args.bubblewrap))
+        bubblewrap_arg = getattr(args, "bubblewrap", None)
+        bubblewrap = _resolve_bubblewrap_path(bubblewrap_arg)
         manager = SandboxManager(profile, bubblewrap)
         result = manager.run(command, check=False)
 
-    # Handle output
-    if cast(bool, args.print_stdout) and result.stdout:
+    # Handle output (argparse guarantees these are bool with defaults)
+    print_stdout = getattr(args, "print_stdout", True)
+    print_stderr = getattr(args, "print_stderr", True)
+    check = getattr(args, "check", False)
+
+    if print_stdout and result.stdout:
         print(result.stdout, end="")
-    if cast(bool, args.print_stderr) and result.stderr:
+    if print_stderr and result.stderr:
         print(result.stderr, end="", file=sys.stderr)
 
     # Check exit code if requested
-    if cast(bool, args.check) and result.returncode != 0:
+    if check and result.returncode != 0:
         return result.returncode
 
     return result.returncode
@@ -412,7 +442,11 @@ def _handle_run(args: argparse.Namespace) -> int:
 
 def _handle_export(args: argparse.Namespace) -> int:
     """Handle 'export' subcommand - export profile as JSON."""
-    profile_path = cast(str | None, args.profile) or _get_default_profile()
+    profile_path_arg = getattr(args, "profile", None)
+    if profile_path_arg is not None:
+        profile_path = profile_path_arg
+    else:
+        profile_path = _get_default_profile()
     profile = _load_profile(str(profile_path))
     serialized = _profile_to_serializable(profile)
     json_output = json.dumps(serialized, indent=2, sort_keys=True)
@@ -422,16 +456,39 @@ def _handle_export(args: argparse.Namespace) -> int:
 
 def _handle_verify(args: argparse.Namespace) -> int:
     """Handle 'verify' subcommand - verify sandbox configuration."""
-    profile_path = cast(str | None, args.profile) or _get_default_profile()
-    profile = _load_profile(str(profile_path))
-    bubblewrap = _resolve_bubblewrap_path(cast(str | None, args.bubblewrap))
-    manager = SandboxManager(profile, bubblewrap)
+    try:
+        # Validate profile path
+        profile_path_arg = getattr(args, "profile", None)
+        if profile_path_arg is not None:
+            profile_path = profile_path_arg
+        else:
+            profile_path = _get_default_profile()
+        profile = _load_profile(str(profile_path))
 
-    allowed_command = cast(Sequence[str] | None, args.allowed_command) or ["ls", "/"]
-    disallowed_command = cast(Sequence[str] | None, args.disallowed_command) or [
-        "touch",
-        "/tmp/probe",
-    ]
+        # Validate bubblewrap path
+        bubblewrap_arg = getattr(args, "bubblewrap", None)
+        bubblewrap = _resolve_bubblewrap_path(bubblewrap_arg)
+        manager = SandboxManager(profile, bubblewrap)
+
+        # Validate command sequences
+        from .validation import validate_list_of_strings
+
+        allowed_command_arg = getattr(args, "allowed_command", None)
+        if allowed_command_arg is not None:
+            allowed_command = validate_list_of_strings(list(allowed_command_arg), "allowed_command")
+        else:
+            allowed_command = ["ls", "/"]
+
+        disallowed_command_arg = getattr(args, "disallowed_command", None)
+        if disallowed_command_arg is not None:
+            disallowed_command = validate_list_of_strings(
+                list(disallowed_command_arg), "disallowed_command"
+            )
+        else:
+            disallowed_command = ["touch", "/tmp/probe"]
+    except ValidationError as e:
+        _LOGGER.error(f"Invalid argument: {e}")
+        return 1
 
     _LOGGER.info("Verifying allowed command: %s", " ".join(allowed_command))
     allowed_result = _execute_command(manager, allowed_command)
@@ -1028,12 +1085,32 @@ def _handle_remote_add(args: argparse.Namespace) -> int:
     """Add a remote executor."""
     from .config import SSHExecutorConfig, load_config, save_config
 
-    name = cast(str, args.name)
-    host = cast(str, args.host)
-    username = cast(str | None, args.username)
-    key_file = cast(str | None, args.key_file)
-    port = cast(int, args.port)
-    profile = cast(str | None, args.profile)
+    # Validate and extract arguments with proper error handling
+    try:
+        name = validate_type(args.name, str, "name")
+        if not name or not name.strip():
+            raise ValidationError("must be non-empty", "name")
+
+        host = validate_type(args.host, str, "host")
+        if not host or not host.strip():
+            raise ValidationError("must be non-empty", "host")
+
+        username = args.username
+        if username is not None:
+            username = validate_type(username, str, "username")
+
+        key_file = args.key_file
+        if key_file is not None:
+            key_file = validate_type(key_file, str, "key_file")
+
+        port = validate_port(args.port, "port")
+
+        profile = args.profile
+        if profile is not None:
+            profile = validate_type(profile, str, "profile")
+    except ValidationError as e:
+        _LOGGER.error(f"Invalid argument: {e}")
+        return 1
 
     # Reserved names
     if name in ("local", "default"):
@@ -1136,7 +1213,14 @@ def _handle_remote_remove(args: argparse.Namespace) -> int:
     """Remove a remote target."""
     from .config import load_config, save_config
 
-    name = cast(str, args.name)
+    # Validate inputs
+    try:
+        name = validate_type(args.name, str, "name")
+        if not name or not name.strip():
+            raise ValidationError("must be non-empty", "name")
+    except ValidationError as e:
+        _LOGGER.error(f"Invalid argument: {e}")
+        return 1
 
     # Prevent removing local
     if name == "local":
@@ -1178,7 +1262,14 @@ def _handle_remote_test(args: argparse.Namespace) -> int:
 
     from .config import create_executor, load_config
 
-    name = cast(str, args.name)
+    # Validate inputs
+    try:
+        name = validate_type(args.name, str, "name")
+        if not name or not name.strip():
+            raise ValidationError("must be non-empty", "name")
+    except ValidationError as e:
+        _LOGGER.error(f"Invalid argument: {e}")
+        return 1
 
     try:
         config = load_config()
@@ -1301,7 +1392,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             argv = list(argv[:insert_pos]) + ["run"] + list(argv[insert_pos:])
 
     args = parser.parse_args(argv)
-    _configure_logging(cast(bool, args.verbose))
+    verbose = getattr(args, "verbose", False)
+    _configure_logging(verbose)
 
     handler = getattr(args, "handler", None)
     if handler is None:

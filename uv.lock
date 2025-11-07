@@ -1510,15 +1510,13 @@ wheels = [
 name = "shannot"
 version = "0.2.1"
 source = { editable = "." }
-dependencies = [
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "tomli-w" },
-]
 
 [package.optional-dependencies]
 all = [
     { name = "asyncssh" },
     { name = "mcp" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli-w" },
 ]
 dev = [
     { name = "basedpyright" },
@@ -1535,9 +1533,13 @@ dev = [
 mcp = [
     { name = "asyncssh" },
     { name = "mcp" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli-w" },
 ]
 remote = [
     { name = "asyncssh" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli-w" },
 ]
 
 [package.metadata]
@@ -1556,8 +1558,12 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
-    { name = "tomli-w", specifier = ">=1.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'all'", specifier = ">=2.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'mcp'", specifier = ">=2.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'remote'", specifier = ">=2.0.0" },
+    { name = "tomli-w", marker = "extra == 'all'", specifier = ">=1.0.0" },
+    { name = "tomli-w", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
+    { name = "tomli-w", marker = "extra == 'remote'", specifier = ">=1.0.0" },
     { name = "types-setuptools", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev", "mcp", "remote", "all"]

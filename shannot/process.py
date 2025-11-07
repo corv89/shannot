@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from .validation import ValidationError
+
 
 @dataclass
 class ProcessResult:
@@ -18,6 +20,33 @@ class ProcessResult:
     stdout: str
     stderr: str
     duration: float
+
+    def __post_init__(self):
+        """Validate ProcessResult fields after initialization."""
+        # Validate command is a tuple of strings
+        if not isinstance(self.command, tuple):
+            raise ValidationError("must be a tuple", "command")
+        if not self.command:
+            raise ValidationError("must be non-empty", "command")
+        for i, item in enumerate(self.command):
+            if not isinstance(item, str):
+                raise ValidationError(f"command[{i}] must be a string", "command")
+
+        # Validate returncode is an integer
+        if not isinstance(self.returncode, int):
+            raise ValidationError("must be an integer", "returncode")
+
+        # Validate stdout and stderr are strings
+        if not isinstance(self.stdout, str):
+            raise ValidationError("must be a string", "stdout")
+        if not isinstance(self.stderr, str):
+            raise ValidationError("must be a string", "stderr")
+
+        # Validate duration is a non-negative number
+        if not isinstance(self.duration, (int, float)):
+            raise ValidationError("must be a number", "duration")
+        if self.duration < 0:
+            raise ValidationError("must be non-negative", "duration")
 
     def succeeded(self) -> bool:
         """Return True when the underlying process exited with status 0."""
