@@ -7,10 +7,8 @@ from unittest.mock import Mock
 
 import pytest
 
-pytest.importorskip("pydantic")
-
-from shannot import ProcessResult, SandboxProfile  # noqa: E402
-from shannot.tools import (  # noqa: E402
+from shannot import ProcessResult, SandboxProfile
+from shannot.tools import (
     CommandInput,
     CommandOutput,
     DirectoryListInput,

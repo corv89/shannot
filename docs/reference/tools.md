@@ -1,24 +1,35 @@
 # Tools Module
 
-Pydantic-AI compatible tools for sandboxed command execution in MCP servers and AI agents.
+Type-safe tools for sandboxed command execution in MCP servers and AI agents.
 
 ## Overview
 
-The tools module provides type-safe, reusable tools that integrate Shannot's sandbox capabilities with Model Context Protocol (MCP) servers and Pydantic-AI agents. These tools handle command execution, file reading, and output streaming with proper error handling.
+The tools module provides type-safe, reusable tools that integrate Shannot's sandbox capabilities with Model Context Protocol (MCP) servers and AI agents. These tools handle command execution, file reading, and directory listing with proper error handling and validation.
 
 **Key Components:**
 
 - **`SandboxDeps`** - Dependency container for sandbox configuration and executors
-- **`run_sandbox_command`** - Execute arbitrary commands in the sandbox
-- **`read_sandbox_file`** - Read file contents from sandboxed paths
-- **`stream_sandbox_output`** - Stream command output (for long-running processes)
+- **`run_command`** - Execute commands in the sandbox
+- **`read_file`** - Read file contents from sandboxed paths
+- **`list_directory`** - List directory contents
+- **`check_disk_usage`** - Get disk usage information
+- **`check_memory`** - Get memory usage information
+- **`search_files`** - Find files by pattern
+- **`grep_content`** - Search for text in files
+
+**Input/Output Models:**
+
+- **`CommandInput`** - Input for command execution (dataclass)
+- **`CommandOutput`** - Output from command execution (dataclass)
+- **`FileReadInput`** - Input for file reading (dataclass)
+- **`DirectoryListInput`** - Input for directory listing (dataclass)
 
 ## Common Usage Patterns
 
 ### With MCP Servers
 
 ```python
-from shannot.tools import SandboxDeps, run_sandbox_command
+from shannot.tools import SandboxDeps, CommandInput, run_command
 from shannot.executors import LocalExecutor
 
 # Create dependencies
@@ -26,53 +37,39 @@ executor = LocalExecutor()
 deps = SandboxDeps(profile_name="diagnostics", executor=executor)
 
 # Use in MCP tool
-result = await run_sandbox_command(
-    deps,
-    command=["df", "-h"],
-    args=[]
-)
+cmd_input = CommandInput(command=["df", "-h"])
+result = await run_command(deps, cmd_input)
 print(result.stdout)
 ```
 
-### With Pydantic-AI
+### With AI Agents
 
 ```python
-from pydantic_ai import Agent
-from shannot.tools import SandboxDeps, run_sandbox_command
+from shannot.tools import SandboxDeps, CommandInput, run_command
 
-# Create agent with sandbox tools
-agent = Agent(
-    "openai:gpt-4",
-    deps_type=SandboxDeps,
-    system_prompt="You can execute read-only system commands."
-)
-
-# Register tool
-@agent.tool
-async def check_disk_usage(ctx) -> str:
-    result = await run_sandbox_command(
-        ctx.deps,
-        command=["df", "-h"],
-        args=[]
-    )
-    return result.stdout
-
-# Run agent
+# Create dependencies
 deps = SandboxDeps(profile_name="diagnostics")
-result = await agent.run("What's the disk usage?", deps=deps)
+
+# Execute commands
+cmd_input = CommandInput(command=["df", "-h"])
+result = await run_command(deps, cmd_input)
+print(f"Disk usage: {result.stdout}")
+
+# The tools can be integrated with any AI framework that supports
+# async functions and dependency injection
 ```
 
 ### Remote Execution
 
 ```python
-from shannot.tools import SandboxDeps
+from shannot.tools import SandboxDeps, CommandInput, run_command
 from shannot.executors import SSHExecutor
 
 # Configure SSH executor
 executor = SSHExecutor(
     host="prod.example.com",
     username="readonly",
-    key_filename="/path/to/key"
+    key_file="/path/to/key"
 )
 
 # Create deps with remote executor
@@ -82,27 +79,24 @@ deps = SandboxDeps(
 )
 
 # Commands now execute on remote host
-result = await run_sandbox_command(deps, command=["uptime"], args=[])
+cmd_input = CommandInput(command=["uptime"])
+result = await run_command(deps, cmd_input)
 ```
 
-### File Reading
+### File Operations
 
 ```python
-from shannot.tools import read_sandbox_file
+from shannot.tools import FileReadInput, DirectoryListInput, read_file, list_directory
 
 # Read a configuration file
-result = await read_sandbox_file(
-    deps,
-    filepath="/etc/os-release"
-)
-print(result.content)
+file_input = FileReadInput(path="/etc/os-release")
+content = await read_file(deps, file_input)
+print(content)
 
-# With line limits for large files
-result = await read_sandbox_file(
-    deps,
-    filepath="/var/log/syslog",
-    max_lines=100
-)
+# List directory contents
+dir_input = DirectoryListInput(path="/var/log", long_format=True, show_hidden=False)
+listing = await list_directory(deps, dir_input)
+print(listing)
 ```
 
 ### Custom Profiles
@@ -123,12 +117,36 @@ deps = SandboxDeps(
 )
 ```
 
+## Input Validation
+
+Input models provide validation via `from_dict()` class methods for use with MCP and other frameworks:
+
+```python
+from shannot.tools import CommandInput
+from shannot.validation import ValidationError
+
+# Valid input
+try:
+    cmd = CommandInput.from_dict({"command": ["ls", "/"]})
+except ValidationError as e:
+    print(f"Invalid input: {e}")
+
+# Invalid input (not a list)
+try:
+    cmd = CommandInput.from_dict({"command": "not a list"})
+except ValidationError as e:
+    print(f"Validation failed: {e}")  # Will raise
+```
+
 ## Error Handling
 
 The tools convert `SandboxError` exceptions to failed `ProcessResult` objects for compatibility with MCP and AI frameworks:
 
 ```python
-result = await run_sandbox_command(deps, command=["forbidden"], args=[])
+from shannot.tools import CommandInput, run_command
+
+cmd_input = CommandInput(command=["forbidden"])
+result = await run_command(deps, cmd_input)
 
 if result.returncode != 0:
     print(f"Command failed: {result.stderr}")

@@ -10,8 +10,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-pytest.importorskip("pydantic")
-
 # Check if mcp is actually installed (not just stubbed)
 try:
     import mcp  # noqa: F401

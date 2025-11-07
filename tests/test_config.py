@@ -7,8 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-pytest.importorskip("pydantic")
-
 from shannot.config import (
     LocalExecutorConfig,
     ShannotConfig,

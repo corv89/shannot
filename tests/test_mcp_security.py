@@ -14,11 +14,7 @@ import json
 
 import pytest
 
-pytest.importorskip("pydantic")
-
-from pydantic import ValidationError  # noqa: E402
-
-from shannot.tools import (  # noqa: E402
+from shannot.tools import (
     CommandInput,
     DirectoryListInput,
     FileReadInput,
@@ -27,6 +23,7 @@ from shannot.tools import (  # noqa: E402
     read_file,
     run_command,
 )
+from shannot.validation import ValidationError
 
 
 class TestInputValidation:
@@ -58,9 +55,9 @@ class TestInputValidation:
         dir_input = DirectoryListInput(path="/tmp", long_format=False, show_hidden=False)
         assert dir_input.path == "/tmp"
 
-        # Boolean type validation
+        # Boolean type validation via from_dict
         with pytest.raises(ValidationError):
-            DirectoryListInput(path="/tmp", long_format="not a bool")  # type: ignore[arg-type]
+            DirectoryListInput.from_dict({"path": "/tmp", "long_format": "not a bool"})
 
 
 @pytest.mark.linux_only
@@ -300,15 +297,15 @@ class TestErrorHandling:
 
     def test_malformed_json_in_command(self):
         """Test that malformed JSON doesn't break validation."""
-        # Pydantic handles validation, so invalid types should raise
+        # Validation via from_dict should raise for invalid types
         with pytest.raises(ValidationError):
-            CommandInput(command="not a list")  # type: ignore[arg-type]
+            CommandInput.from_dict({"command": "not a list"})
 
     def test_null_values_handled(self):
         """Test that null values are handled gracefully."""
         # Test with None values
         with pytest.raises(ValidationError):
-            CommandInput(command=None)  # type: ignore[arg-type]
+            CommandInput.from_dict({"command": None})
 
     def test_extremely_long_command(self):
         """Test handling of extremely long commands."""
