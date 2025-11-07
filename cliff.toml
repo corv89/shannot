@@ -21,8 +21,8 @@ body = """
 {% endif %}\
 {% for group, commits in commits | group_by(attribute="group") %}
     ### {{ group | upper_first }}
-    {% for commit in commits %}
-        - {{ commit.message | split(pat="\n") | first | upper_first }}\
+    {% for commit in commits | unique(attribute="message") %}
+        - {{ commit.message | split(pat="\n") | first | trim | upper_first }}\
     {% endfor %}
 {% endfor %}\n
 """
@@ -42,30 +42,56 @@ filter_unconventional = false
 split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
-  # Replace issue numbers with links
-  { pattern = '\((\w+[-/]\w+)?#([0-9]+)\)', replace = "([#${2}](https://github.com/corv89/shannot/issues/${2}))" },
+  # Remove conventional commit prefixes for cleaner messages
+  { pattern = '^[Ff]eat:\s*', replace = "" },
+  { pattern = '^[Ff]ix:\s*', replace = "" },
+  { pattern = '^[Dd]ocs?:\s*', replace = "" },
+  { pattern = '^[Cc]hore:\s*', replace = "" },
+  { pattern = '^[Rr]efactor:\s*', replace = "" },
+  { pattern = '^[Ss]tyle:\s*', replace = "" },
+  { pattern = '^[Tt]est:\s*', replace = "" },
+  { pattern = '^[Pp]erf:\s*', replace = "" },
+  # Replace PR numbers with links (handles both issues and PRs)
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](https://github.com/corv89/shannot/pull/${1}))" },
 ]
 # regex for parsing and grouping commits
 commit_parsers = [
-  { message = "^[Ff]eat", group = "Features" },
-  { message = "^[Aa]dd", group = "Features" },
-  { message = "^[Ff]ix", group = "Bug Fixes" },
-  { message = "^[Dd]oc", group = "Documentation" },
-  { message = "^[Ii]mprove.*doc", group = "Documentation" },
-  { message = "^[Ee]nhance.*doc", group = "Documentation" },
-  { message = "^[Pp]erf", group = "Performance" },
-  { message = "^[Rr]efactor", group = "Refactoring" },
-  { message = "^[Ss]tyle", group = "Styling" },
-  { message = "^[Tt]est", group = "Testing" },
+  # Skip merge commits and release commits
+  { message = "^[Mm]erge", skip = true },
   { message = "^[Cc]hore\\(release\\)", skip = true },
-  { message = "^[Cc]hore", group = "Miscellaneous Tasks" },
+  # Security first
+  { body = ".*security", group = "Security" },
+  { message = "^[Ss]ecurity", group = "Security" },
+  # Breaking changes (if you use them)
+  { message = ".*BREAKING CHANGE.*", group = "Breaking Changes" },
+  # Dependencies (must come before Add/Update to catch them first)
   { message = "^[Bb]ump", group = "Dependencies" },
   { message = "^[Dd]ependenc", group = "Dependencies" },
-  { message = "^[Ii]mprove", group = "Improvements" },
+  { message = ".*actions/.*from.*to", group = "Dependencies" },
+  { message = ".*-sh/.*from.*to", group = "Dependencies" },
+  { message = ".*sigstore/.*from.*to", group = "Dependencies" },
+  # Features
+  { message = "^[Ff]eat", group = "Features" },
+  { message = "^[Aa]dd", group = "Features" },
+  # Bug fixes
+  { message = "^[Ff]ix", group = "Bug Fixes" },
+  # Performance
+  { message = "^[Pp]erf", group = "Performance" },
+  # Documentation
+  { message = "^[Dd]ocs?", group = "Documentation" },
+  { message = "^[Ii]mprove.*[Dd]oc", group = "Documentation" },
+  { message = "^[Ee]nhance.*[Dd]oc", group = "Documentation" },
+  # Improvements
+  { message = "^[Ii]mprove", group = "Enhancements" },
+  { message = "^[Ee]nhance", group = "Enhancements" },
+  { message = "^[Uu]pdate", group = "Enhancements" },
+  # Code quality
+  { message = "^[Rr]efactor", group = "Refactoring" },
+  { message = "^[Ss]tyle", group = "Code Style" },
+  { message = "^[Tt]est", group = "Testing" },
+  # Everything else
   { message = "^[Cc]hange", group = "Changes" },
-  { message = "^[Uu]pdate", group = "Improvements" },
-  { message = "^[Mm]erge", skip = true },
-  { body = ".*security", group = "Security" },
+  { message = "^[Cc]hore", group = "Miscellaneous" },
 ]
 # protect breaking changes from being skipped due to matching a skipping commit_parser
 protect_breaking_commits = false

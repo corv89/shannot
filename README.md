@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Linux](https://img.shields.io/badge/os-linux-green.svg)](https://www.kernel.org/)
 
-**Shannot** lets LLM agents and automated tools safely explore your Linux systems without risk of modification. Built on [bubblewrap](https://github.com/containers/bubblewrap), it provides bulletproof read-only sandboxing for system diagnostics, monitoring, and exploration - perfect for giving Claude or other AI assistants safe access to your servers.
+**Shannot** lets LLM agents and automated tools safely explore your Linux systems without risk of modification. Built on [bubblewrap](https://github.com/containers/bubblewrap), it provides hardened sandboxing for system diagnostics, monitoring, and exploration - perfect for giving Claude or other AI assistants safe access to your servers.
 
 > Claude __shannot__ do *that!*
 
@@ -16,15 +16,16 @@
 * Network-isolated execution
 * Control exactly which commands are allowed
 
-🤖 **Works with Claude Desktop**
-* Plug-and-play [MCP integration](https://corv89.github.io/shannot/mcp/)
-* Give Claude safe read-only access to your servers
+🤖 **Works with your favorite LLMs**
+* Plug-and-play standards-compliant [MCP integration](https://corv89.github.io/shannot/mcp/)
+* Convenient auto-install for **Claude Code**, **Claude Desktop**, **Codex** and **LM Studio**
+* Compatible with any local model that supports tool-calling
 
 🌐 **Control Remote Systems**
-* Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
+* Run sandboxed commands on Linux servers from macOS, Windows or Linux via SSH
 
 ⚡ **Deploy in Minutes**
-* Python client + bubblewrap on target
+* lightweight Python client + bubblewrap on target
 * No containers, VMs, or complex setup required
 
 
