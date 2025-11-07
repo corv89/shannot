@@ -27,9 +27,7 @@ classifiers = [
     "Environment :: Console",
     "Typing :: Typed",
 ]
-dependencies = [
-    "pydantic>=2.0.0",
-]
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
@@ -56,20 +54,13 @@ dev = [
 ]
 mcp = [
     "mcp>=1.0.0",
-    "pydantic>=2.0.0",
     "asyncssh>=2.14.0",
-]
-pydantic-ai = [
-    "pydantic-ai>=0.0.1",
-    "pydantic>=2.0.0",
 ]
 remote = [
     "asyncssh>=2.14.0",
 ]
 all = [
     "mcp>=1.0.0",
-    "pydantic-ai>=0.0.1",
-    "pydantic>=2.0.0",
     "asyncssh>=2.14.0",
 ]
 

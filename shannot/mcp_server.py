@@ -25,6 +25,7 @@ from mcp.types import (
 from shannot import __version__
 from shannot.execution import SandboxExecutor
 from shannot.tools import CommandInput, CommandOutput, SandboxDeps, run_command
+from shannot.validation import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +161,7 @@ class ShannotMCPServer:
             pdeps = self.deps_by_profile[profile_name]
 
             try:
-                cmd_input = CommandInput(**arguments)  # type: ignore[arg-type]
+                cmd_input = CommandInput.from_dict(arguments)  # type: ignore[arg-type]
                 result = await run_command(pdeps, cmd_input)
                 return [
                     TextContent(
@@ -169,6 +170,9 @@ class ShannotMCPServer:
                     )
                 ]
 
+            except ValidationError as e:
+                logger.error(f"Tool validation failed: {e}", exc_info=True)
+                return [TextContent(type="text", text=f"Invalid input: {str(e)}")]
             except Exception as e:
                 logger.error(f"Tool execution failed: {e}", exc_info=True)
                 return [TextContent(type="text", text=f"Error executing tool: {str(e)}")]

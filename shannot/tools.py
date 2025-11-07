@@ -1,19 +1,24 @@
-"""Pydantic-AI tools for sandbox operations.
+"""Tools for sandbox operations.
 
 This module provides type-safe, reusable tools for interacting with the Shannot sandbox.
-These tools can be used standalone, in MCP servers, or with Pydantic-AI agents.
+These tools can be used standalone or in MCP servers.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from pydantic import BaseModel, Field
+from typing import TYPE_CHECKING, Any
 
 from shannot import SandboxManager, load_profile_from_path
 from shannot.process import ProcessResult
 from shannot.sandbox import SandboxProfile
+from shannot.validation import (
+    ValidationError,
+    validate_bool,
+    validate_list_of_strings,
+    validate_type,
+)
 
 if TYPE_CHECKING:
     from shannot.execution import SandboxExecutor
@@ -131,36 +136,109 @@ class SandboxDeps:
 # Input/Output Models
 
 
-class CommandInput(BaseModel):
+@dataclass
+class CommandInput:
     """Input for running a command in the sandbox."""
 
-    command: list[str] = Field(
-        description="Command and arguments to execute (e.g., ['ls', '-l', '/'])"
-    )
+    command: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> CommandInput:
+        """Create CommandInput from dictionary.
+
+        Args:
+            data: Dictionary containing 'command' key
+
+        Returns:
+            CommandInput instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        command = data.get("command")
+        if command is None:
+            raise ValidationError("command is required", "command")
+
+        validated_command = validate_list_of_strings(command, "command")
+        return cls(command=validated_command)
 
 
-class CommandOutput(BaseModel):
+@dataclass
+class CommandOutput:
     """Output from sandbox command execution."""
 
-    stdout: str = Field(description="Standard output from the command")
-    stderr: str = Field(description="Standard error from the command")
-    returncode: int = Field(description="Exit code (0 = success)")
-    duration: float = Field(description="Execution time in seconds")
-    succeeded: bool = Field(description="Whether the command succeeded")
+    stdout: str
+    stderr: str
+    returncode: int
+    duration: float
+    succeeded: bool
 
 
-class FileReadInput(BaseModel):
+@dataclass
+class FileReadInput:
     """Input for reading a file."""
 
-    path: str = Field(description="Absolute path to the file to read")
+    path: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FileReadInput:
+        """Create FileReadInput from dictionary.
+
+        Args:
+            data: Dictionary containing 'path' key
+
+        Returns:
+            FileReadInput instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        path = data.get("path")
+        if path is None:
+            raise ValidationError("path is required", "path")
+
+        validated_path = validate_type(path, str, "path")
+        return cls(path=validated_path)
 
 
-class DirectoryListInput(BaseModel):
+@dataclass
+class DirectoryListInput:
     """Input for listing a directory."""
 
-    path: str = Field(description="Absolute path to the directory to list")
-    long_format: bool = Field(default=False, description="Show detailed information (ls -l)")
-    show_hidden: bool = Field(default=False, description="Show hidden files (ls -a)")
+    path: str
+    long_format: bool = False
+    show_hidden: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DirectoryListInput:
+        """Create DirectoryListInput from dictionary.
+
+        Args:
+            data: Dictionary containing directory listing options
+
+        Returns:
+            DirectoryListInput instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        path = data.get("path")
+        if path is None:
+            raise ValidationError("path is required", "path")
+
+        validated_path = validate_type(path, str, "path")
+
+        long_format = data.get("long_format", False)
+        validated_long_format = validate_bool(long_format, "long_format")
+
+        show_hidden = data.get("show_hidden", False)
+        validated_show_hidden = validate_bool(show_hidden, "show_hidden")
+
+        return cls(
+            path=validated_path,
+            long_format=validated_long_format,
+            show_hidden=validated_show_hidden,
+        )
 
 
 # Core Tools
@@ -256,9 +334,7 @@ async def check_memory(deps: SandboxDeps) -> str:
     return result.stdout if result.succeeded() else result.stderr
 
 
-async def search_files(
-    deps: SandboxDeps, pattern: str = Field(description="Filename pattern to search for")
-) -> str:
+async def search_files(deps: SandboxDeps, pattern: str) -> str:
     """Find files matching a pattern.
 
     Args:
@@ -274,9 +350,9 @@ async def search_files(
 
 async def grep_content(
     deps: SandboxDeps,
-    pattern: str = Field(description="Text pattern to search for"),
-    path: str = Field(description="File or directory to search in"),
-    recursive: bool = Field(default=False, description="Search recursively in directories"),
+    pattern: str,
+    path: str,
+    recursive: bool = False,
 ) -> str:
     """Search for text pattern in files.
 

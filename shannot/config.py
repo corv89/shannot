@@ -5,8 +5,9 @@ This module handles loading and managing executor configurations from TOML files
 
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -18,32 +19,97 @@ else:
             "tomli is required for Python < 3.11. Install with: pip install tomli"
         ) from exc
 
-from pydantic import BaseModel, Field, field_validator
-
 from .execution import SandboxExecutor
+from .validation import (
+    ValidationError,
+    validate_bool,
+    validate_int_range,
+    validate_literal,
+    validate_path,
+    validate_type,
+)
 
 ExecutorType = Literal["local", "ssh"]
 
 
-class ExecutorConfig(BaseModel):
+@dataclass
+class ExecutorConfig:
     """Base configuration for an executor."""
 
     type: ExecutorType
     profile: str | None = None  # Default profile for this executor
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ExecutorConfig":
+        """Create ExecutorConfig from dictionary.
 
+        Args:
+            data: Dictionary containing configuration
+
+        Returns:
+            ExecutorConfig instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        # Discriminate based on type field
+        exec_type = data.get("type")
+        if exec_type == "local":
+            return LocalExecutorConfig.from_dict(data)
+        elif exec_type == "ssh":
+            return SSHExecutorConfig.from_dict(data)
+        else:
+            raise ValidationError(
+                f"type must be 'local' or 'ssh', got {exec_type!r}",
+                "type",
+            )
+
+
+@dataclass
 class LocalExecutorConfig(ExecutorConfig):
     """Configuration for local executor."""
 
     type: Literal["local"] = "local"  # type: ignore[assignment]
     bwrap_path: Path | None = None  # Explicit path to bwrap if needed
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "LocalExecutorConfig":
+        """Create LocalExecutorConfig from dictionary.
 
+        Args:
+            data: Dictionary containing configuration
+
+        Returns:
+            LocalExecutorConfig instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        exec_type = data.get("type", "local")
+        validate_literal(exec_type, ("local",), "type")
+
+        profile = data.get("profile")
+        if profile is not None:
+            validate_type(profile, str, "profile")
+
+        bwrap_path_raw = data.get("bwrap_path")
+        bwrap_path = (
+            validate_path(bwrap_path_raw, "bwrap_path", expand=True) if bwrap_path_raw else None
+        )
+
+        return cls(
+            type="local",
+            profile=profile,
+            bwrap_path=bwrap_path,
+        )
+
+
+@dataclass
 class SSHExecutorConfig(ExecutorConfig):
     """Configuration for SSH executor."""
 
     type: Literal["ssh"] = "ssh"  # type: ignore[assignment]
-    host: str
+    host: str = ""
     username: str | None = None
     key_file: Path | None = None
     port: int = 22
@@ -51,29 +117,78 @@ class SSHExecutorConfig(ExecutorConfig):
     known_hosts: Path | None = None
     strict_host_key: bool = True
 
-    @field_validator("key_file", mode="before")
+    def __post_init__(self):
+        """Expand paths after initialization."""
+        if self.key_file is not None:
+            self.key_file = self.key_file.expanduser()
+        if self.known_hosts is not None:
+            self.known_hosts = self.known_hosts.expanduser()
+
     @classmethod
-    def expand_path(cls, v: str | Path | None) -> Path | None:
-        """Expand ~ in paths."""
-        if v is None:
-            return None
-        path = Path(v)
-        return path.expanduser()
+    def from_dict(cls, data: dict[str, Any]) -> "SSHExecutorConfig":
+        """Create SSHExecutorConfig from dictionary.
 
-    @field_validator("known_hosts", mode="before")
-    @classmethod
-    def expand_known_hosts(cls, v: str | Path | None) -> Path | None:
-        """Expand ~ in known_hosts paths."""
-        if v is None:
-            return None
-        return Path(v).expanduser()
+        Args:
+            data: Dictionary containing configuration
+
+        Returns:
+            SSHExecutorConfig instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        exec_type = data.get("type", "ssh")
+        validate_literal(exec_type, ("ssh",), "type")
+
+        profile = data.get("profile")
+        if profile is not None:
+            validate_type(profile, str, "profile")
+
+        host = data.get("host")
+        if not host:
+            raise ValidationError("host is required for SSH executor", "host")
+        validate_type(host, str, "host")
+
+        username = data.get("username")
+        if username is not None:
+            validate_type(username, str, "username")
+
+        key_file_raw = data.get("key_file")
+        key_file = validate_path(key_file_raw, "key_file", expand=True) if key_file_raw else None
+
+        port = data.get("port", 22)
+        validate_int_range(port, "port", min_val=1, max_val=65535)
+
+        connection_pool_size = data.get("connection_pool_size", 5)
+        validate_int_range(connection_pool_size, "connection_pool_size", min_val=1)
+
+        known_hosts_raw = data.get("known_hosts")
+        known_hosts = (
+            validate_path(known_hosts_raw, "known_hosts", expand=True) if known_hosts_raw else None
+        )
+
+        strict_host_key = data.get("strict_host_key", True)
+        validate_bool(strict_host_key, "strict_host_key")
+
+        return cls(
+            type="ssh",
+            profile=profile,
+            host=host,
+            username=username,
+            key_file=key_file,
+            port=port,
+            connection_pool_size=connection_pool_size,
+            known_hosts=known_hosts,
+            strict_host_key=strict_host_key,
+        )
 
 
-class ShannotConfig(BaseModel):
+@dataclass
+class ShannotConfig:
     """Complete Shannot configuration."""
 
     default_executor: str = "local"
-    executor: dict[str, LocalExecutorConfig | SSHExecutorConfig] = Field(default_factory=dict)
+    executor: dict[str, LocalExecutorConfig | SSHExecutorConfig] = field(default_factory=dict)
 
     def get_executor_config(
         self, name: str | None = None
@@ -88,6 +203,53 @@ class ShannotConfig(BaseModel):
             )
 
         return self.executor[executor_name]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ShannotConfig":
+        """Create ShannotConfig from dictionary.
+
+        Args:
+            data: Dictionary containing configuration
+
+        Returns:
+            ShannotConfig instance
+
+        Raises:
+            ValidationError: If validation fails
+        """
+        default_executor = data.get("default_executor", "local")
+        validate_type(default_executor, str, "default_executor")
+
+        executor_data = data.get("executor", {})
+        if not isinstance(executor_data, dict):
+            raise ValidationError(
+                f"expected dict, got {type(executor_data).__name__}",
+                "executor",
+            )
+
+        executors: dict[str, LocalExecutorConfig | SSHExecutorConfig] = {}
+        for name, exec_config_data in executor_data.items():
+            if not isinstance(name, str):
+                raise ValidationError(
+                    f"executor keys must be strings, got {type(name).__name__}",
+                    "executor",
+                )
+            if not isinstance(exec_config_data, dict):
+                raise ValidationError(
+                    f"executor values must be dicts, got {type(exec_config_data).__name__}",
+                    f"executor.{name}",
+                )
+
+            try:
+                executors[name] = ExecutorConfig.from_dict(exec_config_data)  # type: ignore[assignment]
+            except ValidationError as e:
+                # Re-raise with context about which executor failed
+                raise ValidationError(str(e), f"executor.{name}") from e
+
+        return cls(
+            default_executor=default_executor,
+            executor=executors,
+        )
 
 
 def get_config_path() -> Path:
@@ -138,8 +300,8 @@ def load_config(config_path: Path | None = None) -> ShannotConfig:
         raise ValueError(f"Failed to parse config file {config_path}: {e}") from e
 
     try:
-        return ShannotConfig.model_validate(data)
-    except Exception as e:
+        return ShannotConfig.from_dict(data)  # type: ignore[arg-type]
+    except ValidationError as e:
         raise ValueError(f"Invalid config file {config_path}: {e}") from e
 
 
@@ -156,7 +318,7 @@ def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
     # Ensure directory exists
     _ = config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Convert to TOML format manually (Pydantic doesn't have TOML export)
+    # Convert to TOML format manually
     lines = [
         f'default_executor = "{config.default_executor}"',
         "",

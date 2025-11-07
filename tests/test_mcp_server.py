@@ -10,8 +10,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-pytest.importorskip("pydantic")
-
 # Provide lightweight stubs for optional dependencies when not installed.
 if "mcp.server" not in sys.modules:
     mcp_module = types.ModuleType("mcp")
