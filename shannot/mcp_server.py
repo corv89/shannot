@@ -14,6 +14,11 @@ from pathlib import Path
 from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
+    GetPromptResult,
+    Prompt,
+    PromptArgument,
+    PromptMessage,
+    PromptsCapability,
     Resource,
     ResourcesCapability,
     ServerCapabilities,
@@ -63,6 +68,7 @@ class ShannotMCPServer:
         # Register handlers
         self._register_tools()
         self._register_resources()
+        self._register_prompts()
 
     def _discover_profiles(self) -> list[Path]:
         """Discover profiles from default locations."""
@@ -217,6 +223,412 @@ class ShannotMCPServer:
             else:
                 return json.dumps({"error": f"Unknown resource: {uri}"})
 
+    def _register_prompts(self) -> None:
+        """Register MCP prompts for diagnostic workflows."""
+
+        @self.server.list_prompts()
+        async def list_prompts() -> list[Prompt]:
+            """List available diagnostic prompt templates."""
+            return [
+                Prompt(
+                    name="system-health-check",
+                    description=(
+                        "Perform a comprehensive system health assessment checking "
+                        "disk space, memory, CPU, processes, and uptime"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="target",
+                            description=(
+                                "Target environment for context (e.g., 'production', 'staging')"
+                            ),
+                            required=False,
+                        )
+                    ],
+                ),
+                Prompt(
+                    name="investigate-performance",
+                    description=(
+                        "Diagnose performance issues by checking resource consumption "
+                        "and identifying bottlenecks"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="symptom",
+                            description=(
+                                "Observed symptom "
+                                "(e.g., 'slow response', 'high load', 'memory exhaustion')"
+                            ),
+                            required=False,
+                        )
+                    ],
+                ),
+                Prompt(
+                    name="analyze-logs",
+                    description=(
+                        "Search and analyze system logs to identify errors, warnings, and anomalies"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="log_path",
+                            description=(
+                                "Specific log file path to analyze (e.g., '/var/log/syslog')"
+                            ),
+                            required=False,
+                        ),
+                        PromptArgument(
+                            name="timeframe",
+                            description="Time period to analyze (e.g., 'last hour', 'today')",
+                            required=False,
+                        ),
+                    ],
+                ),
+                Prompt(
+                    name="disk-usage-audit",
+                    description=(
+                        "Audit disk space usage to identify what's consuming storage "
+                        "and potential cleanup targets"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="threshold",
+                            description="Alert if disk usage exceeds this percentage (e.g., '80')",
+                            required=False,
+                        )
+                    ],
+                ),
+                Prompt(
+                    name="monitor-processes",
+                    description=(
+                        "Monitor and analyze running processes to identify "
+                        "resource-intensive or unusual activity"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="sort_by",
+                            description="Sort criteria: 'cpu', 'memory', or 'time'",
+                            required=False,
+                        )
+                    ],
+                ),
+                Prompt(
+                    name="check-service-status",
+                    description="Check the status and health of a specific system service",
+                    arguments=[
+                        PromptArgument(
+                            name="service_name",
+                            description=(
+                                "Name of the service to check (e.g., 'nginx', 'postgresql')"
+                            ),
+                            required=True,
+                        )
+                    ],
+                ),
+            ]
+
+        @self.server.get_prompt()
+        async def get_prompt(name: str, arguments: dict[str, str] | None) -> GetPromptResult:
+            """Generate prompt content based on name and arguments."""
+            args = arguments or {}
+
+            if name == "system-health-check":
+                return self._generate_health_check_prompt(args)
+            elif name == "investigate-performance":
+                return self._generate_performance_prompt(args)
+            elif name == "analyze-logs":
+                return self._generate_log_analysis_prompt(args)
+            elif name == "disk-usage-audit":
+                return self._generate_disk_audit_prompt(args)
+            elif name == "monitor-processes":
+                return self._generate_process_monitoring_prompt(args)
+            elif name == "check-service-status":
+                return self._generate_service_check_prompt(args)
+            else:
+                raise ValueError(f"Unknown prompt: {name}")
+
+    def _generate_health_check_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate system health check prompt."""
+        target = args.get("target", "the system")
+        tool_name = self._get_diagnostics_tool_name()
+
+        prompt_text = f"""Please perform a comprehensive health check of {target}.
+Use the {tool_name} tool to:
+
+1. **Disk Space**: Check available disk space across all mounted filesystems
+   - Run: `df -h`
+   - Alert if any filesystem is >80% full
+
+2. **Memory Usage**: Check RAM and swap utilization
+   - Run: `free -h`
+   - Note if swap is being heavily used
+
+3. **CPU Load**: Check system load averages
+   - Run: `uptime`
+   - Compare load to number of CPU cores
+
+4. **Running Processes**: Identify resource-intensive processes
+   - Run: `ps aux --sort=-%cpu | head -20` for top CPU consumers
+   - Run: `ps aux --sort=-%mem | head -20` for top memory consumers
+
+5. **System Information**: Get basic system info
+   - Run: `cat /etc/os-release` for OS version
+   - Run: `env` to check environment
+
+After gathering this information, provide a summary with:
+- Overall health status (healthy/warning/critical)
+- Any issues requiring attention
+- Recommendations for improvement"""
+
+        return GetPromptResult(
+            description=f"System health check for {target}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_performance_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate performance investigation prompt."""
+        symptom = args.get("symptom", "performance issues")
+        tool_name = self._get_diagnostics_tool_name()
+
+        prompt_text = f"""The system is experiencing {symptom}.
+Please investigate using the {tool_name} tool:
+
+1. **Identify Top Resource Consumers**:
+   - CPU: `ps aux --sort=-%cpu | head -20`
+   - Memory: `ps aux --sort=-%mem | head -20`
+   - Look for processes consuming excessive resources
+
+2. **Check System Load**:
+   - Run: `uptime`
+   - Compare 1-min, 5-min, 15-min load averages
+
+3. **Memory Pressure**:
+   - Run: `free -h`
+   - Check if swap is active (indicates memory pressure)
+
+4. **Disk I/O** (if supported):
+   - Run: `df -h` to check disk space
+   - Full disks can cause performance issues
+
+5. **Recent Errors**:
+   - Check: `tail -100 /var/log/syslog` or `/var/log/messages`
+   - Look for errors correlating with performance issues
+
+Provide a diagnosis with:
+- Most likely cause of {symptom}
+- Which resources are constrained
+- Recommended actions to resolve the issue"""
+
+        return GetPromptResult(
+            description=f"Performance investigation for: {symptom}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_log_analysis_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate log analysis prompt."""
+        log_path = args.get("log_path", "/var/log/syslog or /var/log/messages")
+        timeframe = args.get("timeframe", "recent entries")
+        tool_name = self._get_diagnostics_tool_name()
+
+        prompt_text = f"""Please analyze system logs for {timeframe}. Use the {tool_name} tool:
+
+1. **Identify Available Logs**:
+   - Run: `ls -lh /var/log/`
+   - Target: {log_path}
+
+2. **Check for Errors**:
+   - Run: `grep -i error {log_path} | tail -50`
+   - Run: `grep -i fail {log_path} | tail -50`
+   - Run: `grep -i critical {log_path} | tail -50`
+
+3. **Check for Warnings**:
+   - Run: `grep -i warn {log_path} | tail -50`
+
+4. **Recent Activity**:
+   - Run: `tail -100 {log_path}`
+
+5. **Pattern Analysis**:
+   - Look for repeated error messages
+   - Identify any error spikes or patterns
+   - Check timestamps for correlation with issues
+
+Provide a summary including:
+- Most significant errors or warnings found
+- Any patterns or trends
+- Recommended actions based on log findings"""
+
+        return GetPromptResult(
+            description=f"Log analysis for {log_path} ({timeframe})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_disk_audit_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate disk usage audit prompt."""
+        threshold = args.get("threshold", "80")
+        tool_name = self._get_diagnostics_tool_name()
+
+        prompt_text = f"""Please audit disk space usage and identify storage consumption.
+Use the {tool_name} tool:
+
+1. **Overall Disk Usage**:
+   - Run: `df -h`
+   - Alert if any filesystem exceeds {threshold}% capacity
+
+2. **Largest Directories** (if find is available):
+   - Run: `find /var -type f -size +100M 2>/dev/null | head -20`
+   - Run: `find /usr -type f -size +100M 2>/dev/null | head -20`
+   - Run: `find /tmp -type f -size +100M 2>/dev/null | head -20`
+
+3. **Log File Sizes**:
+   - Run: `ls -lhS /var/log/ | head -20`
+   - Identify large log files that could be rotated
+
+4. **Check Cache Directories**:
+   - Run: `ls -lh /var/cache/` if accessible
+
+Provide a report with:
+- Filesystems exceeding {threshold}% capacity
+- Largest files and directories found
+- Recommendations for cleanup (old logs, caches, tmp files)
+- Estimated space that could be reclaimed"""
+
+        return GetPromptResult(
+            description=f"Disk usage audit (threshold: {threshold}%)",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_process_monitoring_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate process monitoring prompt."""
+        sort_by = args.get("sort_by", "cpu")
+        tool_name = self._get_diagnostics_tool_name()
+
+        sort_options = {
+            "cpu": ("-%cpu", "CPU usage"),
+            "memory": ("-%mem", "memory usage"),
+            "time": ("-time", "running time"),
+        }
+        sort_flag, sort_desc = sort_options.get(sort_by, ("-%cpu", "CPU usage"))
+
+        prompt_text = f"""Please monitor and analyze running processes sorted by {sort_desc}.
+Use the {tool_name} tool:
+
+1. **Top Processes by {sort_desc.title()}**:
+   - Run: `ps aux --sort={sort_flag} | head -20`
+   - Identify highest resource consumers
+
+2. **Process Count**:
+   - Run: `ps aux | wc -l`
+   - Count total running processes
+
+3. **System Load**:
+   - Run: `uptime`
+   - Check load averages
+
+4. **Unusual Processes**:
+   - Look for unexpected or unknown processes
+   - Check for processes with unusual resource patterns
+   - Identify any zombie or defunct processes
+
+5. **User Context**:
+   - Run: `ps aux` to see which users own processes
+   - Identify if specific users/services are problematic
+
+Provide analysis including:
+- Top 10 processes by {sort_desc}
+- Any unusual or suspicious processes
+- Recommendations for optimization
+- Whether process count is healthy for the system"""
+
+        return GetPromptResult(
+            description=f"Process monitoring (sorted by: {sort_by})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_service_check_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate service status check prompt."""
+        service_name = args.get("service_name", "")
+        if not service_name:
+            raise ValueError("service_name argument is required")
+
+        tool_name = self._get_diagnostics_tool_name()
+
+        prompt_text = f"""Please check the status and health of the '{service_name}' service.
+Use the {tool_name} tool:
+
+1. **Check if Service Process is Running**:
+   - Run: `ps aux | grep -i {service_name}`
+   - Look for active {service_name} processes
+
+2. **Check Service Logs**:
+   - Run: `grep -i {service_name} /var/log/syslog | tail -50` (or /var/log/messages)
+   - Look for recent errors or warnings
+
+3. **Check Service-Specific Logs** (if accessible):
+   - Common paths: `/var/log/{service_name}/`
+   - Try: `ls -la /var/log/{service_name}/` or `ls -la /var/log/ | grep -i {service_name}`
+   - Read recent entries if log files found
+
+4. **Resource Usage**:
+   - Run: `ps aux | grep -i {service_name}`
+   - Note CPU and memory usage of service processes
+
+5. **Port Listening** (if netstat-like tools available):
+   - Check if service is listening on expected ports
+
+Provide a status report with:
+- Is {service_name} running? (yes/no)
+- Resource consumption (CPU, memory)
+- Any recent errors in logs
+- Overall health assessment (healthy/degraded/down)
+- Recommended actions if issues found"""
+
+        return GetPromptResult(
+            description=f"Service status check for: {service_name}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _get_diagnostics_tool_name(self) -> str:
+        """Get the name of the diagnostics sandbox tool."""
+        # Find diagnostics profile or any available profile
+        for pname in self.deps_by_profile.keys():
+            if "diagnostics" in pname.lower():
+                return self._make_tool_name(pname)
+
+        # Fallback to any available profile
+        if self.deps_by_profile:
+            return self._make_tool_name(next(iter(self.deps_by_profile.keys())))
+
+        return "sandbox_diagnostics"
+
     def _generate_tool_description(self, deps: SandboxDeps) -> str:
         """Generate a description for a profile's tool."""
         commands_list = deps.profile.allowed_commands[:5]
@@ -280,6 +692,7 @@ class ShannotMCPServer:
             capabilities=ServerCapabilities(
                 tools=ToolsCapability(),  # We provide tools
                 resources=ResourcesCapability(),  # We provide resources
+                prompts=PromptsCapability(),  # We provide prompts
             ),
         )
 
