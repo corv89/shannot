@@ -121,11 +121,13 @@ class TestShannotConfig:
 
     def test_get_executor_config_not_found(self):
         """Test getting non-existent executor."""
+        from shannot.validation import ValidationError
+
         config = ShannotConfig(
             default_executor="local",
             executor={"local": LocalExecutorConfig(type="local")},
         )
-        with pytest.raises(ValueError, match="Executor 'prod' not found"):
+        with pytest.raises(ValidationError, match="'prod' not found"):
             config.get_executor_config("prod")
 
 

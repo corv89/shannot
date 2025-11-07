@@ -197,7 +197,10 @@ class FileReadInput:
         if path is None:
             raise ValidationError("path is required", "path")
 
-        validated_path = validate_type(path, str, "path")
+        # Validate path is safe (no path traversal)
+        from shannot.validation import validate_safe_path
+
+        validated_path = validate_safe_path(path, "path")
         return cls(path=validated_path)
 
 
@@ -226,7 +229,10 @@ class DirectoryListInput:
         if path is None:
             raise ValidationError("path is required", "path")
 
-        validated_path = validate_type(path, str, "path")
+        # Validate path is safe (no path traversal)
+        from shannot.validation import validate_safe_path
+
+        validated_path = validate_safe_path(path, "path")
 
         long_format = data.get("long_format", False)
         validated_long_format = validate_bool(long_format, "long_format")

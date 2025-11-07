@@ -257,6 +257,106 @@ def validate_bool(value: Any, field_name: str) -> bool:
     return value
 
 
+def validate_command(value: Any, field_name: str) -> list[str]:
+    """Validate a command array (non-empty list of strings).
+
+    Args:
+        value: Value to validate
+        field_name: Name of field being validated
+
+    Returns:
+        The validated command list
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    validated = validate_list_of_strings(value, field_name)
+    if not validated:
+        raise ValidationError("must not be empty", field_name)
+    return validated
+
+
+def validate_port(value: Any, field_name: str) -> int:
+    """Validate a network port number (1-65535).
+
+    Args:
+        value: Value to validate
+        field_name: Name of field being validated
+
+    Returns:
+        The validated port number
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    return validate_int_range(value, field_name, min_val=1, max_val=65535)
+
+
+def validate_timeout(value: Any, field_name: str, max_val: int = 3600) -> int:
+    """Validate a timeout value in seconds.
+
+    Args:
+        value: Value to validate
+        field_name: Name of field being validated
+        max_val: Maximum allowed timeout (default: 3600 seconds / 1 hour)
+
+    Returns:
+        The validated timeout
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    return validate_int_range(value, field_name, min_val=1, max_val=max_val)
+
+
+def validate_safe_path(value: Any, field_name: str) -> str:
+    """Validate a path is safe (no path traversal attacks).
+
+    This function checks for common path traversal patterns that could
+    allow access to files outside the intended directory.
+
+    Args:
+        value: Value to validate (path string)
+        field_name: Name of field being validated
+
+    Returns:
+        The validated path string
+
+    Raises:
+        ValidationError: If path contains dangerous patterns
+
+    Security Checks:
+        - No ".." components (directory traversal)
+        - No null bytes (C string termination attacks)
+        - No newlines (command injection in some contexts)
+        - Must be a non-empty string
+
+    Example:
+        >>> validate_safe_path("/etc/hosts", "path")  # OK
+        '/etc/hosts'
+        >>> validate_safe_path("../../../etc/passwd", "path")  # FAIL
+        ValidationError: path: contains path traversal pattern '..'
+    """
+    # First validate it's a non-empty string
+    validated_str = validate_type(value, str, field_name)
+    if not validated_str:
+        raise ValidationError("must be non-empty", field_name)
+
+    # Check for path traversal
+    if ".." in validated_str:
+        raise ValidationError("contains path traversal pattern '..'", field_name)
+
+    # Check for null bytes (security issue)
+    if "\0" in validated_str:
+        raise ValidationError("contains null byte", field_name)
+
+    # Check for newlines (potential command injection)
+    if "\n" in validated_str or "\r" in validated_str:
+        raise ValidationError("contains newline character", field_name)
+
+    return validated_str
+
+
 __all__ = [
     "ValidationError",
     "validate_type",
@@ -266,4 +366,8 @@ __all__ = [
     "validate_dict_of_type",
     "validate_int_range",
     "validate_bool",
+    "validate_command",
+    "validate_port",
+    "validate_timeout",
+    "validate_safe_path",
 ]

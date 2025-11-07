@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .process import ProcessResult, run_process
+from .validation import ValidationError, validate_bool, validate_type
 
 if TYPE_CHECKING:
     from shannot.execution import SandboxExecutor
@@ -78,9 +79,9 @@ class SandboxBind:
     def validate(self) -> None:
         """Ensure the bind definition is structurally sound."""
         if not self.source.is_absolute():
-            raise SandboxError(f"Bind source must be absolute: {self.source}")
+            raise ValidationError(f"must be absolute: {self.source}", "source")
         if not self.target.is_absolute():
-            raise SandboxError(f"Bind target must be absolute: {self.target}")
+            raise ValidationError(f"must be absolute: {self.target}", "target")
 
 
 def _normalize_base_path(base_path: Path | str | None) -> Path | None:
@@ -96,7 +97,7 @@ def _normalize_base_path(base_path: Path | str | None) -> Path | None:
 def _require_string(value: object, *, field_name: str) -> str:
     """Ensure ``value`` is a non-empty string."""
     if not isinstance(value, str) or not value:
-        raise SandboxError(f"{field_name} must be a non-empty string.")
+        raise ValidationError("must be a non-empty string", field_name)
     return value
 
 
@@ -105,13 +106,13 @@ def _coerce_string_sequence(value: object, *, field_name: str) -> tuple[str, ...
     if value is None:
         return tuple()
     if isinstance(value, str | bytes):
-        raise SandboxError(f"{field_name} must be a sequence of strings.")
+        raise ValidationError("must be a sequence of strings", field_name)
     if not isinstance(value, Sequence):
-        raise SandboxError(f"{field_name} must be a sequence of strings.")
+        raise ValidationError("must be a sequence of strings", field_name)
     result: list[str] = []
     for index, item in enumerate(value):
         if not isinstance(item, str) or not item:
-            raise SandboxError(f"{field_name}[{index}] must be a non-empty string.")
+            raise ValidationError(f"[{index}] must be a non-empty string", field_name)
         result.append(item)
     return tuple(result)
 
@@ -122,7 +123,7 @@ def _coerce_bool(value: object, *, field_name: str, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    raise SandboxError(f"{field_name} must be a boolean value.")
+    raise ValidationError("must be a boolean value", field_name)
 
 
 def _coerce_path(value: object, *, field_name: str) -> Path:
@@ -131,7 +132,7 @@ def _coerce_path(value: object, *, field_name: str) -> Path:
         return value
     if isinstance(value, str) and value:
         return Path(value)
-    raise SandboxError(f"{field_name} must be a non-empty string or Path.")
+    raise ValidationError("must be a non-empty string or Path", field_name)
 
 
 def _absolutize_path(path: Path, *, field_name: str, base_path: Path | None) -> Path:
@@ -139,7 +140,7 @@ def _absolutize_path(path: Path, *, field_name: str, base_path: Path | None) -> 
     if path.is_absolute():
         return path
     if base_path is None:
-        raise SandboxError(f"{field_name} must be absolute: {path}")
+        raise ValidationError(f"must be absolute: {path}", field_name)
     return (base_path / path).resolve()
 
 
@@ -166,9 +167,9 @@ def _coerce_path_sequence(
     if value is None:
         return tuple()
     if isinstance(value, str | bytes):
-        raise SandboxError(f"{field_name} must be a sequence of paths.")
+        raise ValidationError("must be a sequence of paths", field_name)
     if not isinstance(value, Sequence):
-        raise SandboxError(f"{field_name} must be a sequence of paths.")
+        raise ValidationError("must be a sequence of paths", field_name)
     paths: list[Path] = []
     for index, item in enumerate(value):
         member = _coerce_path(item, field_name=f"{field_name}[{index}]")
@@ -183,13 +184,13 @@ def _coerce_environment_mapping(value: object, *, field_name: str) -> Mapping[st
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise SandboxError(f"{field_name} must be a mapping of strings.")
+        raise ValidationError("must be a mapping of strings", field_name)
     environment: dict[str, str] = {}
     for key, raw_value in value.items():
         if not isinstance(key, str) or not key:
-            raise SandboxError(f"{field_name} keys must be non-empty strings.")
+            raise ValidationError("keys must be non-empty strings", field_name)
         if not isinstance(raw_value, str):
-            raise SandboxError(f"{field_name}[{key}] must be a string.")
+            raise ValidationError(f"[{key}] must be a string", field_name)
         environment[key] = raw_value
     return environment
 
@@ -199,17 +200,17 @@ def _coerce_binds(value: object, *, base_path: Path | None) -> tuple[SandboxBind
     if value is None:
         return tuple()
     if isinstance(value, str | bytes):
-        raise SandboxError("binds must be a sequence of mappings.")
+        raise ValidationError("must be a sequence of mappings", "binds")
     if not isinstance(value, Sequence):
-        raise SandboxError("binds must be a sequence of mappings.")
+        raise ValidationError("must be a sequence of mappings", "binds")
     binds: list[SandboxBind] = []
     for index, entry in enumerate(value):
         if not isinstance(entry, Mapping):
-            raise SandboxError(f"binds[{index}] must be a mapping.")
+            raise ValidationError(f"[{index}] must be a mapping", "binds")
         if "source" not in entry:
-            raise SandboxError(f"binds[{index}] must define 'source'.")
+            raise ValidationError(f"[{index}] must define 'source'", "binds")
         if "target" not in entry:
-            raise SandboxError(f"binds[{index}] must define 'target'.")
+            raise ValidationError(f"[{index}] must define 'target'", "binds")
         source = _absolutize_path(
             _coerce_path(entry["source"], field_name=f"binds[{index}].source"),
             field_name=f"binds[{index}].source",
@@ -349,27 +350,29 @@ class SandboxProfile:
         return profile
 
     def validate(self) -> None:
-        """Raise ``SandboxError`` if the profile contains invalid entries."""
+        """Raise ``ValidationError`` if the profile contains invalid entries."""
         if not self.name:
-            raise SandboxError("Sandbox profile must have a non-empty name.")
+            raise ValidationError("must have a non-empty name", "name")
 
-        for pattern in self.allowed_commands:
+        for i, pattern in enumerate(self.allowed_commands):
             if not pattern:
-                raise SandboxError("Allowed command patterns may not be empty.")
+                raise ValidationError(f"[{i}] may not be empty", "allowed_commands")
 
         for bind in self.binds:
             bind.validate()
 
-        for tmpfs_path in self.tmpfs_paths:
+        for i, tmpfs_path in enumerate(self.tmpfs_paths):
             if not tmpfs_path.is_absolute():
-                raise SandboxError(f"tmpfs mount must target absolute path: {tmpfs_path}")
+                raise ValidationError(
+                    f"[{i}] must target absolute path: {tmpfs_path}", "tmpfs_paths"
+                )
 
         if self.seccomp_profile is not None and not self.seccomp_profile.is_absolute():
-            raise SandboxError(f"Seccomp profile path must be absolute: {self.seccomp_profile}")
+            raise ValidationError(f"must be absolute: {self.seccomp_profile}", "seccomp_profile")
 
-        for arg in self.additional_args:
+        for i, arg in enumerate(self.additional_args):
             if not arg:
-                raise SandboxError("Additional Bubblewrap arguments cannot be empty.")
+                raise ValidationError(f"[{i}] cannot be empty", "additional_args")
 
 
 def load_profile_from_mapping(
@@ -624,7 +627,12 @@ class SandboxManager:
 
         if not command:
             raise SandboxError("Sandbox command must not be empty.")
-        executable = command[0]
+
+        # Validate command is a list of non-empty strings
+        from .validation import validate_command
+
+        validated_command = validate_command(list(command), "command")
+        executable = validated_command[0]
         if not self._is_command_allowed(executable):
             raise SandboxError(
                 f"Command '{executable}' is not permitted by sandbox profile "
@@ -632,7 +640,7 @@ class SandboxManager:
             )
 
         # Build the base command
-        invocation = self.build_command(command)
+        invocation = self.build_command(validated_command)
 
         # Handle seccomp file descriptor if profile specifies one
         if self._profile.seccomp_profile is not None:
@@ -792,7 +800,11 @@ class SandboxManager:
         if not command:
             raise SandboxError("Sandbox command must not be empty.")
 
-        executable = command[0]
+        # Validate command is a list of non-empty strings
+        from .validation import validate_command
+
+        validated_command = validate_command(list(command), "command")
+        executable = validated_command[0]
         if not self._is_command_allowed(executable):
             raise SandboxError(
                 f"Command '{executable}' is not permitted by sandbox profile "
@@ -800,7 +812,7 @@ class SandboxManager:
             )
 
         # Use executor to run command
-        result = await self._executor.run_command(self._profile, list(command), timeout=timeout)
+        result = await self._executor.run_command(self._profile, validated_command, timeout=timeout)
 
         if check and not result.succeeded():
             raise SandboxError(

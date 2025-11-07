@@ -19,6 +19,7 @@ from pathlib import Path
 from shannot.execution import SandboxExecutor
 from shannot.process import ProcessResult, run_process
 from shannot.sandbox import BubblewrapCommandBuilder, SandboxProfile
+from shannot.validation import validate_command, validate_path, validate_timeout
 
 
 class LocalExecutor(SandboxExecutor):
@@ -54,11 +55,15 @@ class LocalExecutor(SandboxExecutor):
                        If None, searches PATH automatically.
 
         Raises:
+            ValidationError: If bwrap_path is invalid
             RuntimeError: If not on Linux
             RuntimeError: If bubblewrap not found in PATH
         """
         self._validate_platform()
-        self.bwrap_path: Path = bwrap_path or self._find_bwrap()
+
+        # Validate bwrap_path if provided
+        validated_bwrap_path = validate_path(bwrap_path, "bwrap_path", expand=True)
+        self.bwrap_path: Path = validated_bwrap_path or self._find_bwrap()
 
         # Validate bwrap_path exists and is executable
         if not self.bwrap_path.exists():
@@ -113,6 +118,7 @@ class LocalExecutor(SandboxExecutor):
             ProcessResult with stdout, stderr, returncode, duration
 
         Raises:
+            ValidationError: If command or timeout are invalid
             TimeoutError: Command exceeded timeout
             RuntimeError: Execution error
 
@@ -130,11 +136,15 @@ class LocalExecutor(SandboxExecutor):
             >>> assert result.returncode == 0
             >>> assert "hello" in result.stdout
         """
+        # Validate inputs
+        validated_command = validate_command(command, "command")
+        validated_timeout = validate_timeout(timeout, "timeout", max_val=3600)
+
         # Validate profile before building command
         profile.validate()
 
         # Build bubblewrap command
-        builder = BubblewrapCommandBuilder(profile, command)
+        builder = BubblewrapCommandBuilder(profile, validated_command)
         bwrap_args = builder.build()
 
         # Prepend bwrap executable path
@@ -143,9 +153,11 @@ class LocalExecutor(SandboxExecutor):
         # Execute locally using asyncio.to_thread to avoid blocking
         # Note: run_process is currently synchronous, so we run it in a thread
         try:
-            result = await asyncio.to_thread(run_process, full_command, timeout=timeout)
+            result = await asyncio.to_thread(run_process, full_command, timeout=validated_timeout)
             return result
         except subprocess.TimeoutExpired as e:
-            raise TimeoutError(f"Command timed out after {timeout}s: {' '.join(command)}") from e
+            raise TimeoutError(
+                f"Command timed out after {validated_timeout}s: {' '.join(validated_command)}"
+            ) from e
         except Exception as e:
             raise RuntimeError(f"Failed to execute command: {e}") from e
