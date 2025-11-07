@@ -18,14 +18,14 @@
 
 🤖 **Works with your favorite LLMs**
 * Plug-and-play standards-compliant [MCP integration](https://corv89.github.io/shannot/mcp/)
-* Convenient auto-install for **Claude Code**, **Claude Desktop**, **Codex** and **LM Studio**
+* Convenient auto-install for **Claude Code**, **Codex**, **LM Studio** and **Claude Desktop**
 * Compatible with any local model that supports tool-calling
 
 🌐 **Control Remote Systems**
 * Run sandboxed commands on Linux servers from macOS, Windows or Linux via SSH
 
 ⚡ **Deploy in Minutes**
-* lightweight Python client + bubblewrap on target
+* Lightweight Python client + bubblewrap on target
 * No containers, VMs, or complex setup required
 
 
@@ -43,11 +43,17 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
-# Install shannot
+# macOS/Windows users (for remote Linux targets)
+uv tool install "shannot[mcp]"
+
+# Linux users - local sandbox only
 uv tool install shannot
 
-# Or with MCP support for Claude Desktop
+# Linux users - with MCP for Claude Code/Codex
 uv tool install "shannot[mcp]"
+
+# Linux users - local & remote execution only (no MCP)
+uv tool install "shannot[remote]"
 ```
 
 #### Install on Target (Linux only)
@@ -84,23 +90,27 @@ Ubuntu and Debian mark system Python as "externally managed" (PEP 668), which pr
 sudo apt install pipx
 pipx ensurepath
 
-# Install shannot
+# Install shannot (local execution only)
 pipx install shannot
 
-# Or with optional dependencies
-pipx install "shannot[mcp]"  # MCP/Claude Desktop support
-pipx install "shannot[all]"  # All optional features
+# With MCP support for Claude Code/Codex (includes remote execution)
+pipx install "shannot[mcp]"
+
+# Remote execution only (no MCP)
+pipx install "shannot[remote]"
 ```
 
 **Traditional pip:**
 
 ```bash
-# Basic installation
+# Basic installation (local execution only)
 pip install --user shannot
 
-# With optional dependencies
-pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
-pip install --user "shannot[all]"  # All optional features
+# With MCP support for Claude Code/Codex (includes remote execution)
+pip install --user "shannot[mcp]"
+
+# Remote execution only (no MCP)
+pip install --user "shannot[remote]"
 
 # Note: On Ubuntu/Debian, you may need --break-system-packages
 # (not recommended, use pipx or uv instead)
@@ -108,8 +118,8 @@ pip install --user "shannot[all]"  # All optional features
 </details>
 
 **Optional dependencies:**
-- `[mcp]` - MCP server for Claude Desktop integration
-- `[all]` - All optional features
+- `[mcp]` - MCP server integration for Claude Code/Codex/Claude Desktop (includes remote execution)
+- `[remote]` - Remote execution via SSH (without MCP)
 
 ### Usage
 
