@@ -36,6 +36,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,mcp,remote]"
 
+      - name: Debug MCP installation
+        run: |
+          echo "=== Installed MCP version ==="
+          pip show mcp
+          echo ""
+          echo "=== Python can import mcp ==="
+          python -c "import mcp; print(f'MCP imported from: {mcp.__file__}')"
+          echo ""
+          echo "=== Available types in mcp.types ==="
+          python -c "from mcp import types; print([x for x in dir(types) if 'Prompt' in x or 'prompt' in x])"
+          echo ""
+          echo "=== Try importing GetPromptResult ==="
+          python -c "from mcp.types import GetPromptResult; print('SUCCESS')" || echo "FAILED"
+
       - name: Run ruff linter
         run: |
           ruff check .
@@ -54,7 +68,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.python-version == '3.11'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: coverage.xml
@@ -153,7 +167,7 @@ jobs:
           twine check dist/*
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: distribution-packages
           path: dist/
