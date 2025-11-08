@@ -43,17 +43,11 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
-# macOS/Windows users (for remote Linux targets)
-uv tool install "shannot[mcp]"
-
-# Linux users - local sandbox only
+# Standard installation (includes MCP server and remote execution)
 uv tool install shannot
 
-# Linux users - with MCP for Claude Code/Codex
-uv tool install "shannot[mcp]"
-
-# Linux users - local & remote execution only (no MCP)
-uv tool install "shannot[remote]"
+# Minimal installation (Linux-only local CLI, no MCP or remote support)
+uv tool install "shannot[minimal]"
 ```
 
 #### Install on Target (Linux only)
@@ -90,27 +84,21 @@ Ubuntu and Debian mark system Python as "externally managed" (PEP 668), which pr
 sudo apt install pipx
 pipx ensurepath
 
-# Install shannot (local execution only)
+# Standard installation (includes MCP and remote execution)
 pipx install shannot
 
-# With MCP support for Claude Code/Codex (includes remote execution)
-pipx install "shannot[mcp]"
-
-# Remote execution only (no MCP)
-pipx install "shannot[remote]"
+# Minimal installation (Linux-only local CLI)
+pipx install "shannot[minimal]"
 ```
 
 **Traditional pip:**
 
 ```bash
-# Basic installation (local execution only)
+# Standard installation (includes MCP and remote execution)
 pip install --user shannot
 
-# With MCP support for Claude Code/Codex (includes remote execution)
-pip install --user "shannot[mcp]"
-
-# Remote execution only (no MCP)
-pip install --user "shannot[remote]"
+# Minimal installation (Linux-only local CLI)
+pip install --user "shannot[minimal]"
 
 # Note: On Ubuntu/Debian, you may need --break-system-packages
 # (not recommended, use pipx or uv instead)
@@ -118,8 +106,7 @@ pip install --user "shannot[remote]"
 </details>
 
 **Optional dependencies:**
-- `[mcp]` - MCP server integration for Claude Code/Codex/Claude Desktop (includes remote execution)
-- `[remote]` - Remote execution via SSH (without MCP)
+- `[minimal]` - Linux-only local CLI without MCP server or remote execution support
 
 ### Usage
 

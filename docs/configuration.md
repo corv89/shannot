@@ -410,11 +410,9 @@ shannot remote list
 
 ### "No module named 'asyncssh'"
 
-Install remote dependencies:
+This error indicates you installed the minimal version of Shannot. Reinstall with full dependencies:
 ```bash
-pip install shannot[remote]
-# or with MCP support (includes remote)
-pip install shannot[mcp]
+pip install --user shannot
 ```
 
 ### MCP not using remote executor

@@ -2,7 +2,7 @@
 
 UV ?= uv
 VENV ?= .venv
-UV_SYNC_EXTRAS := dev mcp remote
+UV_SYNC_EXTRAS := dev
 UV_RUN_EXTRAS := $(foreach extra,$(UV_SYNC_EXTRAS),--extra $(extra))
 UV_RUN := $(UV) run --frozen $(UV_RUN_EXTRAS)
 
