@@ -37,11 +37,17 @@ Python client + bubblewrap on target • No containers, VMs, or complex setup re
     curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
     # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
-    # Install shannot
+    # macOS/Windows users (for remote Linux targets)
+    uv tool install "shannot[mcp]"
+
+    # Linux users - local sandbox only
     uv tool install shannot
 
-    # Or with MCP support for Claude Desktop
+    # Linux users - with MCP for Claude Code/Codex
     uv tool install "shannot[mcp]"
+
+    # Linux users - local & remote execution only (no MCP)
+    uv tool install "shannot[remote]"
     ```
 
 === "pipx (Ubuntu/Debian)"
@@ -51,21 +57,27 @@ Python client + bubblewrap on target • No containers, VMs, or complex setup re
     sudo apt install pipx
     pipx ensurepath
 
-    # Install shannot
+    # Install shannot (local execution only)
     pipx install shannot
 
-    # Or with optional dependencies
-    pipx install "shannot[mcp]"  # MCP/Claude Desktop support
+    # With MCP support for Claude Code/Codex (includes remote)
+    pipx install "shannot[mcp]"
+
+    # Remote execution only (no MCP)
+    pipx install "shannot[remote]"
     ```
 
 === "pip"
 
     ```bash
-    # Basic installation
+    # Basic installation (local execution only)
     pip install --user shannot
 
-    # With optional dependencies
-    pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
+    # With MCP support for Claude Code/Codex (includes remote)
+    pip install --user "shannot[mcp]"
+
+    # Remote execution only (no MCP)
+    pip install --user "shannot[remote]"
     ```
 
 ### Install bubblewrap (Linux only)

@@ -158,6 +158,10 @@ shannot systemctl status
 # Exploration
 shannot find / -name "*.conf"
 shannot grep -r "pattern" /var/log
+
+# Systemd inspection (requires systemd.json profile)
+shannot --profile systemd systemctl status nginx
+shannot --profile systemd journalctl -u nginx -n 50
 ```
 
 ```python
@@ -174,11 +178,12 @@ if result.succeeded():
 
 ## Configuration
 
-Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
+Shannot uses JSON profiles to control sandbox behavior. Four profiles included:
 
 - **`minimal.json`** (default) - Basic commands (ls, cat, grep, find), works out-of-the-box
 - **`readonly.json`** - Extended command set, suitable for most use cases
 - **`diagnostics.json`** - System monitoring (df, free, ps, uptime), perfect for LLM agents
+- **`systemd.json`** - Includes journalctl and filesystem-based service discovery (no D-Bus)
 
 ```json
 {
@@ -192,6 +197,34 @@ Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
 ```
 
 See [profiles](https://corv89.github.io/shannot/profiles) for complete documentation.
+
+### Systemd & Journal Access
+
+The `systemd.json` profile provides access to systemd journals and service monitoring using **filesystem-based methods** (no D-Bus required).
+
+**Quick examples:**
+```bash
+# View kernel logs
+shannot --profile systemd journalctl -k
+
+# Analyze service logs
+shannot --profile systemd journalctl -u nginx -n 50
+
+# List running services (via cgroup filesystem)
+shannot --profile systemd ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'
+
+# Monitor service resources
+shannot --profile systemd systemd-cgtop --depth=3
+```
+
+**Optional: Full journal access**
+```bash
+# Add your user to systemd-journal group for complete log access
+sudo usermod -aG systemd-journal $USER
+# Log out and back in for group membership to take effect
+```
+
+**Note:** `systemctl` commands are not available (require D-Bus). Use filesystem-based alternatives for service discovery. See [usage guide](https://corv89.github.io/shannot/usage/#service-discovery-without-d-bus) for details.
 
 ## How It Works
 

@@ -672,6 +672,7 @@ class TestMCPServerPrompts:
             mcp_server._generate_disk_audit_prompt({}),
             mcp_server._generate_process_monitoring_prompt({}),
             mcp_server._generate_service_check_prompt({"service_name": "test"}),
+            mcp_server._generate_kernel_logs_prompt({}),
         ]
 
         for prompt in prompts:
@@ -686,3 +687,334 @@ class TestMCPServerPrompts:
             # Message should have text content
             assert hasattr(prompt.messages[0].content, "text")
             assert prompt.messages[0].content.text
+
+    def test_get_systemd_tool_name_with_systemd_profile(self):
+        """Test _get_systemd_tool_name finds systemd profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"])
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_systemd"
+
+    def test_get_systemd_tool_name_with_executor_label(self):
+        """Test _get_systemd_tool_name includes executor label."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"], executor_label="remote")
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_remote_systemd"
+
+    def test_get_systemd_tool_name_fallback_to_diagnostics(self):
+        """Test _get_systemd_tool_name falls back to diagnostics if no systemd profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "diagnostics"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["diagnostics"])
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_diagnostics"
+
+    def test_generate_kernel_logs_prompt_default_args(self, mcp_server):
+        """Test kernel logs prompt generation with default arguments."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        assert "recent entries" in result.description
+        assert "all priorities" in result.description
+        assert len(result.messages) == 1
+        assert result.messages[0].role == "user"
+
+        prompt_text = result.messages[0].content.text
+        assert "kernel logs" in prompt_text
+        assert "journalctl -k" in prompt_text
+        assert "journalctl --dmesg" in prompt_text
+        assert "sandbox_test1" in prompt_text  # Should use diagnostics tool name (fallback)
+
+    def test_generate_kernel_logs_prompt_with_timeframe(self, mcp_server):
+        """Test kernel logs prompt with custom timeframe."""
+        result = mcp_server._generate_kernel_logs_prompt({"timeframe": "last hour"})
+
+        assert "last hour" in result.description
+        prompt_text = result.messages[0].content.text
+        assert "last hour" in prompt_text
+        assert 'journalctl -k --since "1 hour ago"' in prompt_text
+
+    def test_generate_kernel_logs_prompt_with_priority(self, mcp_server):
+        """Test kernel logs prompt with priority filter."""
+        result = mcp_server._generate_kernel_logs_prompt({"priority": "err"})
+
+        assert "err" in result.description
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -p err" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_diagnostic_patterns(self, mcp_server):
+        """Test kernel logs prompt includes common diagnostic patterns."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        # Check for diagnostic patterns
+        assert "Hardware errors" in prompt_text or "hardware" in prompt_text.lower()
+        assert "Driver issues" in prompt_text or "driver" in prompt_text.lower()
+        assert "Disk problems" in prompt_text or "disk" in prompt_text.lower()
+        assert "Memory issues" in prompt_text or "memory" in prompt_text.lower()
+        assert "oom" in prompt_text.lower()
+
+    def test_generate_kernel_logs_prompt_explains_journalctl_vs_dmesg(self, mcp_server):
+        """Test kernel logs prompt explains why journalctl is preferred over dmesg."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "dmesg" in prompt_text
+        assert "CAP_SYSLOG" in prompt_text or "capability" in prompt_text.lower()
+        assert "journalctl" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_time_filtering(self, mcp_server):
+        """Test kernel logs prompt includes time-based filtering examples."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -b 0" in prompt_text  # Current boot
+        assert "journalctl -k -b -1" in prompt_text  # Previous boot
+        assert "--since" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_priority_filtering(self, mcp_server):
+        """Test kernel logs prompt includes priority filtering examples."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -p err" in prompt_text
+        assert "journalctl -k -p warning" in prompt_text
+
+    def test_generate_kernel_logs_prompt_uses_systemd_tool(self):
+        """Test kernel logs prompt uses systemd tool when available."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"])
+            result = server._generate_kernel_logs_prompt({})
+
+            assert hasattr(result.messages[0].content, "text")
+            prompt_text = result.messages[0].content.text  # type: ignore[attr-defined]
+            assert "sandbox_systemd" in prompt_text
+
+    def test_generate_kernel_logs_prompt_mentions_systemd_journal_group(self, mcp_server):
+        """Test kernel logs prompt mentions systemd-journal group requirement."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "systemd-journal" in prompt_text.lower() or "group" in prompt_text.lower()
+
+    def test_generate_kernel_logs_prompt_has_expected_output_structure(self, mcp_server):
+        """Test kernel logs prompt requests structured output."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        # Should request comprehensive analysis with specific sections
+        assert "Critical" in prompt_text or "critical" in prompt_text.lower()
+        assert "Warnings" in prompt_text or "warning" in prompt_text.lower()
+        assert "Recommendations" in prompt_text or "recommend" in prompt_text.lower()
+
+    # Tests for list-running-services prompt
+    def test_generate_list_running_services_prompt_basic(self, mcp_server):
+        """Test list running services prompt generation."""
+        result = mcp_server._generate_list_running_services_prompt({})
+
+        assert result.description == "List running services (filesystem-based discovery)"
+        assert len(result.messages) == 1
+        assert result.messages[0].role == "user"
+
+        prompt_text = result.messages[0].content.text
+        assert "/sys/fs/cgroup/system.slice" in prompt_text
+        assert "cgroup" in prompt_text.lower()
+
+    def test_generate_list_running_services_mentions_no_dbus(self, mcp_server):
+        """Test prompt explains D-Bus is not available."""
+        result = mcp_server._generate_list_running_services_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "D-Bus" in prompt_text or "systemctl" in prompt_text
+        assert "does NOT have" in prompt_text or "won't work" in prompt_text
+
+    def test_generate_list_running_services_uses_systemd_tool(self):
+        """Test prompt uses systemd tool when available."""
+        from unittest.mock import Mock, patch
+
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"])
+            result = server._generate_list_running_services_prompt({})
+
+            assert hasattr(result.messages[0].content, "text")
+            prompt_text = result.messages[0].content.text  # type: ignore[attr-defined]
+            assert "sandbox_systemd" in prompt_text
+
+    # Tests for check-service-resources prompt
+    def test_generate_check_service_resources_prompt_with_service_name(self, mcp_server):
+        """Test service resources prompt with service name."""
+        result = mcp_server._generate_check_service_resources_prompt({"service_name": "nginx"})
+
+        assert "nginx.service" in result.description
+        assert len(result.messages) == 1
+
+        prompt_text = result.messages[0].content.text
+        assert "nginx.service" in prompt_text
+        assert "memory.current" in prompt_text
+        assert "cpu.stat" in prompt_text
+
+    def test_generate_check_service_resources_adds_service_suffix(self, mcp_server):
+        """Test service name gets .service suffix if missing."""
+        result = mcp_server._generate_check_service_resources_prompt({"service_name": "nginx"})
+
+        prompt_text = result.messages[0].content.text
+        assert "nginx.service" in prompt_text
+
+    def test_generate_check_service_resources_requires_service_name(self, mcp_server):
+        """Test prompt requires service_name argument."""
+        with pytest.raises(ValueError, match="service_name argument is required"):
+            mcp_server._generate_check_service_resources_prompt({})
+
+    def test_generate_check_service_resources_includes_cgroup_paths(self, mcp_server):
+        """Test prompt includes cgroup filesystem paths."""
+        result = mcp_server._generate_check_service_resources_prompt({"service_name": "postgresql"})
+
+        prompt_text = result.messages[0].content.text
+        assert "/sys/fs/cgroup/system.slice/postgresql.service" in prompt_text
+        assert "cgroup.procs" in prompt_text
+
+    # Tests for discover-failed-services prompt
+    def test_generate_discover_failed_services_default_args(self, mcp_server):
+        """Test discover failed services with default arguments."""
+        result = mcp_server._generate_discover_failed_services_prompt({})
+
+        assert "today" in result.description
+        assert "priority=err" in result.description
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl" in prompt_text
+        assert "failed" in prompt_text.lower()
+
+    def test_generate_discover_failed_services_with_timeframe(self, mcp_server):
+        """Test discover failed services with custom timeframe."""
+        result = mcp_server._generate_discover_failed_services_prompt({"timeframe": "1 hour ago"})
+
+        prompt_text = result.messages[0].content.text
+        assert "1 hour ago" in prompt_text
+
+    def test_generate_discover_failed_services_explains_no_systemctl(self, mcp_server):
+        """Test prompt explains systemctl --failed not available."""
+        result = mcp_server._generate_discover_failed_services_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "systemctl --failed" in prompt_text or "D-Bus" in prompt_text
+
+    def test_generate_discover_failed_services_includes_failure_patterns(self, mcp_server):
+        """Test prompt includes common failure indicators."""
+        result = mcp_server._generate_discover_failed_services_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "code=exited" in prompt_text or "Failed to start" in prompt_text
+        assert "core dump" in prompt_text.lower()
+
+    # Tests for analyze-service-logs prompt
+    def test_generate_analyze_service_logs_with_service_name(self, mcp_server):
+        """Test analyze service logs prompt with service name."""
+        result = mcp_server._generate_analyze_service_logs_prompt({"service_name": "nginx"})
+
+        assert "nginx.service" in result.description
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -u nginx.service" in prompt_text
+
+    def test_generate_analyze_service_logs_requires_service_name(self, mcp_server):
+        """Test prompt requires service_name argument."""
+        with pytest.raises(ValueError, match="service_name argument is required"):
+            mcp_server._generate_analyze_service_logs_prompt({})
+
+    def test_generate_analyze_service_logs_with_timeframe(self, mcp_server):
+        """Test analyze logs with custom timeframe."""
+        result = mcp_server._generate_analyze_service_logs_prompt(
+            {"service_name": "postgresql", "timeframe": "24 hours ago"}
+        )
+
+        prompt_text = result.messages[0].content.text
+        assert "24 hours ago" in prompt_text
+
+    def test_generate_analyze_service_logs_includes_journalctl_tips(self, mcp_server):
+        """Test prompt includes journalctl usage tips."""
+        result = mcp_server._generate_analyze_service_logs_prompt({"service_name": "nginx"})
+
+        prompt_text = result.messages[0].content.text
+        assert "--since" in prompt_text
+        assert "--no-pager" in prompt_text or "-p" in prompt_text
+
+    def test_generate_analyze_service_logs_includes_error_patterns(self, mcp_server):
+        """Test prompt includes error search patterns."""
+        result = mcp_server._generate_analyze_service_logs_prompt({"service_name": "nginx"})
+
+        prompt_text = result.messages[0].content.text
+        assert "error" in prompt_text.lower()
+        assert "grep" in prompt_text.lower()
+
+    # Tests for monitor-service-health prompt
+    def test_generate_monitor_service_health_with_service_name(self, mcp_server):
+        """Test monitor service health prompt."""
+        result = mcp_server._generate_monitor_service_health_prompt({"service_name": "nginx"})
+
+        assert "nginx.service" in result.description
+        assert "health check" in result.description.lower()
+
+        prompt_text = result.messages[0].content.text
+        assert "nginx.service" in prompt_text
+        assert "comprehensive" in prompt_text.lower()
+
+    def test_generate_monitor_service_health_requires_service_name(self, mcp_server):
+        """Test prompt requires service_name argument."""
+        with pytest.raises(ValueError, match="service_name argument is required"):
+            mcp_server._generate_monitor_service_health_prompt({})
+
+    def test_generate_monitor_service_health_combines_multiple_checks(self, mcp_server):
+        """Test health check combines cgroups, processes, and logs."""
+        result = mcp_server._generate_monitor_service_health_prompt({"service_name": "postgresql"})
+
+        prompt_text = result.messages[0].content.text
+        # Should check cgroups
+        assert "/sys/fs/cgroup" in prompt_text
+        # Should check processes
+        assert "ps" in prompt_text or "Process" in prompt_text
+        # Should check logs
+        assert "journalctl" in prompt_text
+
+    def test_generate_monitor_service_health_defines_health_states(self, mcp_server):
+        """Test prompt defines health status levels."""
+        result = mcp_server._generate_monitor_service_health_prompt({"service_name": "nginx"})
+
+        prompt_text = result.messages[0].content.text
+        assert "Healthy" in prompt_text
+        assert "Degraded" in prompt_text or "Failed" in prompt_text
+
+    def test_generate_monitor_service_health_includes_resource_checks(self, mcp_server):
+        """Test health check includes resource usage."""
+        result = mcp_server._generate_monitor_service_health_prompt({"service_name": "nginx"})
+
+        prompt_text = result.messages[0].content.text
+        assert "memory" in prompt_text.lower()
+        assert "cpu" in prompt_text.lower()

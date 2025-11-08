@@ -413,8 +413,8 @@ shannot remote list
 Install remote dependencies:
 ```bash
 pip install shannot[remote]
-# or
-pip install shannot[all]
+# or with MCP support (includes remote)
+pip install shannot[mcp]
 ```
 
 ### MCP not using remote executor

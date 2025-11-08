@@ -38,11 +38,17 @@ bwrap --version
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
-# Install shannot
+# macOS/Windows users (for remote Linux targets)
+uv tool install "shannot[mcp]"
+
+# Linux users - local sandbox only
 uv tool install shannot
 
-# Or with MCP support for Claude Desktop
+# Linux users - with MCP for Claude Code/Codex
 uv tool install "shannot[mcp]"
+
+# Linux users - local & remote execution only (no MCP)
+uv tool install "shannot[remote]"
 ```
 
 #### Alternative: pipx (Ubuntu/Debian)
@@ -54,23 +60,27 @@ Ubuntu and Debian mark system Python as "externally managed" (PEP 668). Use `pip
 sudo apt install pipx
 pipx ensurepath
 
-# Install shannot
+# Install shannot (local execution only)
 pipx install shannot
 
-# Or with optional dependencies
-pipx install "shannot[mcp]"  # MCP/Claude Desktop support
-pipx install "shannot[all]"  # All optional features
+# With MCP support for Claude Code/Codex (includes remote execution)
+pipx install "shannot[mcp]"
+
+# Remote execution only (no MCP)
+pipx install "shannot[remote]"
 ```
 
 #### Traditional: pip
 
 ```bash
-# Basic installation
+# Basic installation (local execution only)
 pip install --user shannot
 
-# With optional dependencies
-pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
-pip install --user "shannot[all]"  # All optional features
+# With MCP support for Claude Code/Codex (includes remote execution)
+pip install --user "shannot[mcp]"
+
+# Remote execution only (no MCP)
+pip install --user "shannot[remote]"
 
 # Note: On Ubuntu/Debian, you may need --break-system-packages
 # (not recommended, use pipx or uv instead)
@@ -121,17 +131,14 @@ sudo pacman -S bubblewrap
 ### Optional Dependencies
 
 ```bash
-# MCP server for Claude Desktop
+# MCP server for Claude Code/Codex (includes remote execution)
 pip install --user "shannot[mcp]"
 
-# Remote execution via SSH
+# Remote execution via SSH only (no MCP)
 pip install --user "shannot[remote]"
 
 # Development tools (testing, linting)
 pip install --user "shannot[dev]"
-
-# Everything
-pip install --user "shannot[all]"
 ```
 
 ## Post-Installation

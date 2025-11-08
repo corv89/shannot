@@ -512,6 +512,151 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 > - PasswordAuthentication: yes (consider disabling)
 > - PermitRootLogin: no (good!)
 
+### Kernel Log Investigation
+
+> **You**: Check the kernel logs for any hardware errors
+
+> **Claude**: I'll analyze the kernel logs using journalctl.
+>
+> *[Uses check-kernel-logs prompt with sandbox_systemd tool]*
+>
+> *[Runs `journalctl -k -p err --since "24 hours ago"`]*
+>
+> Found 2 kernel errors in the last 24 hours:
+> - 14:23: "ata1.00: exception Emask 0x0 SAct 0x0 SErr 0x0 action 0x6"
+> - 16:45: "ACPI Warning: \_SB.PCI0.LPCB.EC0._QA2: Return Package has no elements"
+>
+> The ATA error suggests a possible disk issue. I recommend:
+> 1. Check SMART status with `smartctl -a /dev/sda`
+> 2. Monitor for additional disk errors
+> 3. Ensure backups are current
+
+> **You**: Show me all kernel messages from the current boot
+
+> **Claude**: *[Uses sandbox_systemd tool to run `journalctl -k -b 0`]*
+>
+> Here are the kernel messages from this boot session. The system booted successfully with:
+> - No critical errors
+> - All hardware detected properly
+> - 3 warnings about firmware loading (non-critical)
+> - Network interfaces initialized correctly
+
+### Service Discovery and Monitoring
+
+The systemd profile provides filesystem-based service discovery without D-Bus access. Claude can use specialized MCP prompts to guide these operations:
+
+#### List Running Services
+
+> **You**: What services are currently running?
+
+> **Claude**: I'll discover running services using the cgroup filesystem.
+>
+> *[Uses list-running-services prompt with sandbox_systemd tool]*
+>
+> *[Runs `ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'`]*
+>
+> Found 23 active services:
+> - nginx.service (3 processes)
+> - postgresql.service (5 processes)
+> - sshd.service (1 process)
+> - systemd-journald.service (1 process)
+> - cron.service (1 process)
+> ... (18 more services)
+
+#### Check Service Resources
+
+> **You**: How much memory is nginx using?
+
+> **Claude**: I'll check nginx resource usage via cgroup statistics.
+>
+> *[Uses check-service-resources prompt with sandbox_systemd tool]*
+>
+> *[Runs `cat /sys/fs/cgroup/system.slice/nginx.service/memory.current`]*
+>
+> nginx.service resource usage:
+> - Status: Running
+> - Processes: 3 (PIDs: 1234, 1235, 1236)
+> - Memory: 47.2 MB
+> - CPU time: 127.5 seconds (total since start)
+> - No recent errors in logs
+
+#### Find Failed Services
+
+> **You**: Are there any services that failed today?
+
+> **Claude**: I'll search journal logs for service failures.
+>
+> *[Uses discover-failed-services prompt with sandbox_systemd tool]*
+>
+> *[Runs `journalctl -p err --since today | grep '\.service'`]*
+>
+> Found 2 services with errors today:
+>
+> 1. **myapp.service** - Failed to start at 14:23
+>    - Error: "code=exited, status=1"
+>    - Last log: "Database connection refused"
+>    - Status: Still not running
+>
+> 2. **backup.service** - Temporary failure at 02:00
+>    - Error: "timeout"
+>    - Last log: "Backup completed successfully" (02:15)
+>    - Status: Now running normally
+
+#### Analyze Service Logs
+
+> **You**: Show me nginx logs from the last hour
+
+> **Claude**: I'll analyze nginx service logs.
+>
+> *[Uses analyze-service-logs prompt with sandbox_systemd tool]*
+>
+> *[Runs `journalctl -u nginx --since "1 hour ago" --no-pager`]*
+>
+> nginx.service log analysis (last hour):
+> - Total entries: 234
+> - Errors: 0
+> - Warnings: 2
+> - Last restart: None (stable since boot)
+> - Notable events:
+>   - 15:23: "200 GET /api/status (0.045s)"
+>   - 15:45: Warning - "client closed connection before sending response"
+
+#### Comprehensive Health Check
+
+> **You**: Give me a complete health check for postgresql
+
+> **Claude**: I'll perform a comprehensive health assessment.
+>
+> *[Uses monitor-service-health prompt with sandbox_systemd tool]*
+>
+> postgresql.service health report:
+>
+> **Status**: RUNNING
+> **Health**: Healthy
+> **Processes**: 5 (main + 4 workers)
+> **Resource Usage**:
+> - Memory: 256.8 MB
+> - CPU time: 1,847 seconds
+>
+> **Recent Activity** (last 24h):
+> - Errors: 0
+> - Restarts: 0
+> - Last started: 3 days ago
+>
+> **Listening Ports**: tcp/5432
+>
+> **Assessment**: Service is healthy with normal operation. No issues detected.
+
+### Why No systemctl Commands?
+
+The systemd profile does not include D-Bus access, so `systemctl` commands won't work. This is intentional for security:
+
+- **D-Bus provides two-way communication** - Could be used to modify system state
+- **Filesystem methods are truly read-only** - Cannot start/stop/restart services
+- **cgroup v2 provides sufficient data** - All monitoring needs are met
+
+Claude's MCP prompts automatically guide it to use the correct filesystem-based alternatives.
+
 ## Quick Reference - Claude Code CLI Commands
 
 ```bash

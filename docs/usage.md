@@ -282,6 +282,155 @@ shannot grep "ERROR" /var/log/syslog
 shannot wc -l /var/log/*.log
 ```
 
+### Kernel Log Analysis
+
+The systemd profile includes journalctl for accessing kernel logs:
+
+```bash
+# View kernel logs (equivalent to dmesg)
+shannot --profile systemd journalctl -k
+
+# Alternative syntax (--dmesg is equivalent to -k)
+shannot --profile systemd journalctl --dmesg
+
+# Last hour of kernel messages
+shannot --profile systemd journalctl -k --since "1 hour ago"
+
+# Kernel errors only
+shannot --profile systemd journalctl -k -p err
+
+# Current boot kernel logs
+shannot --profile systemd journalctl -k -b 0
+
+# Previous boot kernel logs
+shannot --profile systemd journalctl -k -b -1
+
+# Search for hardware errors
+shannot --profile systemd journalctl -k | grep -i "error\|fail"
+
+# Check for disk issues
+shannot --profile systemd journalctl -k | grep -i "ata\|scsi\|disk"
+
+# Memory-related kernel messages
+shannot --profile systemd journalctl -k | grep -i "oom\|memory"
+
+# Network hardware issues
+shannot --profile systemd journalctl -k | grep -i "eth\|wlan"
+
+# Combined filters: recent boot errors
+shannot --profile systemd journalctl -k -b 0 -p err
+```
+
+**Why journalctl instead of dmesg?**
+
+- `dmesg` requires `CAP_SYSLOG` capability (restricted in sandbox)
+- `journalctl -k` reads from journal files (accessible with proper permissions)
+- `journalctl --dmesg` is equivalent to `journalctl -k`
+- Both access the same kernel ring buffer data
+- journalctl provides better filtering and time-based queries
+
+**Setup for Full Access:**
+
+For complete access to kernel logs, add your user to the `systemd-journal` group:
+
+```bash
+sudo usermod -aG systemd-journal $USER
+# Log out and back in for changes to take effect
+```
+
+### Service Discovery Without D-Bus
+
+The systemd profile uses **filesystem-based service discovery** for enhanced security. Traditional `systemctl` commands require D-Bus access, which has been removed from the profile because D-Bus provides two-way IPC that could be used to modify system state.
+
+Instead, you can discover and monitor services using read-only filesystem methods:
+
+#### List Running Services
+
+```bash
+# List all running services via cgroup filesystem
+shannot --profile systemd ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'
+
+# Use systemd-cgls for hierarchical view
+shannot --profile systemd systemd-cgls /sys/fs/cgroup/system.slice
+
+# Cross-reference with services that have logged
+shannot --profile systemd journalctl -F _SYSTEMD_UNIT | grep '\.service$'
+```
+
+#### Check Service Resource Usage
+
+```bash
+# Check if a service is running
+shannot --profile systemd test -d /sys/fs/cgroup/system.slice/nginx.service && echo "Running" || echo "Not Running"
+
+# Get service PIDs
+shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/cgroup.procs
+
+# Check memory usage (in bytes)
+shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/memory.current
+
+# Check CPU statistics
+shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/cpu.stat
+
+# Monitor all services with resource usage
+shannot --profile systemd systemd-cgtop --depth=3 -n 1
+```
+
+#### Find Failed Services
+
+```bash
+# Search for services with errors today
+shannot --profile systemd journalctl -p err --since today | grep '\.service'
+
+# Find failed service starts
+shannot --profile systemd journalctl --since "1 hour ago" | grep -i "failed to start"
+
+# Check for service crashes
+shannot --profile systemd journalctl --since today | grep -i "core dump"
+```
+
+#### Analyze Service Logs
+
+```bash
+# View recent logs for a service
+shannot --profile systemd journalctl -u nginx -n 50
+
+# Check for errors in last hour
+shannot --profile systemd journalctl -u nginx -p err --since "1 hour ago"
+
+# Count service restarts
+shannot --profile systemd journalctl -u nginx --since today | grep -c "Started"
+
+# View service logs from previous boot
+shannot --profile systemd journalctl -u nginx -b -1
+```
+
+#### Capabilities Comparison
+
+| Feature | systemctl (D-Bus) | Filesystem Method |
+|---------|-------------------|-------------------|
+| List running services | ✅ `systemctl list-units` | ⚠️ Parse `/sys/fs/cgroup/system.slice/` |
+| Service state (active/failed) | ✅ `systemctl status` | ❌ Must infer from logs |
+| Resource usage | ⚠️ Limited | ✅ Full cgroup stats |
+| Service logs | ✅ `journalctl -u` | ✅ `journalctl -u` |
+| Start/stop service | ❌ (read-only) | ❌ (read-only) |
+
+**Why No D-Bus Access?**
+
+- **Security**: D-Bus socket enables two-way communication (less secure than read-only)
+- **Read-only guarantee**: Filesystem methods are truly read-only
+- **Sufficient data**: cgroup v2 exposes all necessary monitoring information  
+- **Better for automation**: File-based access is more scriptable
+
+**What You Can Still Do:**
+
+- ✅ List running services (via `/sys/fs/cgroup/`)
+- ✅ Monitor resource usage (via cgroup files and `systemd-cgtop`)
+- ✅ Analyze logs (via `journalctl`)
+- ✅ Find failures (via journal queries)
+- ❌ Query service state (active/inactive) - must infer from cgroups + logs
+- ❌ View service dependencies - parse unit files if needed
+
 
 ## Python API
 
