@@ -205,6 +205,7 @@ The `systemd.json` profile enables `systemctl` and `journalctl` commands for ins
 **What works out-of-the-box:**
 - `systemctl status/list-units/show` - Read-only systemd state via D-Bus
 - `journalctl` - User's own logs and world-readable system logs
+- `journalctl -k` / `journalctl --dmesg` - Kernel logs (modern alternative to `dmesg`)
 
 **For full system journal access (optional):**
 ```bash
@@ -219,9 +220,31 @@ After group membership, you'll have read access to:
 - Boot logs and kernel messages
 - Failed service diagnostics
 
+**Kernel Log Examples:**
+```bash
+# View kernel logs (equivalent to dmesg)
+shannot --profile systemd journalctl -k
+shannot --profile systemd journalctl --dmesg
+
+# Recent kernel errors
+shannot --profile systemd journalctl -k -p err --since "1 hour ago"
+
+# Current boot kernel messages
+shannot --profile systemd journalctl -k -b 0
+
+# Search for hardware issues
+shannot --profile systemd journalctl -k | grep -i "error\|fail"
+```
+
+**Why `journalctl -k` instead of `dmesg`?**
+- `dmesg` requires `CAP_SYSLOG` capability (restricted in sandbox)
+- `journalctl -k` reads from journal files (accessible with proper permissions)
+- Both access the same kernel ring buffer data
+- journalctl provides better filtering and time-based queries
+
 **Limitations:**
 - Write operations (start/stop/restart services) are blocked by read-only mounts
-- `dmesg` requires additional setup (see troubleshooting docs)
+- Live log following (`journalctl -f`) won't work in read-only sandbox
 - Some distros may have stricter journal permissions
 
 **Troubleshooting:**

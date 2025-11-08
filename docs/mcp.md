@@ -512,6 +512,35 @@ Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and 
 > - PasswordAuthentication: yes (consider disabling)
 > - PermitRootLogin: no (good!)
 
+### Kernel Log Investigation
+
+> **You**: Check the kernel logs for any hardware errors
+
+> **Claude**: I'll analyze the kernel logs using journalctl.
+>
+> *[Uses check-kernel-logs prompt with sandbox_systemd tool]*
+>
+> *[Runs `journalctl -k -p err --since "24 hours ago"`]*
+>
+> Found 2 kernel errors in the last 24 hours:
+> - 14:23: "ata1.00: exception Emask 0x0 SAct 0x0 SErr 0x0 action 0x6"
+> - 16:45: "ACPI Warning: \_SB.PCI0.LPCB.EC0._QA2: Return Package has no elements"
+>
+> The ATA error suggests a possible disk issue. I recommend:
+> 1. Check SMART status with `smartctl -a /dev/sda`
+> 2. Monitor for additional disk errors
+> 3. Ensure backups are current
+
+> **You**: Show me all kernel messages from the current boot
+
+> **Claude**: *[Uses sandbox_systemd tool to run `journalctl -k -b 0`]*
+>
+> Here are the kernel messages from this boot session. The system booted successfully with:
+> - No critical errors
+> - All hardware detected properly
+> - 3 warnings about firmware loading (non-critical)
+> - Network interfaces initialized correctly
+
 ## Quick Reference - Claude Code CLI Commands
 
 ```bash

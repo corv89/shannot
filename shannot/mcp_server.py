@@ -328,6 +328,25 @@ class ShannotMCPServer:
                         )
                     ],
                 ),
+                Prompt(
+                    name="check-kernel-logs",
+                    description=(
+                        "Access and analyze kernel logs using journalctl for hardware, "
+                        "driver, and low-level system diagnostics"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="timeframe",
+                            description="Time period to analyze (e.g., 'last hour', 'since boot')",
+                            required=False,
+                        ),
+                        PromptArgument(
+                            name="priority",
+                            description="Log priority filter (e.g., 'err', 'warning', 'info')",
+                            required=False,
+                        ),
+                    ],
+                ),
             ]
 
         @self.server.get_prompt()
@@ -347,6 +366,8 @@ class ShannotMCPServer:
                 return self._generate_process_monitoring_prompt(args)
             elif name == "check-service-status":
                 return self._generate_service_check_prompt(args)
+            elif name == "check-kernel-logs":
+                return self._generate_kernel_logs_prompt(args)
             else:
                 raise ValueError(f"Unknown prompt: {name}")
 
@@ -620,6 +641,78 @@ Provide a status report with:
             ],
         )
 
+    def _generate_kernel_logs_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate kernel log analysis prompt."""
+        timeframe = args.get("timeframe", "recent entries")
+        priority = args.get("priority", "all priorities")
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please analyze kernel logs for {timeframe} ({priority}).
+Use the {tool_name} tool with the systemd profile:
+
+1. **Access Kernel Ring Buffer via journalctl**:
+   - Run: `journalctl -k` (kernel messages only)
+   - Or: `journalctl --dmesg` (equivalent to -k)
+   - For time filtering: `journalctl -k --since "1 hour ago"`
+   - For specific boot: `journalctl -k -b 0` (current boot)
+
+2. **Filter by Priority** (if {priority} != 'all priorities'):
+   - Errors only: `journalctl -k -p err`
+   - Warnings: `journalctl -k -p warning`
+   - Info and above: `journalctl -k -p info`
+   - All messages: `journalctl -k` (default)
+
+3. **Common Kernel Log Diagnostic Patterns**:
+   - Hardware errors: `journalctl -k | grep -i "error\\|fail"`
+   - Driver issues: `journalctl -k | grep -i "driver"`
+   - Disk problems: `journalctl -k | grep -i "ata\\|scsi\\|disk\\|sda\\|nvme"`
+   - Memory issues: `journalctl -k | grep -i "oom\\|memory\\|killed process"`
+   - Network hardware: `journalctl -k | grep -i "eth\\|wlan\\|network"`
+   - USB devices: `journalctl -k | grep -i "usb"`
+   - Firmware: `journalctl -k | grep -i "firmware"`
+
+4. **Time-Based Analysis**:
+   - Current boot: `journalctl -k -b 0`
+   - Previous boot: `journalctl -k -b -1`
+   - Last hour: `journalctl -k --since "1 hour ago"`
+   - Last 24h: `journalctl -k --since "24 hours ago"`
+   - Since specific time: `journalctl -k --since "2024-01-01 00:00:00"`
+
+5. **Combined Filters** (examples):
+   - Recent errors: `journalctl -k -p err --since "1 hour ago"`
+   - Boot errors: `journalctl -k -b 0 -p err`
+   - Hardware warnings: `journalctl -k -p warning | grep -i "hardware"`
+
+**Important Notes**:
+- `journalctl -k` and `journalctl --dmesg` access the same kernel ring buffer data
+- Traditional `dmesg` command may require CAP_SYSLOG capability (restricted)
+- journalctl reads from /var/log/journal and /run/log/journal (accessible via systemd profile)
+- User must be in `systemd-journal` group for full access to historical logs
+- Requires systemd profile with journal bind mounts enabled
+
+**Limitations**:
+- Live following (`journalctl -kf`) won't work in read-only sandbox
+- Some very early boot messages may not be captured in journal
+
+Provide comprehensive analysis including:
+- **Critical Issues**: Any hardware errors, driver failures, or system crashes
+- **Warnings**: Important warnings that need attention
+- **Patterns**: Recurring messages or error sequences
+- **Hardware Health**: Assessment of hardware-level problems (disk, memory, network)
+- **Driver Status**: Any driver loading failures or incompatibilities
+- **Recommendations**: Suggested actions based on kernel messages found
+- **Timeline**: When issues occurred (if time-based patterns exist)"""
+
+        return GetPromptResult(
+            description=f"Kernel log analysis ({timeframe}, {priority})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
     def _get_diagnostics_tool_name(self) -> str:
         """Get the name of the diagnostics sandbox tool."""
         # Find diagnostics profile or any available profile
@@ -632,6 +725,16 @@ Provide a status report with:
             return self._make_tool_name(next(iter(self.deps_by_profile.keys())))
 
         return "sandbox_diagnostics"
+
+    def _get_systemd_tool_name(self) -> str:
+        """Get the name of the systemd sandbox tool."""
+        # Find systemd profile or fall back to diagnostics
+        for pname in self.deps_by_profile.keys():
+            if "systemd" in pname.lower():
+                return self._make_tool_name(pname)
+
+        # Fallback to diagnostics if systemd not found
+        return self._get_diagnostics_tool_name()
 
     def _generate_tool_description(self, deps: SandboxDeps) -> str:
         """Generate a description for a profile's tool."""

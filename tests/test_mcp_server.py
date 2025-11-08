@@ -672,6 +672,7 @@ class TestMCPServerPrompts:
             mcp_server._generate_disk_audit_prompt({}),
             mcp_server._generate_process_monitoring_prompt({}),
             mcp_server._generate_service_check_prompt({"service_name": "test"}),
+            mcp_server._generate_kernel_logs_prompt({}),
         ]
 
         for prompt in prompts:
@@ -686,3 +687,144 @@ class TestMCPServerPrompts:
             # Message should have text content
             assert hasattr(prompt.messages[0].content, "text")
             assert prompt.messages[0].content.text
+
+    def test_get_systemd_tool_name_with_systemd_profile(self):
+        """Test _get_systemd_tool_name finds systemd profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"])
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_systemd"
+
+    def test_get_systemd_tool_name_with_executor_label(self):
+        """Test _get_systemd_tool_name includes executor label."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"], executor_label="remote")
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_remote_systemd"
+
+    def test_get_systemd_tool_name_fallback_to_diagnostics(self):
+        """Test _get_systemd_tool_name falls back to diagnostics if no systemd profile."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "diagnostics"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["diagnostics"])
+            tool_name = server._get_systemd_tool_name()
+
+            assert tool_name == "sandbox_diagnostics"
+
+    def test_generate_kernel_logs_prompt_default_args(self, mcp_server):
+        """Test kernel logs prompt generation with default arguments."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        assert "recent entries" in result.description
+        assert "all priorities" in result.description
+        assert len(result.messages) == 1
+        assert result.messages[0].role == "user"
+
+        prompt_text = result.messages[0].content.text
+        assert "kernel logs" in prompt_text
+        assert "journalctl -k" in prompt_text
+        assert "journalctl --dmesg" in prompt_text
+        assert "sandbox_test1" in prompt_text  # Should use diagnostics tool name (fallback)
+
+    def test_generate_kernel_logs_prompt_with_timeframe(self, mcp_server):
+        """Test kernel logs prompt with custom timeframe."""
+        result = mcp_server._generate_kernel_logs_prompt({"timeframe": "last hour"})
+
+        assert "last hour" in result.description
+        prompt_text = result.messages[0].content.text
+        assert "last hour" in prompt_text
+        assert 'journalctl -k --since "1 hour ago"' in prompt_text
+
+    def test_generate_kernel_logs_prompt_with_priority(self, mcp_server):
+        """Test kernel logs prompt with priority filter."""
+        result = mcp_server._generate_kernel_logs_prompt({"priority": "err"})
+
+        assert "err" in result.description
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -p err" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_diagnostic_patterns(self, mcp_server):
+        """Test kernel logs prompt includes common diagnostic patterns."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        # Check for diagnostic patterns
+        assert "Hardware errors" in prompt_text or "hardware" in prompt_text.lower()
+        assert "Driver issues" in prompt_text or "driver" in prompt_text.lower()
+        assert "Disk problems" in prompt_text or "disk" in prompt_text.lower()
+        assert "Memory issues" in prompt_text or "memory" in prompt_text.lower()
+        assert "oom" in prompt_text.lower()
+
+    def test_generate_kernel_logs_prompt_explains_journalctl_vs_dmesg(self, mcp_server):
+        """Test kernel logs prompt explains why journalctl is preferred over dmesg."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "dmesg" in prompt_text
+        assert "CAP_SYSLOG" in prompt_text or "capability" in prompt_text.lower()
+        assert "journalctl" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_time_filtering(self, mcp_server):
+        """Test kernel logs prompt includes time-based filtering examples."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -b 0" in prompt_text  # Current boot
+        assert "journalctl -k -b -1" in prompt_text  # Previous boot
+        assert "--since" in prompt_text
+
+    def test_generate_kernel_logs_prompt_includes_priority_filtering(self, mcp_server):
+        """Test kernel logs prompt includes priority filtering examples."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "journalctl -k -p err" in prompt_text
+        assert "journalctl -k -p warning" in prompt_text
+
+    def test_generate_kernel_logs_prompt_uses_systemd_tool(self):
+        """Test kernel logs prompt uses systemd tool when available."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            mock_deps = Mock()
+            mock_deps.profile = Mock()
+            mock_deps.profile.name = "systemd"
+            mock_deps_class.return_value = mock_deps
+
+            server = ShannotMCPServer(profile_paths=["systemd"])
+            result = server._generate_kernel_logs_prompt({})
+
+            assert hasattr(result.messages[0].content, "text")
+            prompt_text = result.messages[0].content.text  # type: ignore[attr-defined]
+            assert "sandbox_systemd" in prompt_text
+
+    def test_generate_kernel_logs_prompt_mentions_systemd_journal_group(self, mcp_server):
+        """Test kernel logs prompt mentions systemd-journal group requirement."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        assert "systemd-journal" in prompt_text.lower() or "group" in prompt_text.lower()
+
+    def test_generate_kernel_logs_prompt_has_expected_output_structure(self, mcp_server):
+        """Test kernel logs prompt requests structured output."""
+        result = mcp_server._generate_kernel_logs_prompt({})
+
+        prompt_text = result.messages[0].content.text
+        # Should request comprehensive analysis with specific sections
+        assert "Critical" in prompt_text or "critical" in prompt_text.lower()
+        assert "Warnings" in prompt_text or "warning" in prompt_text.lower()
+        assert "Recommendations" in prompt_text or "recommend" in prompt_text.lower()

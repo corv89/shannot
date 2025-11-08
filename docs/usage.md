@@ -282,6 +282,62 @@ shannot grep "ERROR" /var/log/syslog
 shannot wc -l /var/log/*.log
 ```
 
+### Kernel Log Analysis
+
+The systemd profile includes journalctl for accessing kernel logs:
+
+```bash
+# View kernel logs (equivalent to dmesg)
+shannot --profile systemd journalctl -k
+
+# Alternative syntax (--dmesg is equivalent to -k)
+shannot --profile systemd journalctl --dmesg
+
+# Last hour of kernel messages
+shannot --profile systemd journalctl -k --since "1 hour ago"
+
+# Kernel errors only
+shannot --profile systemd journalctl -k -p err
+
+# Current boot kernel logs
+shannot --profile systemd journalctl -k -b 0
+
+# Previous boot kernel logs
+shannot --profile systemd journalctl -k -b -1
+
+# Search for hardware errors
+shannot --profile systemd journalctl -k | grep -i "error\|fail"
+
+# Check for disk issues
+shannot --profile systemd journalctl -k | grep -i "ata\|scsi\|disk"
+
+# Memory-related kernel messages
+shannot --profile systemd journalctl -k | grep -i "oom\|memory"
+
+# Network hardware issues
+shannot --profile systemd journalctl -k | grep -i "eth\|wlan"
+
+# Combined filters: recent boot errors
+shannot --profile systemd journalctl -k -b 0 -p err
+```
+
+**Why journalctl instead of dmesg?**
+
+- `dmesg` requires `CAP_SYSLOG` capability (restricted in sandbox)
+- `journalctl -k` reads from journal files (accessible with proper permissions)
+- `journalctl --dmesg` is equivalent to `journalctl -k`
+- Both access the same kernel ring buffer data
+- journalctl provides better filtering and time-based queries
+
+**Setup for Full Access:**
+
+For complete access to kernel logs, add your user to the `systemd-journal` group:
+
+```bash
+sudo usermod -aG systemd-journal $USER
+# Log out and back in for changes to take effect
+```
+
 
 ## Python API
 
