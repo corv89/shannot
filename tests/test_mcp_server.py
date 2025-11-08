@@ -230,6 +230,45 @@ class TestShannotMCPServerInit:
         server = ShannotMCPServer(profile_paths=[])
         assert isinstance(server.deps_by_profile, dict)
 
+    def test_warns_on_macos_when_bwrap_missing(self, mock_profile_paths, caplog):
+        """Warn macOS users when no profiles load due to missing bubblewrap."""
+        import platform
+
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            # Simulate bubblewrap missing
+            mock_deps_class.side_effect = Exception(
+                "Bubblewrap executable not found at /usr/bin/bwrap"
+            )
+
+            with patch("platform.system", return_value="Darwin"):
+                with caplog.at_level("WARNING"):
+                    server = ShannotMCPServer(profile_paths=mock_profile_paths)
+
+                    # Should have no profiles loaded
+                    assert len(server.deps_by_profile) == 0
+
+                    # Should have macOS-specific warning
+                    assert any("macOS" in record.message for record in caplog.records)
+                    assert any("--target" in record.message for record in caplog.records)
+
+    def test_warns_on_linux_when_bwrap_missing(self, mock_profile_paths, caplog):
+        """Warn Linux users when no profiles load due to missing bubblewrap."""
+        with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
+            # Simulate bubblewrap missing
+            mock_deps_class.side_effect = Exception(
+                "Bubblewrap executable not found at /usr/bin/bwrap"
+            )
+
+            with patch("platform.system", return_value="Linux"):
+                with caplog.at_level("WARNING"):
+                    server = ShannotMCPServer(profile_paths=mock_profile_paths)
+
+                    # Should have no profiles loaded
+                    assert len(server.deps_by_profile) == 0
+
+                    # Should have Linux-specific warning (mentions installing)
+                    assert any("Install bubblewrap" in record.message for record in caplog.records)
+
 
 class TestMCPServerToolRegistration:
     """Test tool registration and listing."""
@@ -295,6 +334,26 @@ class TestMCPServerToolRegistration:
 
             tool_names = set(server.server._tool_cache.keys())
             assert tool_names == {"sandbox_lima_test1", "sandbox_lima_test2"}
+
+    def test_handlers_registered_once_for_multiple_profiles(self, mcp_server):
+        """Ensure tool handlers are registered exactly once, not once per profile."""
+        # This test works with both real and dummy MCP servers
+        # by checking that request_handlers dict has exactly one entry per request type
+        from mcp.types import CallToolRequest, ListToolsRequest
+
+        handlers = mcp_server.server.request_handlers
+
+        # Should have exactly 1 list_tools handler (not 2, one per profile)
+        list_tools_handlers = [h for k, h in handlers.items() if k == ListToolsRequest]
+        assert len(list_tools_handlers) == 1, (
+            "list_tools handler should be registered once, not once per profile"
+        )
+
+        # Should have exactly 1 call_tool handler (not 2, one per profile)
+        call_tool_handlers = [h for k, h in handlers.items() if k == CallToolRequest]
+        assert len(call_tool_handlers) == 1, (
+            "call_tool handler should be registered once, not once per profile"
+        )
 
 
 class TestMCPServerToolDescriptions:

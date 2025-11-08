@@ -58,6 +58,7 @@ class ShannotMCPServer:
         if profile_paths is None:
             profile_paths = self._discover_profiles()
 
+        bwrap_errors = 0
         for spec in profile_paths:
             try:
                 deps = self._create_deps_from_spec(spec, executor)
@@ -65,6 +66,25 @@ class ShannotMCPServer:
                 logger.info(f"Loaded profile: {deps.profile.name}")
             except Exception as e:
                 logger.error(f"Failed to load profile {spec}: {e}")
+                if "Bubblewrap executable not found" in str(e):
+                    bwrap_errors += 1
+
+        # Warn if no profiles loaded due to missing bubblewrap
+        if len(self.deps_by_profile) == 0 and bwrap_errors > 0:
+            import platform
+
+            if platform.system() == "Darwin":
+                logger.warning(
+                    "No profiles loaded: Bubblewrap is not available on macOS. "
+                    "To use Shannot tools, configure remote execution with --target. "
+                    "See: https://corv89.github.io/shannot/usage/#remote-execution"
+                )
+            else:
+                logger.warning(
+                    "No profiles loaded: Bubblewrap not found. "
+                    "Install bubblewrap or configure remote execution with --target. "
+                    "See: https://corv89.github.io/shannot/installation/"
+                )
 
         # Register handlers
         self._register_tools()
@@ -115,14 +135,7 @@ class ShannotMCPServer:
     def _register_tools(self) -> None:
         """Register MCP tools for each profile."""
 
-        # Register a generic tool for each profile
-        for profile_name in self.deps_by_profile.keys():
-            self._register_profile_tools(profile_name)
-
-    def _register_profile_tools(self, profile_name: str) -> None:
-        """Register tools for a specific profile."""
-
-        # Generic command execution tool
+        # Register handlers once for all profiles
         @self.server.list_tools()
         async def list_tools() -> list[Tool]:
             """List available MCP tools."""
