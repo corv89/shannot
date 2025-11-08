@@ -758,6 +758,15 @@ def _install_to_client(
                 success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
                 if success_hint:
                     _LOGGER.info("✓ %s", success_hint)
+
+                # Warn macOS users if no target specified
+                if target_name is None and platform.system() == "Darwin":
+                    _LOGGER.warning(
+                        "⚠️  Bubblewrap is not available on macOS. "
+                        "Configure remote execution with --target to use Shannot tools."
+                    )
+                    _LOGGER.info("   See: https://corv89.github.io/shannot/usage/#remote-execution")
+
                 return True
             else:
                 return False
@@ -822,6 +831,14 @@ def _install_to_client(
         success_hint = _MCP_CLIENT_SUCCESS_HINTS.get(client)
         if success_hint:
             _LOGGER.info("✓ %s", success_hint)
+
+        # Warn macOS users if no target specified
+        if target_name is None and platform.system() == "Darwin":
+            _LOGGER.warning(
+                "⚠️  Bubblewrap is not available on macOS. "
+                "Configure remote execution with --target to use Shannot tools."
+            )
+            _LOGGER.info("   See: https://corv89.github.io/shannot/usage/#remote-execution")
 
         return True
     except Exception as e:
@@ -1098,6 +1115,11 @@ def _handle_remote_add(args: argparse.Namespace) -> int:
         username = args.username
         if username is not None:
             username = validate_type(username, str, "username")
+        else:
+            # Default to current user if not specified
+            import getpass
+
+            username = getpass.getuser()
 
         key_file = args.key_file
         if key_file is not None:

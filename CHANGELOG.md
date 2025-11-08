@@ -5,10 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2025-11-07
+## [0.3.1] - 2025-11-08
+
+### Breaking Changes
+
+- Remove D-Bus and add filesystem-based service discovery
+- Invert dependency defaults to include MCP and remote by default
 
 ### Dependencies
 
+- Bump version to 0.3.1
+
+### Enhancements
+
+- Update lockfile for MCP/asyncssh as core dependencies
+
+### Features
+
+- Add systemd profile for systemctl/journalctl access
+- Add kernel log access via MCP prompts
+- Add systemd support ([#45](https://github.com/corv89/shannot/pull/45))
+- Add TYPE_CHECKING imports to resolve basedpyright errors
+
+## [0.3.0] - 2025-11-07
+
+### Bug Fixes
+
+- Fix import order in test_config.py (ruff format)
+- Fix type errors in test_config.py by adding isinstance checks
+- Fix ruff line length violations in error messages
+
+### Dependencies
+
+- Bump github/codeql-action from 3 to 4 ([#5](https://github.com/corv89/shannot/pull/5))
+- Bump actions/setup-python from 5 to 6 ([#3](https://github.com/corv89/shannot/pull/3))
 - Bump actions/github-script from 7 to 8 ([#24](https://github.com/corv89/shannot/pull/24))
 - Bump actions/download-artifact from 5 to 6 ([#26](https://github.com/corv89/shannot/pull/26))
 - Bump actions/upload-pages-artifact from 3 to 4 ([#28](https://github.com/corv89/shannot/pull/28))
@@ -20,89 +50,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Enhancements
 
-- Improve Validation ([#38](https://github.com/corv89/shannot/pull/38))
-- MCP QoL improvements ([#36](https://github.com/corv89/shannot/pull/36))
-- Support Claude Code ([#21](https://github.com/corv89/shannot/pull/21))
-
-### Features
-
-- Add security policy and changelog ([#22](https://github.com/corv89/shannot/pull/22))
-- Add Prompts ([#30](https://github.com/corv89/shannot/pull/30))
-- Remove Pydantic ([#37](https://github.com/corv89/shannot/pull/37))
-- Replace Codecov with Coverage.py ([#29](https://github.com/corv89/shannot/pull/29))
-
-## [0.2.1] - 2025-10-25
-
-### Bug Fixes
-
-- Fix MCP server capabilities declaration for Claude Code
-- Fix profile package distribution
-
-### Changes
-
-- Change Claude Code MCP install to use user scope instead of local
-
-### Dependencies
-
-- Bump github/codeql-action from 3 to 4 ([#5](https://github.com/corv89/shannot/pull/5))
-- Bump actions/setup-python from 5 to 6 ([#3](https://github.com/corv89/shannot/pull/3))
-
-### Documentation
-
-- Improve MCP documentation for Claude Code integration
-- Enhance API reference documentation with usage examples and context
-
-### Enhancements
-
-- Improve developer tooling with UV-backed make targets
-- Improve DX via Makefile ([#20](https://github.com/corv89/shannot/pull/20))
-
-### Features
-
-- Add remote MCP support ([#14](https://github.com/corv89/shannot/pull/14))
-- Add py.typed marker file for PEP 561 compliance
-- Add CHANGELOG.md and git-cliff automation
-- Add SECURITY.md with vulnerability reporting and security policy
-
-## [0.2.0] - 2025-10-24
-
-### Bug Fixes
-
-- Fix import order in test_config.py (ruff format)
-- Fix type errors in test_config.py by adding isinstance checks
-- Update license format in pyproject.toml
-- Complete overhaul of install.sh installation logic
-- Fix basedpyright type errors
-- Fix basedpyright errors in test files
-- Fix failing tests
-- Fix test skip conditions for tool cache tests
-
-### Code Style
-
-- Fix ruff line length violations in error messages
-
-### Dependencies
-
-- Dependency & Packaging Updates
-
-### Enhancements
-
 - Improve error messages
 - Update GitHub Actions to use pip instead of removed install.sh
+- Update license format in pyproject.toml
+- Update tests for granular namespace isolation flags
 - Improve README.md for clarity and user focus
 - Improve formatting in README.md
 - Improve README formatting for MCP integration
+- Improve DX via Makefile ([#20](https://github.com/corv89/shannot/pull/20))
+- Improve Validation ([#38](https://github.com/corv89/shannot/pull/38))
 
 ### Features
 
 - Add configuration system with TOML and remote execution
 - Add UV support and improve installation experience
 - Add configurable user namespace isolation and enhanced error diagnostics
+- Add comprehensive troubleshooting guide and improve README
 - Add --version flag to CLI and bump version to 0.1.1
-
-### Testing
-
-- Update tests for granular namespace isolation flags
+- Add remote MCP support ([#14](https://github.com/corv89/shannot/pull/14))
+- Add security policy and changelog ([#22](https://github.com/corv89/shannot/pull/22))
+- Add Prompts ([#30](https://github.com/corv89/shannot/pull/30))
 
 ## [0.1.1] - 2025-10-20
 
