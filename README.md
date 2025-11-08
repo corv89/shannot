@@ -183,7 +183,7 @@ Shannot uses JSON profiles to control sandbox behavior. Four profiles included:
 - **`minimal.json`** (default) - Basic commands (ls, cat, grep, find), works out-of-the-box
 - **`readonly.json`** - Extended command set, suitable for most use cases
 - **`diagnostics.json`** - System monitoring (df, free, ps, uptime), perfect for LLM agents
-- **`systemd.json`** - Includes systemctl and journalctl for service/log inspection
+- **`systemd.json`** - Includes journalctl and filesystem-based service discovery (no D-Bus)
 
 ```json
 {
@@ -200,12 +200,13 @@ See [profiles](https://corv89.github.io/shannot/profiles) for complete documenta
 
 ### Systemd & Journal Access
 
-The `systemd.json` profile enables `systemctl` and `journalctl` commands for inspecting services and logs. Permission levels:
+The `systemd.json` profile enables journal access and service monitoring using **filesystem-based methods** instead of D-Bus for enhanced security.
 
 **What works out-of-the-box:**
-- `systemctl status/list-units/show` - Read-only systemd state via D-Bus
 - `journalctl` - User's own logs and world-readable system logs
 - `journalctl -k` / `journalctl --dmesg` - Kernel logs (modern alternative to `dmesg`)
+- `systemd-cgtop` - Live process/resource monitoring
+- Service discovery via `/sys/fs/cgroup/system.slice/` parsing
 
 **For full system journal access (optional):**
 ```bash
@@ -217,8 +218,29 @@ sudo usermod -aG systemd-journal $USER
 
 After group membership, you'll have read access to:
 - All system service logs
-- Boot logs and kernel messages
+- Boot logs and kernel messages  
 - Failed service diagnostics
+
+**Service Discovery Without D-Bus:**
+
+The systemd profile uses **filesystem-based service discovery** for security:
+
+```bash
+# List running services (via cgroup filesystem)
+shannot --profile systemd ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'
+
+# Check service resource usage
+shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/memory.current
+
+# Monitor all services (live)
+shannot --profile systemd systemd-cgtop --depth=3
+
+# Find failed services (via logs)
+shannot --profile systemd journalctl -p err --since today | grep "\.service"
+
+# Analyze service logs
+shannot --profile systemd journalctl -u nginx -n 100
+```
 
 **Kernel Log Examples:**
 ```bash
@@ -236,14 +258,36 @@ shannot --profile systemd journalctl -k -b 0
 shannot --profile systemd journalctl -k | grep -i "error\|fail"
 ```
 
-**Why `journalctl -k` instead of `dmesg`?**
-- `dmesg` requires `CAP_SYSLOG` capability (restricted in sandbox)
-- `journalctl -k` reads from journal files (accessible with proper permissions)
-- Both access the same kernel ring buffer data
-- journalctl provides better filtering and time-based queries
+**Why no systemctl commands?**
+
+Traditional `systemctl status/list-units` requires D-Bus access to query systemd's manager process. D-Bus has been removed from the systemd profile because:
+
+- **Security**: D-Bus socket enables two-way IPC (less secure than read-only)
+- **Read-only guarantee**: Filesystem methods are truly read-only
+- **Sufficient data**: cgroup v2 exposes all necessary monitoring information
+- **Better for automation**: File-based access is more scriptable
+
+**What you can still do:**
+- ✅ List running services (via `/sys/fs/cgroup/`)
+- ✅ Monitor resource usage (via cgroup files)
+- ✅ Analyze logs (via `journalctl`)
+- ✅ Find failures (via journal queries)
+- ❌ Query service state (active/inactive) - must infer from cgroups + logs
+- ❌ View service dependencies - no easy alternative
+
+**MCP Integration:**
+
+When using Claude Code/Desktop, specialized MCP prompts guide the LLM to use these filesystem-based methods automatically:
+- `list-running-services` - Discovers services via cgroup parsing
+- `check-service-resources` - Reads cgroup metrics for resource analysis
+- `discover-failed-services` - Analyzes journal for failures
+- `analyze-service-logs` - Deep-dives into service logs
+- `monitor-service-health` - Comprehensive health check
+
+See [MCP documentation](https://corv89.github.io/shannot/mcp/) for details.
 
 **Limitations:**
-- Write operations (start/stop/restart services) are blocked by read-only mounts
+- Write operations (start/stop/restart services) are blocked
 - Live log following (`journalctl -f`) won't work in read-only sandbox
 - Some distros may have stricter journal permissions
 

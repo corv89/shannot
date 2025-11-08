@@ -347,6 +347,85 @@ class ShannotMCPServer:
                         ),
                     ],
                 ),
+                Prompt(
+                    name="list-running-services",
+                    description=(
+                        "Discover active systemd services using filesystem-based methods "
+                        "(cgroup parsing) without requiring D-Bus access"
+                    ),
+                    arguments=[],
+                ),
+                Prompt(
+                    name="check-service-resources",
+                    description=(
+                        "Check resource usage (memory, CPU, I/O) of a specific service "
+                        "using cgroup statistics"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="service_name",
+                            description="Name of the service (e.g., 'nginx', 'postgresql')",
+                            required=True,
+                        ),
+                    ],
+                ),
+                Prompt(
+                    name="discover-failed-services",
+                    description=(
+                        "Find services that failed recently by analyzing journal logs "
+                        "for error messages"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="timeframe",
+                            description="Time period to check (e.g., 'today', '1 hour ago')",
+                            required=False,
+                        ),
+                        PromptArgument(
+                            name="priority",
+                            description="Log priority level (default: 'err')",
+                            required=False,
+                        ),
+                    ],
+                ),
+                Prompt(
+                    name="analyze-service-logs",
+                    description=(
+                        "Deep analysis of a specific service's logs to diagnose issues, "
+                        "find errors, and track restart events"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="service_name",
+                            description="Name of the service to analyze",
+                            required=True,
+                        ),
+                        PromptArgument(
+                            name="timeframe",
+                            description="Time period to analyze (default: '1 hour ago')",
+                            required=False,
+                        ),
+                        PromptArgument(
+                            name="priority",
+                            description="Minimum log priority (default: 'info')",
+                            required=False,
+                        ),
+                    ],
+                ),
+                Prompt(
+                    name="monitor-service-health",
+                    description=(
+                        "Comprehensive health check for a service combining cgroup stats, "
+                        "process info, and log analysis"
+                    ),
+                    arguments=[
+                        PromptArgument(
+                            name="service_name",
+                            description="Name of the service to monitor",
+                            required=True,
+                        ),
+                    ],
+                ),
             ]
 
         @self.server.get_prompt()
@@ -368,6 +447,16 @@ class ShannotMCPServer:
                 return self._generate_service_check_prompt(args)
             elif name == "check-kernel-logs":
                 return self._generate_kernel_logs_prompt(args)
+            elif name == "list-running-services":
+                return self._generate_list_running_services_prompt(args)
+            elif name == "check-service-resources":
+                return self._generate_check_service_resources_prompt(args)
+            elif name == "discover-failed-services":
+                return self._generate_discover_failed_services_prompt(args)
+            elif name == "analyze-service-logs":
+                return self._generate_analyze_service_logs_prompt(args)
+            elif name == "monitor-service-health":
+                return self._generate_monitor_service_health_prompt(args)
             else:
                 raise ValueError(f"Unknown prompt: {name}")
 
@@ -705,6 +794,421 @@ Provide comprehensive analysis including:
 
         return GetPromptResult(
             description=f"Kernel log analysis ({timeframe}, {priority})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_list_running_services_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate prompt for listing running services without D-Bus."""
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please discover active systemd services using filesystem-based methods.
+Use the {tool_name} tool with the systemd profile:
+
+**Important**: This profile does NOT have D-Bus access, so `systemctl` commands won't work.
+Instead, use filesystem-based service discovery methods:
+
+1. **List Running Services via cgroup Filesystem**:
+   - Run: `ls -1 /sys/fs/cgroup/system.slice/ | grep '\\.service$'`
+   - This shows all services with active cgroups
+   - Each directory represents a running service
+
+2. **Verify Services Have Active Processes**:
+   - For each service, check: `cat /sys/fs/cgroup/system.slice/<service>/cgroup.procs`
+   - Non-empty file = service has running processes
+   - Example: `cat /sys/fs/cgroup/system.slice/nginx.service/cgroup.procs`
+
+3. **Use systemd-cgls for Tree View**:
+   - Run: `systemd-cgls /sys/fs/cgroup/system.slice`
+   - Shows hierarchical view of services and processes
+   - No D-Bus required for this operation
+
+4. **Cross-Reference with Journal** (optional):
+   - Run: `journalctl -F _SYSTEMD_UNIT | grep '\\.service$'`
+   - Shows services that have logged (may include stopped services)
+   - Combine with cgroup listing for comprehensive view
+
+5. **Count Processes per Service**:
+   - For each service: `cat /sys/fs/cgroup/system.slice/<service>/cgroup.procs | wc -l`
+   - Shows how many processes the service has
+
+**Limitations**:
+- Cannot show service state (active/inactive/failed) like `systemctl list-units`
+- Only shows services with active cgroup directories
+- User services require checking `/sys/fs/cgroup/user.slice/` separately
+- Service state must be inferred from cgroup existence + log analysis
+
+**What This Method Provides**:
+- ✅ List of running services
+- ✅ Process count per service
+- ✅ Service hierarchy (via systemd-cgls)
+- ❌ Service state (active/failed/inactive) - use logs to infer
+- ❌ Service dependencies - parse unit files if needed
+
+Provide a summary including:
+- **Running Services**: List of active services found
+- **Process Count**: How many processes each service has
+- **Health Indicators**: Any services with unusual characteristics
+- **Next Steps**: Suggestions for specific services to investigate further"""
+
+        return GetPromptResult(
+            description="List running services (filesystem-based discovery)",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_check_service_resources_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate prompt for checking service resource usage via cgroups."""
+        service_name = args.get("service_name", "")
+        if not service_name:
+            raise ValueError("service_name argument is required")
+
+        # Add .service suffix if not present
+        if not service_name.endswith(".service"):
+            service_name = f"{service_name}.service"
+
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please analyze resource usage for {service_name} using cgroup statistics.
+Use the {tool_name} tool with the systemd profile:
+
+**Important**: No D-Bus access available - using cgroup v2 filesystem instead.
+
+1. **Check if Service is Running**:
+   - Run: `test -d /sys/fs/cgroup/system.slice/{service_name} && echo "Running" \\
+     || echo "Not Running"`
+   - Or: `ls -la /sys/fs/cgroup/system.slice/{service_name}/`
+
+2. **Get Process Information**:
+   - List PIDs: `cat /sys/fs/cgroup/system.slice/{service_name}/cgroup.procs`
+   - Process details: `ps -p $(cat /sys/fs/cgroup/system.slice/{service_name}/cgroup.procs) \\
+     -o pid,user,comm,%cpu,%mem,vsz,rss,start,time,args`
+
+3. **Memory Usage**:
+   - Current memory: `cat /sys/fs/cgroup/system.slice/{service_name}/memory.current`
+   - Memory limit: `cat /sys/fs/cgroup/system.slice/{service_name}/memory.max`
+   - Peak memory: `cat /sys/fs/cgroup/system.slice/{service_name}/memory.peak`
+   - Detailed stats: `cat /sys/fs/cgroup/system.slice/{service_name}/memory.stat`
+   - **Note**: Values are in bytes. Divide by 1048576 for MB, 1073741824 for GB.
+
+4. **CPU Statistics**:
+   - CPU stats: `cat /sys/fs/cgroup/system.slice/{service_name}/cpu.stat`
+   - Shows `usage_usec` (total CPU time in microseconds)
+   - Shows `user_usec` and `system_usec` (user vs kernel CPU time)
+   - **Note**: These are cumulative values since service start
+
+5. **I/O Statistics** (if available):
+   - I/O stats: `cat /sys/fs/cgroup/system.slice/{service_name}/io.stat`
+   - Shows read/write bytes and operations per device
+
+6. **Live Monitoring with systemd-cgtop**:
+   - Run: `systemd-cgtop --depth=3 -n 1 | grep {service_name}`
+   - Shows formatted CPU%, memory usage, and tasks
+
+7. **Check Recent Logs for Context**:
+   - Last 20 lines: `journalctl -u {service_name} -n 20 --no-pager`
+   - Recent errors: `journalctl -u {service_name} -p err --since "1 hour ago"`
+
+**Interpreting cgroup Values**:
+- `memory.current`: Current memory usage in bytes
+- `memory.max`: Memory limit (may be "max" for unlimited)
+- `cpu.stat usage_usec`: Total CPU microseconds consumed
+- `cgroup.procs`: One PID per line
+
+**Limitations**:
+- Cannot get service uptime from cgroups (check journal start time instead)
+- CPU usage is cumulative time, not current percentage
+- systemd-cgtop provides percentage but is a snapshot
+- No service state information (use logs to infer health)
+
+Provide analysis including:
+- **Status**: Running or Not Running
+- **Resource Usage**: Memory (in MB/GB), CPU time
+- **Process Count**: Number of active processes
+- **Health Assessment**: Based on resource consumption and logs
+- **Recommendations**: If memory/CPU usage seems unusual"""
+
+        return GetPromptResult(
+            description=f"Resource usage analysis for {service_name}",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_discover_failed_services_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate prompt for discovering failed services via journal analysis."""
+        timeframe = args.get("timeframe", "today")
+        priority = args.get("priority", "err")
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please find services that failed recently by analyzing journal logs.
+Use the {tool_name} tool with the systemd profile:
+
+**Important**: Without D-Bus access, cannot query `systemctl --failed`.
+Instead, analyze journal logs to infer service failures.
+
+1. **Find Error-Level Messages from systemd**:
+   - Run: `journalctl -p {priority} --since "{timeframe}" | grep -E '\\.service|Failed|failed'`
+   - Look for patterns like "Failed to start", "Main process exited"
+
+2. **Extract Units with Errors**:
+   - Run: `journalctl -p {priority} --since "{timeframe}" --no-pager | \\
+     grep -oP '[a-zA-Z0-9_-]+\\.service' | sort -u`
+   - Lists unique service names that appeared in error logs
+
+3. **Search for Specific Failure Patterns**:
+   - Failed starts: `journalctl --since "{timeframe}" | grep -i "failed to start"`
+   - Service exits: `journalctl --since "{timeframe}" | grep -i "main process exited"`
+   - Core dumps: `journalctl --since "{timeframe}" | grep -i "core dump"`
+   - Timeouts: `journalctl --since "{timeframe}" | grep -i "timeout"`
+
+4. **Analyze Each Failed Service**:
+   - For each service found, get detailed logs:
+   - Run: `journalctl -u <service_name> -p {priority} --since "{timeframe}" --no-pager`
+   - Look for error messages, exit codes, and stack traces
+
+5. **Check for Restart Loops**:
+   - Run: `journalctl --since "{timeframe}" | grep -E "Started|Stopped" | grep <service_name>`
+   - Multiple start/stop cycles indicate instability
+
+6. **Cross-Reference with Running Services**:
+   - Check if failed service is currently running:
+   - Run: `test -d /sys/fs/cgroup/system.slice/<service>.service && \\
+     echo "Now Running" || echo "Still Failed"`
+
+**Common Failure Indicators**:
+- "code=exited, status=1" - Service exited with error
+- "code=killed, signal=KILL" - Service was killed (OOM?)
+- "code=killed, signal=TERM" - Service was terminated
+- "Start request repeated too quickly" - Restart loop
+- "Failed with result 'timeout'" - Service took too long to start
+- "Failed with result 'exit-code'" - Service crashed on startup
+
+**Limitations**:
+- Relies on journal entries (may miss silent failures)
+- Cannot query systemd manager state directly
+- Some services may fail without logging to journal
+- Requires systemd-journal group for full log access
+
+Provide summary including:
+- **Failed Services**: List of services with errors in timeframe
+- **Failure Types**: Exit codes, signals, timeout, etc.
+- **Error Messages**: Key error messages for each service
+- **Current Status**: Whether services are now running
+- **Recommendations**: Actions to diagnose or fix issues"""
+
+        return GetPromptResult(
+            description=f"Discover failed services ({timeframe}, priority={priority})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_analyze_service_logs_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate prompt for deep service log analysis."""
+        service_name = args.get("service_name", "")
+        if not service_name:
+            raise ValueError("service_name argument is required")
+
+        # Add .service suffix if not present
+        if not service_name.endswith(".service"):
+            service_name = f"{service_name}.service"
+
+        timeframe = args.get("timeframe", "1 hour ago")
+        priority = args.get("priority", "info")
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please perform deep analysis of {service_name} logs to diagnose issues.
+Use the {tool_name} tool with the systemd profile:
+
+1. **Get Recent Logs**:
+   - Run: `journalctl -u {service_name} --since "{timeframe}" -p {priority} --no-pager`
+   - Shows all messages at {priority} level and above
+
+2. **Search for Error Patterns**:
+   - Errors: `journalctl -u {service_name} --since "{timeframe}" | \\
+     grep -iE "error|fail|exception|timeout"`
+   - Refused connections: `journalctl -u {service_name} --since "{timeframe}" | \\
+     grep -i "refused\\|denied"`
+   - Crashes: `journalctl -u {service_name} --since "{timeframe}" | \\
+     grep -iE "crash|segfault|core dump"`
+
+3. **Track Service Lifecycle Events**:
+   - Start/stop events: `journalctl -u {service_name} --since "{timeframe}" | \\
+     grep -iE "start|stop|restart|reload"`
+   - Count restarts: `journalctl -u {service_name} --since "{timeframe}" | \\
+     grep -c "Started"`
+   - Last start: `journalctl -u {service_name} | grep "Started" | tail -1`
+
+4. **Analyze Log Volume**:
+   - Total entries: `journalctl -u {service_name} --since "{timeframe}" | wc -l`
+   - By priority:
+     - Errors: `journalctl -u {service_name} --since "{timeframe}" -p err | wc -l`
+     - Warnings: `journalctl -u {service_name} --since "{timeframe}" -p warning | wc -l`
+     - Info: `journalctl -u {service_name} --since "{timeframe}" -p info | wc -l`
+
+5. **Boot History** (if available):
+   - List boots: `journalctl -u {service_name} --list-boots | tail -5`
+   - Previous boot logs: `journalctl -u {service_name} -b -1 -n 50 --no-pager`
+   - Compare with current boot
+
+6. **Time-Based Pattern Analysis**:
+   - Last hour: `journalctl -u {service_name} --since "1 hour ago" -n 100`
+   - Specific time range: `journalctl -u {service_name} \\
+     --since "2024-01-01 10:00" --until "2024-01-01 11:00"`
+   - Follow live (limited in sandbox): `journalctl -u {service_name} -f -n 20`
+
+7. **Extract Specific Information**:
+   - Exit codes: `journalctl -u {service_name} | grep "code=exited"`
+   - Signals: `journalctl -u {service_name} | grep "code=killed"`
+   - Configuration changes: `journalctl -u {service_name} | grep -i "config\\|reload"`
+
+**journalctl Pro Tips**:
+- `-o json`: Output as JSON for parsing
+- `-o verbose`: Show all metadata fields
+- `-p <priority>`: Filter by syslog priority (emerg/alert/crit/err/warning/notice/info/debug)
+- `--since` and `--until`: Time ranges
+- `-n <number>`: Limit output lines
+- `--no-pager`: Don't use less/more (better for scripting)
+
+**Limitations**:
+- No live following in read-only sandbox
+- Boot logs require persistent journal (journald configuration)
+- Full access requires systemd-journal group membership
+
+Provide comprehensive analysis:
+- **Summary**: Overall service health and activity level
+- **Error Analysis**: Types and frequency of errors
+- **Lifecycle**: Start/stop/restart patterns and timestamps
+- **Anomalies**: Unusual log patterns or error spikes
+- **Timeline**: Key events in chronological order
+- **Root Cause**: Likely cause of any issues found
+- **Recommendations**: Specific actions to resolve problems"""
+
+        return GetPromptResult(
+            description=f"Deep log analysis for {service_name} ({timeframe})",
+            messages=[
+                PromptMessage(
+                    role="user",
+                    content=TextContent(type="text", text=prompt_text),
+                )
+            ],
+        )
+
+    def _generate_monitor_service_health_prompt(self, args: dict[str, str]) -> GetPromptResult:
+        """Generate comprehensive service health monitoring prompt."""
+        service_name = args.get("service_name", "")
+        if not service_name:
+            raise ValueError("service_name argument is required")
+
+        # Add .service suffix if not present
+        if not service_name.endswith(".service"):
+            service_name = f"{service_name}.service"
+
+        tool_name = self._get_systemd_tool_name()
+
+        prompt_text = f"""Please perform a comprehensive health check for {service_name}.
+Use the {tool_name} tool with the systemd profile:
+
+**This combines cgroup statistics, process information, and log analysis for \\
+complete service health assessment.**
+
+1. **Check Running Status** (cgroup-based):
+   - Run: `test -d /sys/fs/cgroup/system.slice/{service_name} && \\
+     echo "RUNNING" || echo "NOT RUNNING"`
+   - If running, continue with detailed checks
+
+2. **Process Information**:
+   - List PIDs: `cat /sys/fs/cgroup/system.slice/{service_name}/cgroup.procs`
+   - Full process details:
+     ```
+     ps -p $(cat /sys/fs/cgroup/system.slice/{service_name}/cgroup.procs \\
+       2>/dev/null || echo 1) \\
+       -o pid,ppid,user,%cpu,%mem,vsz,rss,stat,start,time,comm,args 2>/dev/null
+     ```
+
+3. **Resource Usage**:
+   - Memory: `cat /sys/fs/cgroup/system.slice/{service_name}/memory.current`
+   - CPU stats: `cat /sys/fs/cgroup/system.slice/{service_name}/cpu.stat`
+   - Live view: `systemd-cgtop --depth=3 -n 1 | grep {service_name}`
+   - Convert memory bytes to MB: divide by 1048576
+
+4. **Recent Log Analysis**:
+   - Last 50 lines: `journalctl -u {service_name} -n 50 --no-pager`
+   - Recent errors: `journalctl -u {service_name} -p err \\
+     --since "1 hour ago"`
+   - Count errors today: `journalctl -u {service_name} -p err \\
+     --since today | wc -l`
+
+5. **Restart Analysis** (last 24 hours):
+   - Count restarts: `journalctl -u {service_name} --since "24 hours ago" | \\
+     grep -c "Started\\|Stopped"`
+   - Last start time: `journalctl -u {service_name} | \\
+     grep "Started" | tail -1`
+   - Any crashes: `journalctl -u {service_name} --since "24 hours ago" | \\
+     grep -i "core dump\\|segfault"`
+
+6. **Port/Network Status** (if ss is available):
+   - Listening ports: `ss -tlnp 2>/dev/null | \\
+     grep -i {service_name.replace(".service", "")}`
+   - Or: `ps -p $(cat /sys/fs/cgroup/system.slice/{service_name}/cgroup.procs) \\
+     -o pid | tail -n +2 | xargs -I {{}} ss -tlnp | grep {{}}`
+
+7. **Configuration File Check** (common locations):
+   - Service unit: `cat /lib/systemd/system/{service_name} 2>/dev/null || \\
+     cat /etc/systemd/system/{service_name}`
+   - Check for MemoryMax, CPUQuota limits
+   - App config: `ls -l /etc/{service_name.replace(".service", "")}/ 2>/dev/null`
+
+8. **Health Score Indicators**:
+   - ✅ Running with processes: Healthy
+   - ⚠️ Running but errors in logs: Degraded
+   - ⚠️ Running but frequent restarts: Unstable
+   - ⚠️ High memory usage (>80% of limit): Resource pressure
+   - ❌ Not running + recent errors: Failed
+   - ❌ Not running + crash logs: Crashed
+
+**Determine Health Status**:
+- **Healthy**: Running, no errors, stable, normal resource usage
+- **Degraded**: Running but errors/warnings in logs
+- **Unstable**: Frequent restarts, intermittent errors
+- **Resource-Constrained**: High memory/CPU usage approaching limits
+- **Failed**: Not running with recent error logs
+- **Unknown**: Cannot determine (insufficient data)
+
+**Limitations**:
+- Cannot query systemd state directly (no D-Bus)
+- Service uptime must be inferred from journal start time
+- systemctl-specific fields unavailable (SubState, LoadState, etc.)
+
+Provide comprehensive health report:
+- **Status**: RUNNING or NOT RUNNING
+- **Health**: Healthy/Degraded/Unstable/Failed/Unknown
+- **Process Count**: Number of active processes
+- **Resource Usage**: Memory (MB), CPU time
+- **Recent Errors**: Count and summary of recent errors
+- **Restart Count**: Times restarted in last 24h
+- **Listening Ports**: If applicable
+- **Issues Found**: Any problems detected
+- **Recommendations**: Specific actions based on findings
+- **Overall Assessment**: Summary and severity level"""
+
+        return GetPromptResult(
+            description=f"Comprehensive health check for {service_name}",
             messages=[
                 PromptMessage(
                     role="user",
