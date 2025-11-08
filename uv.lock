@@ -1508,8 +1508,14 @@ wheels = [
 
 [[package]]
 name = "shannot"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "." }
+dependencies = [
+    { name = "asyncssh" },
+    { name = "mcp" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "tomli-w" },
+]
 
 [package.optional-dependencies]
 dev = [
@@ -1524,24 +1530,12 @@ dev = [
     { name = "ruff" },
     { name = "types-setuptools" },
 ]
-mcp = [
-    { name = "asyncssh" },
-    { name = "mcp" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "tomli-w" },
-]
-remote = [
-    { name = "asyncssh" },
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-    { name = "tomli-w" },
-]
 
 [package.metadata]
 requires-dist = [
-    { name = "asyncssh", marker = "extra == 'mcp'", specifier = ">=2.14.0" },
-    { name = "asyncssh", marker = "extra == 'remote'", specifier = ">=2.14.0" },
+    { name = "asyncssh", specifier = ">=2.14.0" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.18.0" },
+    { name = "mcp", specifier = ">=1.18.0" },
     { name = "mkdocs", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "mkdocs-material", marker = "extra == 'dev'", specifier = ">=9.0.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'", specifier = ">=0.24.0" },
@@ -1550,13 +1544,11 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'mcp'", specifier = ">=2.0.0" },
-    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'remote'", specifier = ">=2.0.0" },
-    { name = "tomli-w", marker = "extra == 'mcp'", specifier = ">=1.0.0" },
-    { name = "tomli-w", marker = "extra == 'remote'", specifier = ">=1.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
+    { name = "tomli-w", specifier = ">=1.0.0" },
     { name = "types-setuptools", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev", "mcp", "remote"]
+provides-extras = ["minimal", "dev"]
 
 [[package]]
 name = "six"
