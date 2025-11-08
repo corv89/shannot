@@ -38,6 +38,7 @@ bwrap --version
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
+
 # Standard installation (includes MCP server and remote execution)
 uv tool install shannot
 
