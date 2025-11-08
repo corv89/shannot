@@ -158,6 +158,10 @@ shannot systemctl status
 # Exploration
 shannot find / -name "*.conf"
 shannot grep -r "pattern" /var/log
+
+# Systemd inspection (requires systemd.json profile)
+shannot --profile systemd systemctl status nginx
+shannot --profile systemd journalctl -u nginx -n 50
 ```
 
 ```python
@@ -174,11 +178,12 @@ if result.succeeded():
 
 ## Configuration
 
-Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
+Shannot uses JSON profiles to control sandbox behavior. Four profiles included:
 
 - **`minimal.json`** (default) - Basic commands (ls, cat, grep, find), works out-of-the-box
 - **`readonly.json`** - Extended command set, suitable for most use cases
 - **`diagnostics.json`** - System monitoring (df, free, ps, uptime), perfect for LLM agents
+- **`systemd.json`** - Includes systemctl and journalctl for service/log inspection
 
 ```json
 {
@@ -192,6 +197,38 @@ Shannot uses JSON profiles to control sandbox behavior. Three profiles included:
 ```
 
 See [profiles](https://corv89.github.io/shannot/profiles) for complete documentation.
+
+### Systemd & Journal Access
+
+The `systemd.json` profile enables `systemctl` and `journalctl` commands for inspecting services and logs. Permission levels:
+
+**What works out-of-the-box:**
+- `systemctl status/list-units/show` - Read-only systemd state via D-Bus
+- `journalctl` - User's own logs and world-readable system logs
+
+**For full system journal access (optional):**
+```bash
+# Add your user to the systemd-journal group
+sudo usermod -aG systemd-journal $USER
+
+# Log out and back in for group membership to take effect
+```
+
+After group membership, you'll have read access to:
+- All system service logs
+- Boot logs and kernel messages
+- Failed service diagnostics
+
+**Limitations:**
+- Write operations (start/stop/restart services) are blocked by read-only mounts
+- `dmesg` requires additional setup (see troubleshooting docs)
+- Some distros may have stricter journal permissions
+
+**Troubleshooting:**
+If you see "Permission denied" errors:
+1. Verify group membership: `groups | grep systemd-journal`
+2. Check journal permissions: `ls -l /var/log/journal`
+3. Try user journal only: `journalctl --user`
 
 ## How It Works
 
