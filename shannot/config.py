@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -20,6 +20,10 @@ else:
         ) from exc
 
 from .execution import SandboxExecutor
+
+if TYPE_CHECKING:
+    from .executors.local import LocalExecutor
+    from .executors.ssh import SSHExecutor
 from .validation import (
     ValidationError,
     validate_bool,
@@ -355,7 +359,9 @@ def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
         f.write("\n".join(lines))
 
 
-def create_executor(config: ShannotConfig, executor_name: str | None = None) -> SandboxExecutor:
+def create_executor(
+    config: ShannotConfig, executor_name: str | None = None
+) -> "LocalExecutor | SSHExecutor":
     """Create an executor from configuration.
 
     Args:
