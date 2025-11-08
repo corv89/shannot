@@ -38,17 +38,12 @@ bwrap --version
 curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
 # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
-# macOS/Windows users (for remote Linux targets)
-uv tool install "shannot[mcp]"
 
-# Linux users - local sandbox only
+# Standard installation (includes MCP server and remote execution)
 uv tool install shannot
 
-# Linux users - with MCP for Claude Code/Codex
-uv tool install "shannot[mcp]"
-
-# Linux users - local & remote execution only (no MCP)
-uv tool install "shannot[remote]"
+# Minimal installation (Linux-only local CLI, no MCP or remote support)
+uv tool install "shannot[minimal]"
 ```
 
 #### Alternative: pipx (Ubuntu/Debian)
@@ -60,27 +55,21 @@ Ubuntu and Debian mark system Python as "externally managed" (PEP 668). Use `pip
 sudo apt install pipx
 pipx ensurepath
 
-# Install shannot (local execution only)
+# Standard installation (includes MCP and remote execution)
 pipx install shannot
 
-# With MCP support for Claude Code/Codex (includes remote execution)
-pipx install "shannot[mcp]"
-
-# Remote execution only (no MCP)
-pipx install "shannot[remote]"
+# Minimal installation (Linux-only local CLI)
+pipx install "shannot[minimal]"
 ```
 
 #### Traditional: pip
 
 ```bash
-# Basic installation (local execution only)
+# Standard installation (includes MCP and remote execution)
 pip install --user shannot
 
-# With MCP support for Claude Code/Codex (includes remote execution)
-pip install --user "shannot[mcp]"
-
-# Remote execution only (no MCP)
-pip install --user "shannot[remote]"
+# Minimal installation (Linux-only local CLI)
+pip install --user "shannot[minimal]"
 
 # Note: On Ubuntu/Debian, you may need --break-system-packages
 # (not recommended, use pipx or uv instead)
@@ -130,14 +119,13 @@ sudo pacman -S bubblewrap
 
 ### Optional Dependencies
 
+Shannot includes MCP server and remote execution support by default. The only optional dependency is for a minimal installation:
+
 ```bash
-# MCP server for Claude Code/Codex (includes remote execution)
-pip install --user "shannot[mcp]"
+# Minimal installation (Linux-only local CLI, excludes MCP and remote support)
+pip install --user "shannot[minimal]"
 
-# Remote execution via SSH only (no MCP)
-pip install --user "shannot[remote]"
-
-# Development tools (testing, linting)
+# Development tools (testing, linting, documentation)
 pip install --user "shannot[dev]"
 ```
 

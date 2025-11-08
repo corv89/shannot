@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shannot"
-version = "0.3.0"
+version = "0.3.1"
 description = "Secure read-only sandboxing for LLM agents and system diagnostics"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -24,10 +24,17 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Environment :: Console",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "mcp>=1.18.0",
+    "asyncssh>=2.14.0",
+    "tomli>=2.0.0; python_version < '3.11'",
+    "tomli-w>=1.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
@@ -40,6 +47,7 @@ shannot = "shannot.cli:main"
 shannot-mcp = "shannot.mcp_main:entrypoint"
 
 [project.optional-dependencies]
+minimal = []
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21.0",
@@ -51,17 +59,6 @@ dev = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.0.0",
     "mkdocstrings[python]>=0.24.0",
-]
-mcp = [
-    "mcp>=1.18.0",
-    "asyncssh>=2.14.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "tomli-w>=1.0.0",
-]
-remote = [
-    "asyncssh>=2.14.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "tomli-w>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]
