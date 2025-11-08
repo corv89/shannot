@@ -1115,6 +1115,11 @@ def _handle_remote_add(args: argparse.Namespace) -> int:
         username = args.username
         if username is not None:
             username = validate_type(username, str, "username")
+        else:
+            # Default to current user if not specified
+            import getpass
+
+            username = getpass.getuser()
 
         key_file = args.key_file
         if key_file is not None:
