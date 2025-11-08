@@ -200,102 +200,31 @@ See [profiles](https://corv89.github.io/shannot/profiles) for complete documenta
 
 ### Systemd & Journal Access
 
-The `systemd.json` profile enables journal access and service monitoring using **filesystem-based methods** instead of D-Bus for enhanced security.
+The `systemd.json` profile provides access to systemd journals and service monitoring using **filesystem-based methods** (no D-Bus required).
 
-**What works out-of-the-box:**
-- `journalctl` - User's own logs and world-readable system logs
-- `journalctl -k` / `journalctl --dmesg` - Kernel logs (modern alternative to `dmesg`)
-- `systemd-cgtop` - Live process/resource monitoring
-- Service discovery via `/sys/fs/cgroup/system.slice/` parsing
-
-**For full system journal access (optional):**
+**Quick examples:**
 ```bash
-# Add your user to the systemd-journal group
-sudo usermod -aG systemd-journal $USER
+# View kernel logs
+shannot --profile systemd journalctl -k
 
-# Log out and back in for group membership to take effect
-```
+# Analyze service logs
+shannot --profile systemd journalctl -u nginx -n 50
 
-After group membership, you'll have read access to:
-- All system service logs
-- Boot logs and kernel messages  
-- Failed service diagnostics
-
-**Service Discovery Without D-Bus:**
-
-The systemd profile uses **filesystem-based service discovery** for security:
-
-```bash
 # List running services (via cgroup filesystem)
 shannot --profile systemd ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'
 
-# Check service resource usage
-shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/memory.current
-
-# Monitor all services (live)
+# Monitor service resources
 shannot --profile systemd systemd-cgtop --depth=3
-
-# Find failed services (via logs)
-shannot --profile systemd journalctl -p err --since today | grep "\.service"
-
-# Analyze service logs
-shannot --profile systemd journalctl -u nginx -n 100
 ```
 
-**Kernel Log Examples:**
+**Optional: Full journal access**
 ```bash
-# View kernel logs (equivalent to dmesg)
-shannot --profile systemd journalctl -k
-shannot --profile systemd journalctl --dmesg
-
-# Recent kernel errors
-shannot --profile systemd journalctl -k -p err --since "1 hour ago"
-
-# Current boot kernel messages
-shannot --profile systemd journalctl -k -b 0
-
-# Search for hardware issues
-shannot --profile systemd journalctl -k | grep -i "error\|fail"
+# Add your user to systemd-journal group for complete log access
+sudo usermod -aG systemd-journal $USER
+# Log out and back in for group membership to take effect
 ```
 
-**Why no systemctl commands?**
-
-Traditional `systemctl status/list-units` requires D-Bus access to query systemd's manager process. D-Bus has been removed from the systemd profile because:
-
-- **Security**: D-Bus socket enables two-way IPC (less secure than read-only)
-- **Read-only guarantee**: Filesystem methods are truly read-only
-- **Sufficient data**: cgroup v2 exposes all necessary monitoring information
-- **Better for automation**: File-based access is more scriptable
-
-**What you can still do:**
-- ✅ List running services (via `/sys/fs/cgroup/`)
-- ✅ Monitor resource usage (via cgroup files)
-- ✅ Analyze logs (via `journalctl`)
-- ✅ Find failures (via journal queries)
-- ❌ Query service state (active/inactive) - must infer from cgroups + logs
-- ❌ View service dependencies - no easy alternative
-
-**MCP Integration:**
-
-When using Claude Code/Desktop, specialized MCP prompts guide the LLM to use these filesystem-based methods automatically:
-- `list-running-services` - Discovers services via cgroup parsing
-- `check-service-resources` - Reads cgroup metrics for resource analysis
-- `discover-failed-services` - Analyzes journal for failures
-- `analyze-service-logs` - Deep-dives into service logs
-- `monitor-service-health` - Comprehensive health check
-
-See [MCP documentation](https://corv89.github.io/shannot/mcp/) for details.
-
-**Limitations:**
-- Write operations (start/stop/restart services) are blocked
-- Live log following (`journalctl -f`) won't work in read-only sandbox
-- Some distros may have stricter journal permissions
-
-**Troubleshooting:**
-If you see "Permission denied" errors:
-1. Verify group membership: `groups | grep systemd-journal`
-2. Check journal permissions: `ls -l /var/log/journal`
-3. Try user journal only: `journalctl --user`
+**Note:** `systemctl` commands are not available (require D-Bus). Use filesystem-based alternatives for service discovery. See [usage guide](https://corv89.github.io/shannot/usage/#service-discovery-without-d-bus) for details.
 
 ## How It Works
 
