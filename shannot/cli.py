@@ -702,6 +702,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profile",
         help="Default profile for this remote (name like 'minimal' or path to .json file)",
     )
+    _ = remote_add_parser.add_argument(
+        "--skip-test",
+        action="store_true",
+        help="Skip automatic connection testing after adding the remote",
+    )
     remote_add_parser.set_defaults(handler=_handle_remote_add)
 
     # remote remove
@@ -1223,11 +1228,52 @@ def _handle_remote_add(args: argparse.Namespace) -> int:
             _LOGGER.info(f"  Key: {key_file}")
         if normalized_profile:
             _LOGGER.info(f"  Profile: {normalized_profile}")
-        _LOGGER.info(f"\nTest with: shannot remote test {name}")
-        _LOGGER.info(f"Use with: shannot --target {name} ls /")
-        return 0
     except Exception as e:
         _LOGGER.error(f"Failed to save config: {e}")
+        return 1
+
+    # Check if we should skip testing
+    skip_test = getattr(args, "skip_test", False)
+    if skip_test:
+        _LOGGER.info(f"\nSkipping connection test (--skip-test specified)")
+        _LOGGER.info(f"Test manually with: shannot remote test {name}")
+        _LOGGER.info(f"Use with: shannot --target {name} ls /")
+        return 0
+
+    # Automatically test the connection
+    _LOGGER.info(f"\nTesting connection to '{name}'...")
+
+    try:
+        from .config import create_executor
+
+        # Reload config to get the executor we just added
+        config = load_config()
+        executor = create_executor(config, name)
+        executor_config = config.executor[name]
+
+        # Test connection with detailed error reporting
+        success, error_msg = _test_remote_connection(
+            name, executor_config, executor, verbose=False
+        )
+
+        if success:
+            _LOGGER.info("✓ Connection successful")
+            _LOGGER.info(f"\nYou can now use this target with:")
+            _LOGGER.info(f"  shannot --target {name} ls /")
+            return 0
+        else:
+            _LOGGER.warning("⚠ Connection test failed\n")
+            _LOGGER.error(error_msg)
+            _LOGGER.info(f"\nThe remote '{name}' was saved, but connection testing failed.")
+            _LOGGER.info("Fix the issues above and test again with:")
+            _LOGGER.info(f"  shannot remote test {name}")
+            return 1
+
+    except Exception as e:
+        _LOGGER.warning("⚠ Could not test connection automatically")
+        _LOGGER.error(f"  Error: {e}")
+        _LOGGER.info(f"\nThe remote '{name}' was saved. Test manually with:")
+        _LOGGER.info(f"  shannot remote test {name}")
         return 1
 
 
@@ -1278,10 +1324,135 @@ def _handle_remote_remove(args: argparse.Namespace) -> int:
         return 1
 
 
-def _handle_remote_test(args: argparse.Namespace) -> int:
-    """Test connection to a remote target."""
+def _test_remote_connection(
+    name: str,
+    executor_config,
+    executor,
+    *,
+    verbose: bool = False,
+) -> tuple[bool, str | None]:
+    """Test connection to a remote target and check for bubblewrap.
+
+    Returns:
+        Tuple of (success, error_message). If successful, error_message is None.
+    """
     import asyncio
 
+    # Load profile using same logic as SandboxDeps
+    profile_name = executor_config.profile or "minimal"
+
+    # Check if it's a path or a name
+    if "/" in profile_name or profile_name.endswith(".json"):
+        # It's a path
+        profile = _load_profile(profile_name)
+    else:
+        # It's a name - check standard locations
+        user_profile = Path.home() / ".config" / "shannot" / f"{profile_name}.json"
+        if user_profile.exists():
+            profile = _load_profile(str(user_profile))
+        else:
+            # Fall back to bundled profiles
+            bundled_profile = Path(__file__).parent.parent / "profiles" / f"{profile_name}.json"
+            profile = _load_profile(str(bundled_profile))
+
+    # Try to run a simple command to test connectivity
+    async def test():
+        result = await executor.run_command(profile, ["echo", "test"], timeout=10)
+        return result
+
+    try:
+        result = asyncio.run(test())
+    except TimeoutError:
+        return False, "Connection timed out after 10 seconds"
+    except Exception as e:
+        # Check for specific error types
+        error_str = str(e)
+        if "Permission denied" in error_str or "Authentication failed" in error_str:
+            return False, (
+                f"SSH authentication failed: {e}\n\n"
+                "Common solutions:\n"
+                "  1. Check SSH key permissions:\n"
+                "     chmod 600 ~/.ssh/id_rsa\n"
+                "     chmod 600 ~/.ssh/id_ed25519\n"
+                "  2. Verify SSH key is added to remote's authorized_keys:\n"
+                f"     ssh-copy-id {executor_config.username}@{executor_config.host}\n"
+                "  3. Test SSH manually:\n"
+                f"     ssh {executor_config.username}@{executor_config.host}\n\n"
+                "For more help, see:\n"
+                "  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md#ssh-connection-issues"
+            )
+        elif "Connection refused" in error_str:
+            return False, (
+                f"Connection refused: {e}\n\n"
+                "Common solutions:\n"
+                "  1. Verify the host is reachable:\n"
+                f"     ping {executor_config.host}\n"
+                "  2. Check if SSH service is running on the remote:\n"
+                f"     ssh {executor_config.username}@{executor_config.host}\n"
+                f"  3. Verify SSH port {executor_config.port} is correct\n\n"
+                "For more help, see:\n"
+                "  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md#ssh-connection-issues"
+            )
+        elif "No route to host" in error_str or "Name or service not known" in error_str:
+            return False, (
+                f"Cannot reach host: {e}\n\n"
+                "Common solutions:\n"
+                "  1. Verify the hostname is correct:\n"
+                f"     ping {executor_config.host}\n"
+                "  2. Check your network connection\n"
+                "  3. If using a VPN, ensure it's connected\n\n"
+                "For more help, see:\n"
+                "  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md#ssh-connection-issues"
+            )
+        else:
+            return False, f"Connection failed: {e}"
+
+    if not result.succeeded():
+        # Check if it's a bubblewrap-specific error
+        stderr = result.stderr.strip()
+        if "bwrap: command not found" in stderr or "bwrap: not found" in stderr:
+            return False, (
+                "Bubblewrap is not installed on the remote system.\n\n"
+                "To install bubblewrap on the remote system, run:\n\n"
+                "  Debian/Ubuntu:\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'sudo apt update && sudo apt install -y bubblewrap'\n\n"
+                "  Fedora/RHEL/CentOS:\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'sudo dnf install -y bubblewrap'\n\n"
+                "  Arch Linux:\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'sudo pacman -S bubblewrap'\n\n"
+                "For more help, see:\n"
+                "  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md#bubblewrap-installation"
+            )
+        elif "setting up uid map: Permission denied" in stderr or "Failed RTM_NEWADDR: Operation not permitted" in stderr:
+            return False, (
+                "User namespace creation is blocked on the remote system.\n\n"
+                "This is common on Ubuntu 24.04+ due to AppArmor restrictions.\n\n"
+                "To fix this on the remote system, run:\n\n"
+                "  Ubuntu 24.04+:\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0'\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'echo \"kernel.apparmor_restrict_unprivileged_userns=0\" | sudo tee -a /etc/sysctl.conf'\n\n"
+                "  Other distributions:\n"
+                f"    ssh {executor_config.username}@{executor_config.host} "
+                "'sudo sysctl -w kernel.unprivileged_userns_clone=1'\n\n"
+                "For more details, see:\n"
+                "  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md#user-namespace-issues"
+            )
+        else:
+            return False, f"Test command failed with error:\n{stderr}"
+
+    if verbose:
+        _LOGGER.info(f"  Test output: {result.stdout.strip()}")
+
+    return True, None
+
+
+def _handle_remote_test(args: argparse.Namespace) -> int:
+    """Test connection to a remote target."""
     from .config import create_executor, load_config
 
     # Validate inputs
@@ -1320,48 +1491,23 @@ def _handle_remote_test(args: argparse.Namespace) -> int:
         # Create executor
         executor = create_executor(config, name)
 
-        # Load profile using same logic as SandboxDeps
-        profile_name = executor_config.profile or "minimal"
+        # Test connection with detailed error reporting
+        success, error_msg = _test_remote_connection(
+            name, executor_config, executor, verbose=True
+        )
 
-        # Check if it's a path or a name
-        if "/" in profile_name or profile_name.endswith(".json"):
-            # It's a path
-            profile = _load_profile(profile_name)
-        else:
-            # It's a name - check standard locations
-            user_profile = Path.home() / ".config" / "shannot" / f"{profile_name}.json"
-            if user_profile.exists():
-                profile = _load_profile(str(user_profile))
-            else:
-                # Fall back to bundled profiles
-                bundled_profile = Path(__file__).parent.parent / "profiles" / f"{profile_name}.json"
-                profile = _load_profile(str(bundled_profile))
-
-        # Try to run a simple command
-        async def test():
-            result = await executor.run_command(profile, ["echo", "test"])
-            return result
-
-        result = asyncio.run(test())
-
-        if result.succeeded():
+        if success:
             _LOGGER.info("✓ Connection successful")
-            _LOGGER.info(f"  Test output: {result.stdout.strip()}")
             return 0
         else:
-            _LOGGER.error("✗ Test command failed")
-            _LOGGER.error(f"  Error: {result.stderr}")
+            _LOGGER.error("✗ Connection test failed\n")
+            _LOGGER.error(error_msg)
             return 1
 
     except Exception as e:
-        _LOGGER.error(f"✗ Connection failed: {e}")
-        _LOGGER.info("\nTroubleshooting:")
-        _LOGGER.info("  1. Check SSH key permissions (chmod 600 ~/.ssh/id_rsa)")
-        _LOGGER.info("  2. Verify host is reachable (ping hostname)")
-        _LOGGER.info("  3. Test SSH manually (ssh user@hostname)")
-        _LOGGER.info(
-            "  4. Check bubblewrap is installed on remote (ssh user@hostname bwrap --version)"
-        )
+        _LOGGER.error(f"✗ Unexpected error: {e}")
+        _LOGGER.info("\nFor troubleshooting help, see:")
+        _LOGGER.info("  https://github.com/corv89/shannot/blob/main/docs/troubleshooting.md")
         return 1
 
 
