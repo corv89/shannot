@@ -31,234 +31,56 @@
 
 ## Quick Start
 
-### Installation
-
-- **Client** (any platform): Python 3.10+
-- **Target** (Linux only): bubblewrap
-
-#### Install on Client (any platform)
-
 ```bash
-# Install UV (recommended - works on all platforms)
-curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
-# Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
+# Install (requires Python 3.10+)
+pip install shannot
 
-# Standard installation (includes MCP server and remote execution)
-uv tool install shannot
+# On Linux: install bubblewrap
+sudo apt install bubblewrap  # Debian/Ubuntu
+sudo dnf install bubblewrap  # Fedora/RHEL
 
-# Minimal installation (Linux-only local CLI, no MCP or remote support)
-uv tool install "shannot[minimal]"
-```
-
-#### Install on Target (Linux only)
-
-If your target is a remote Linux system, bubblewrap is all you need (Python not required):
-
-```bash
-# Debian/Ubuntu
-sudo apt install bubblewrap
-
-# Fedora/RHEL
-sudo dnf install bubblewrap
-
-# openSUSE
-sudo zypper install bubblewrap
-
-# Arch Linux
-sudo pacman -S bubblewrap
-```
-
-If client and target are the same Linux machine, install both shannot and bubblewrap.
-
-See [Deployment Guide](https://corv89.github.io/shannot/deployment/) for remote execution setup via SSH.
-
-<details>
-<summary><b>Alternative installation methods</b></summary>
-
-**pipx (recommended for Ubuntu/Debian):**
-
-Ubuntu and Debian mark system Python as "externally managed" (PEP 668), which prevents `pip install --user`. Use `pipx` instead:
-
-```bash
-# Install pipx
-sudo apt install pipx
-pipx ensurepath
-
-# Standard installation (includes MCP and remote execution)
-pipx install shannot
-
-# Minimal installation (Linux-only local CLI)
-pipx install "shannot[minimal]"
-```
-
-**Traditional pip:**
-
-```bash
-# Standard installation (includes MCP and remote execution)
-pip install --user shannot
-
-# Minimal installation (Linux-only local CLI)
-pip install --user "shannot[minimal]"
-
-# Note: On Ubuntu/Debian, you may need --break-system-packages
-# (not recommended, use pipx or uv instead)
-```
-</details>
-
-**Optional dependencies:**
-- `[minimal]` - Linux-only local CLI without MCP server or remote execution support
-
-### Usage
-
-```bash
-# Run a command in the sandbox
+# Run commands in sandbox
 shannot ls /
-
-# Check version
-shannot --version
-
-# Verify the sandbox is working
-shannot verify
-
-# Export your profile configuration
-shannot export
-
-# Use a custom profile
-shannot --profile /path/to/profile.json cat /etc/os-release
-
-# Get help
-shannot --help
+shannot df -h
+shannot cat /etc/os-release
 ```
 
-## Use Cases
+See [Installation Guide](https://corv89.github.io/shannot/installation/) for other platforms and methods.
 
-- **System diagnostics** - Let LLM agents inspect system state without modification risk
-- **Safe exploration** - Test unfamiliar commands without worrying about side effects
-- **Automated monitoring** - Build scripts with guaranteed read-only access
+## Profiles
+
+Control what commands are allowed with JSON profiles:
 
 ```bash
-# Diagnostics
-shannot df -h
-shannot cat /proc/meminfo
-
-# Exploration
-shannot find /etc -name "*.conf"
-shannot grep -r "error" /var/log
-
-# Journal logs (requires systemd.json profile)
-shannot --profile systemd journalctl -u nginx -n 50
+shannot ls /                          # Uses minimal.json (default)
+shannot --profile diagnostics df -h   # System monitoring commands
+shannot --profile systemd journalctl  # Journal access
 ```
 
-```python
-# Monitoring scripts
-from shannot import SandboxManager, load_profile_from_path
-
-profile = load_profile_from_path("~/.config/shannot/profile.json")
-manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
-
-result = manager.run(["df", "-h"])
-if result.succeeded():
-    print(result.stdout)
-```
-
-## Configuration
-
-Shannot uses JSON profiles to control sandbox behavior. Four profiles included:
-
-- **`minimal.json`** (default) - Basic commands (ls, cat, grep, find)
-- **`readonly.json`** - Extended command set for general use
-- **`diagnostics.json`** - System monitoring (df, free, ps, uptime)
-- **`systemd.json`** - Journal access and service monitoring
-
-```json
-{
-  "name": "minimal",
-  "allowed_commands": ["ls", "cat", "grep", "find"],
-  "binds": [{"source": "/usr", "target": "/usr", "read_only": true}],
-  "tmpfs_paths": ["/tmp"],
-  "environment": {"PATH": "/usr/bin:/bin"},
-  "network_isolation": true
-}
-```
-
-See [Profile Configuration](https://corv89.github.io/shannot/profiles/) for details.
-
-## How It Works
-
-Shannot wraps Linux's bubblewrap tool to create lightweight, secure sandboxes:
-
-1. **Namespace isolation** - Each command runs in isolated namespaces (PID, mount, network, etc.)
-2. **Read-only mounts** - System directories are mounted read-only
-3. **Temporary filesystems** - Writable locations use ephemeral tmpfs
-4. **Command allowlisting** - Only explicitly permitted commands can execute
-5. **No persistence** - All changes are lost when the command exits
+See [Profile Configuration](https://corv89.github.io/shannot/profiles/) for customization.
 
 ## Python API
 
 ```python
 from shannot import SandboxManager, load_profile_from_path
 
-profile = load_profile_from_path("~/.config/shannot/profile.json")
-manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
+profile = load_profile_from_path("diagnostics.json")
+manager = SandboxManager(profile)
 
-result = manager.run(["ls", "/"])
-print(f"Output: {result.stdout}")
-print(f"Duration: {result.duration:.2f}s")
+result = manager.run(["df", "-h"])
+print(result.stdout)
 ```
 
-See [API](https://corv89.github.io/shannot/api) for complete documentation.
-
-## Development
-
-```bash
-# Clone and install
-git clone https://github.com/corv89/shannot.git
-cd shannot
-make install-dev
-
-# Run tests (integration tests require Linux + bubblewrap)
-make test
-make test-unit  # unit tests only
-
-# Lint and type check
-make lint
-make format
-make type-check
-
-# Optional helpers
-make test-integration
-make test-coverage
-make pre-commit-install  # re-install git hooks if needed
-```
+See [API Reference](https://corv89.github.io/shannot/api/) for details.
 
 
 ## Documentation
 
-**[Full documentation](https://corv89.github.io/shannot/)**
+📚 [**Full Documentation**](https://corv89.github.io/shannot/) • [Installation](https://corv89.github.io/shannot/installation/) • [MCP Integration](https://corv89.github.io/shannot/mcp/) • [API Reference](https://corv89.github.io/shannot/api/)
 
-Quick links:
-- **[Installation Guide](https://corv89.github.io/shannot/installation/)** - Install Shannot on any platform
-- **[Usage Guide](https://corv89.github.io/shannot/usage/)** - Learn basic commands and workflows
-- **[Profile Configuration](https://corv89.github.io/shannot/profiles/)** - Configure sandbox behavior
-- **[API Reference](https://corv89.github.io/shannot/api/)** - Python API documentation
-- **[Deployment Guide](https://corv89.github.io/shannot/deployment/)** - Remote execution, Ansible, systemd
-- **[MCP Integration](https://corv89.github.io/shannot/mcp/)** - Claude Desktop integration
-- **[Troubleshooting](https://corv89.github.io/shannot/troubleshooting/)** - Common issues and solutions
+## Security Note
 
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) or [open an issue](https://github.com/corv89/shannot/issues).
-
-## Security Considerations
-
-Shannot provides strong isolation but **is not a security boundary**:
-
-- Sandbox escapes possible via kernel exploits
-- Read-only access still exposes system information
-- No built-in CPU/memory limits (use systemd/cgroups)
-- Don't run as root unless necessary
-
-For production, combine with SELinux/AppArmor, seccomp filters ([seccomp](https://corv89.github.io/shannot/seccomp)), and resource limits.
+Shannot provides strong isolation but **is not a security boundary**. Don't run as root unless necessary. See [Security Considerations](https://corv89.github.io/shannot/security/) for details.
 
 ## License
 
