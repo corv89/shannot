@@ -32,8 +32,11 @@
 ## Quick Start
 
 ```bash
-# Install (requires Python 3.10+)
-pip install shannot
+# Install UV (recommended - handles Python 3.10+ requirement automatically)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Shannot
+uv tool install shannot
 
 # On Linux: install bubblewrap
 sudo apt install bubblewrap  # Debian/Ubuntu
@@ -45,7 +48,9 @@ shannot df -h
 shannot cat /etc/os-release
 ```
 
-See [Installation Guide](https://corv89.github.io/shannot/installation/) for other platforms and methods.
+**Alternative:** `pip install shannot` (requires Python 3.10+, may conflict with system package managers)
+
+See [Installation Guide](https://corv89.github.io/shannot/installation/) for details.
 
 ## Profiles
 
