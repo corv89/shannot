@@ -151,9 +151,20 @@ def _get_default_profile() -> Path:
 
 def _configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
+
+    # Force flush after each log entry to ensure messages aren't lost
+    # when stderr is piped/redirected (e.g., by uv tool install wrappers)
+    class FlushingStreamHandler(logging.StreamHandler):
+        def emit(self, record):
+            super().emit(record)
+            self.flush()
+
+    handler = FlushingStreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+
     logging.basicConfig(
         level=level,
-        format="%(levelname)s %(name)s: %(message)s",
+        handlers=[handler],
     )
 
     # Suppress noisy third-party loggers unless in verbose mode
@@ -1427,6 +1438,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return handler(args)
     except SandboxError as exc:
         _LOGGER.error("Sandbox error: %s", exc)
+        sys.stderr.flush()  # Ensure error messages are written when stderr is piped/redirected
         return 1
 
 
