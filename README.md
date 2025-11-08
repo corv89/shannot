@@ -64,6 +64,7 @@ shannot --profile systemd journalctl  # Journal access
 
 See [Profile Configuration](https://corv89.github.io/shannot/profiles/) for customization.
 
+
 ## Python API
 
 ```python

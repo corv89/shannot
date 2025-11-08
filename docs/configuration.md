@@ -14,7 +14,7 @@ Platform-specific locations (auto-detected):
 - **macOS**: `~/Library/Application Support/shannot/config.toml`
 - **Windows**: `%APPDATA%\Local\shannot\config.toml`
 
-No configuration file needed for basic local usage - Shannot works out-of-the-box on Linux!
+No configuration file needed for basic local usage - Shannot works out-of-the-box on Linux.
 
 ## Quick Start
 
