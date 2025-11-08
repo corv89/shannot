@@ -132,9 +132,9 @@ shannot --help
 
 ## Use Cases
 
-**System diagnostics** - Let LLM agents inspect system state without modification risk
-**Safe exploration** - Test unfamiliar commands without worrying about side effects
-**Automated monitoring** - Build scripts with guaranteed read-only access
+- **System diagnostics** - Let LLM agents inspect system state without modification risk
+- **Safe exploration** - Test unfamiliar commands without worrying about side effects
+- **Automated monitoring** - Build scripts with guaranteed read-only access
 
 ```bash
 # Diagnostics
