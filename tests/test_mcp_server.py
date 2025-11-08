@@ -232,7 +232,6 @@ class TestShannotMCPServerInit:
 
     def test_warns_on_macos_when_bwrap_missing(self, mock_profile_paths, caplog):
         """Warn macOS users when no profiles load due to missing bubblewrap."""
-        import platform
 
         with patch("shannot.mcp_server.SandboxDeps") as mock_deps_class:
             # Simulate bubblewrap missing
