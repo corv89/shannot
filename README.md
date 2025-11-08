@@ -85,7 +85,7 @@ See [API Reference](https://corv89.github.io/shannot/api/) for details.
 
 ## Security Note
 
-Shannot provides strong isolation but **is not a security boundary**. Don't run as root unless necessary. See [Security Considerations](https://corv89.github.io/shannot/security/) for details.
+Shannot provides strong isolation but **is not a security boundary**. Don't run as root unless necessary.
 
 ## License
 
