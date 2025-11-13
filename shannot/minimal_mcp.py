@@ -24,6 +24,14 @@ from typing import Any, Callable, Literal
 logger = logging.getLogger(__name__)
 
 
+def asdict_exclude_none(obj: Any) -> dict:
+    """Convert dataclass to dict, excluding None values"""
+    if obj is None:
+        return {}
+    result = asdict(obj)
+    return {k: v for k, v in result.items() if v is not None}
+
+
 # ============================================================================
 # Data Models (stdlib dataclasses instead of Pydantic)
 # ============================================================================
@@ -57,12 +65,21 @@ class Resource:
 
 
 @dataclass
+class PromptArgument:
+    """Argument for a prompt"""
+
+    name: str
+    description: str | None = None
+    required: bool = False
+
+
+@dataclass
 class Prompt:
     """MCP Prompt definition"""
 
     name: str
     description: str | None = None
-    arguments: list[dict[str, Any]] = field(default_factory=list)
+    arguments: list[PromptArgument] = field(default_factory=list)
 
 
 @dataclass
@@ -82,12 +99,33 @@ class GetPromptResult:
 
 
 @dataclass
+class ToolsCapability:
+    """Tools capability declaration"""
+
+    pass
+
+
+@dataclass
+class ResourcesCapability:
+    """Resources capability declaration"""
+
+    pass
+
+
+@dataclass
+class PromptsCapability:
+    """Prompts capability declaration"""
+
+    pass
+
+
+@dataclass
 class ServerCapabilities:
     """Server capability declarations"""
 
-    tools: dict[str, Any] | None = None
-    resources: dict[str, Any] | None = None
-    prompts: dict[str, Any] | None = None
+    tools: ToolsCapability | None = None
+    resources: ResourcesCapability | None = None
+    prompts: PromptsCapability | None = None
     logging: dict[str, Any] | None = None
 
 
@@ -420,19 +458,16 @@ class MinimalMCPServer:
         )
 
         # Build capabilities
-        capabilities: dict[str, Any] = {}
-        if self._has_tools:
-            capabilities["tools"] = {}
-        if self._has_resources:
-            capabilities["resources"] = {}
-        if self._has_prompts:
-            capabilities["prompts"] = {}
-        # Always support logging
-        capabilities["logging"] = {}
+        capabilities = ServerCapabilities(
+            tools=ToolsCapability() if self._has_tools else None,
+            resources=ResourcesCapability() if self._has_resources else None,
+            prompts=PromptsCapability() if self._has_prompts else None,
+            logging={},  # Always support logging
+        )
 
         return {
             "protocolVersion": protocol_version,
-            "capabilities": capabilities,
+            "capabilities": asdict_exclude_none(capabilities),
             "serverInfo": {"name": self.name, "version": self.version},
         }
 
@@ -507,29 +542,44 @@ class MinimalMCPServer:
 
 async def stdio_server():
     """
-    Create stdio transport for MCP server.
+    Create stdio transport for MCP server (async context manager).
 
-    Returns read_stream and write_stream compatible with Server.run()
+    Yields read_stream and write_stream compatible with Server.run()
 
     This is a simplified version of official mcp.server.stdio.stdio_server()
     using only stdlib.
     """
-    loop = asyncio.get_event_loop()
+    from contextlib import asynccontextmanager
 
-    # Create reader for stdin
-    reader = asyncio.StreamReader(loop=loop)
-    reader_protocol = asyncio.StreamReaderProtocol(reader)
+    @asynccontextmanager
+    async def _stdio_context():
+        loop = asyncio.get_event_loop()
 
-    # Connect stdin to reader
-    await loop.connect_read_pipe(lambda: reader_protocol, sys.stdin.buffer)
+        # Create reader for stdin
+        reader = asyncio.StreamReader(loop=loop)
+        reader_protocol = asyncio.StreamReaderProtocol(reader)
 
-    # Create writer for stdout
-    writer_transport, writer_protocol = await loop.connect_write_pipe(
-        lambda: asyncio.streams.FlowControlMixin(), sys.stdout.buffer
-    )
-    writer = asyncio.StreamWriter(writer_transport, writer_protocol, None, loop)
+        # Connect stdin to reader
+        await loop.connect_read_pipe(lambda: reader_protocol, sys.stdin.buffer)
 
-    return reader, writer
+        # Create writer for stdout
+        writer_transport, writer_protocol = await loop.connect_write_pipe(
+            lambda: asyncio.streams.FlowControlMixin(), sys.stdout.buffer
+        )
+        writer = asyncio.StreamWriter(writer_transport, writer_protocol, None, loop)
+
+        try:
+            yield reader, writer
+        finally:
+            # Cleanup - close writer
+            if writer and not writer.is_closing():
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+    return _stdio_context()
 
 
 # ============================================================================

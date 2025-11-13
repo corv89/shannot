@@ -11,10 +11,10 @@ import logging
 from collections.abc import Sequence
 from pathlib import Path
 
-from mcp.server import InitializationOptions, Server
-from mcp.server.stdio import stdio_server
-from mcp.types import (
+from shannot.minimal_mcp import (
     GetPromptResult,
+    InitializationOptions,
+    MinimalMCPServer as Server,
     Prompt,
     PromptArgument,
     PromptMessage,
@@ -25,6 +25,7 @@ from mcp.types import (
     TextContent,
     Tool,
     ToolsCapability,
+    stdio_server,
 )
 
 from shannot import __version__
