@@ -1309,7 +1309,7 @@ Provide comprehensive health report:
 
         return output
 
-    async def run(self) -> None:
+    def run(self) -> None:
         """Run the MCP server."""
         options = InitializationOptions(
             server_name="shannot-sandbox",
@@ -1321,14 +1321,20 @@ Provide comprehensive health report:
             ),
         )
 
-        async with stdio_server() as (read_stream, write_stream):
-            await self.server.run(read_stream, write_stream, options)
+        read_stream, write_stream = stdio_server()
+        self.server.run(read_stream, write_stream, options)
 
-    async def cleanup(self) -> None:
+    def cleanup(self) -> None:
         """Cleanup resources associated with the server."""
+        import asyncio
+
         for deps in self.deps_by_profile.values():
             try:
-                await deps.cleanup()
+                # Bridge to async cleanup if needed
+                if asyncio.iscoroutinefunction(deps.cleanup):
+                    asyncio.run(deps.cleanup())
+                else:
+                    deps.cleanup()
             except Exception as exc:
                 logger.debug("Failed to cleanup sandbox dependencies: %s", exc)
 

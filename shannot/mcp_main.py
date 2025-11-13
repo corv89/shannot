@@ -9,7 +9,6 @@ It can be invoked via:
 from __future__ import annotations
 
 import argparse
-import asyncio
 import logging
 import sys
 from collections.abc import Sequence
@@ -81,7 +80,7 @@ def _resolve_profiles(
     return None
 
 
-async def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     """Main entry point for MCP server."""
     if argv is None:
         argv = sys.argv[1:]
@@ -134,7 +133,7 @@ async def main(argv: Sequence[str] | None = None) -> None:
         for name in server.deps_by_profile.keys():
             logger.info("  - %s", name)
 
-        await server.run()
+        server.run()
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except SystemExit:
@@ -145,15 +144,14 @@ async def main(argv: Sequence[str] | None = None) -> None:
     finally:
         if server is not None:
             try:
-                await server.cleanup()
+                server.cleanup()
             except Exception as exc:  # pragma: no cover - best effort cleanup
                 logger.debug("Failed to cleanup server resources: %s", exc)
 
 
 def entrypoint() -> None:
     """Synchronous entrypoint for console_scripts."""
-
-    asyncio.run(main())
+    main()
 
 
 if __name__ == "__main__":
