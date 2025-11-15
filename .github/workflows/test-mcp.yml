@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload MCP test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mcp-test-reports-py${{ matrix.python-version }}
           path: ./mcp-reports/
@@ -205,7 +205,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mcp-test-reports-with-config
           path: ./mcp-reports-config/
