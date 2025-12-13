@@ -11,6 +11,7 @@ from sandboxlib import VirtualizedProc
 from sandboxlib.mix_accept_input import MixAcceptInput
 from sandboxlib.mix_dump_output import MixDumpOutput
 from sandboxlib.mix_pypy import MixPyPy
+from sandboxlib.mix_remote import MixRemote
 from sandboxlib.mix_subprocess import MixSubprocess
 from sandboxlib.mix_vfs import Dir, MixVFS, RealDir
 from sandboxlib.vfs_procfs import build_proc, build_sys
@@ -33,6 +34,7 @@ def main(argv):
             "session-id=",
             "script-name=",
             "analysis=",
+            "target=",
         ],
     )
 
@@ -47,7 +49,7 @@ def main(argv):
         return help()
 
     class SandboxedProc(
-        MixSubprocess, MixPyPy, MixVFS, MixDumpOutput, MixAcceptInput, VirtualizedProc
+        MixRemote, MixSubprocess, MixPyPy, MixVFS, MixDumpOutput, MixAcceptInput, VirtualizedProc
     ):
         virtual_cwd = "/tmp"
         vfs_root = Dir({"tmp": Dir({})})
@@ -65,6 +67,7 @@ def main(argv):
         "raw_stdout": False,
         "script_name": None,
         "analysis": None,
+        "target": None,
     }
 
     lib_path_specified = False
@@ -89,6 +92,7 @@ def main(argv):
             SandboxedProc.debug_errors = True
         elif option == "--dry-run":
             SandboxedProc.subprocess_dry_run = True
+            SandboxedProc.vfs_track_writes = True  # Track file writes for approval
         elif option == "--session-id":
             session_id = value
         elif option == "--script-name":
@@ -97,6 +101,9 @@ def main(argv):
         elif option == "--analysis":
             SandboxedProc.subprocess_analysis = value
             sandbox_args["analysis"] = value
+        elif option == "--target":
+            SandboxedProc.remote_target = value
+            sandbox_args["target"] = value
         elif option in ["-h", "--help"]:
             return help()
         else:
@@ -212,9 +219,10 @@ def main(argv):
         if session:
             print(f"\n*** Session created: {session.id} ***")
             print(f"    Commands queued: {len(session.commands)}")
+            print(f"    File writes queued: {len(session.pending_writes)}")
             print("    Run 'shannot approve' to review and execute.")
         else:
-            print("\n*** No commands were queued. ***")
+            print("\n*** No commands or writes were queued. ***")
 
     popen.terminate()
     popen.wait()

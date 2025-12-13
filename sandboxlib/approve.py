@@ -145,10 +145,16 @@ class SessionListView(View):
             pointer = "\033[36m>\033[0m" if i == self.cursor else " "
 
             cmd_count = len(session.commands)
+            write_count = len(session.pending_writes)
             date = session.created_at[:10]
             name = session.name[:30]
 
-            print(f" {pointer}{marker} {name:<32} ({cmd_count:>2} cmds) {date}")
+            # Show counts
+            counts = f"{cmd_count:>2} cmds"
+            if write_count:
+                counts += f", {write_count} writes"
+
+            print(f" {pointer}{marker} {name:<32} ({counts}) {date}")
 
         print()
         print(" \033[90m[Up/Down] move  [Space] select  [a]ll  [n]one\033[0m")
@@ -229,7 +235,7 @@ class SessionDetailView(View):
         print(f" \033[1mCommands ({len(s.commands)}):\033[0m")
 
         # Scrollable command list
-        visible_rows = rows - 15
+        visible_rows = rows - 18 - (3 if s.pending_writes else 0)
         if visible_rows < 3:
             visible_rows = 3
         visible_cmds = s.commands[self.scroll : self.scroll + visible_rows]
@@ -245,14 +251,27 @@ class SessionDetailView(View):
         if remaining > 0:
             print(f"       ... ({remaining} more)")
 
+        # Show pending writes summary
+        if s.pending_writes:
+            print()
+            print(f" \033[1mFile Writes ({len(s.pending_writes)}):\033[0m")
+            for i, write_data in enumerate(s.pending_writes[:3]):
+                path = write_data.get("path", "?")
+                remote = " \033[33m[remote]\033[0m" if write_data.get("remote") else ""
+                print(f"   {i+1:>3}. {path}{remote}")
+            if len(s.pending_writes) > 3:
+                print(f"       ... ({len(s.pending_writes) - 3} more)")
+
         print()
-        print(
-            " \033[90m[Up/Down] scroll  [v] view script  [x] execute  [r] reject  [Esc] back\033[0m"
-        )
+        help_text = " \033[90m[Up/Down] scroll  [v] view script"
+        if s.pending_writes:
+            help_text += "  [w] view writes"
+        help_text += "  [x] execute  [r] reject  [Esc] back\033[0m"
+        print(help_text)
 
     def handle_key(self, key: str) -> Action | View | None:
         rows, _ = get_terminal_size()
-        visible_rows = max(3, rows - 15)
+        visible_rows = max(3, rows - 18)
         max_scroll = max(0, len(self.session.commands) - visible_rows)
 
         if key in ("b", "\x1b"):
@@ -266,6 +285,9 @@ class SessionDetailView(View):
 
         elif key in ("v", "\r"):
             return ScriptView(self.session)
+
+        elif key == "w" and self.session.pending_writes:
+            return PendingWritesListView(self.session)
 
         elif key == "x":
             return Action("execute", [self.session])
@@ -334,6 +356,152 @@ class ScriptView(View):
 
 
 # ==============================================================================
+# Pending Writes List View
+# ==============================================================================
+
+
+class PendingWritesListView(View):
+    """List of pending file writes for a session."""
+
+    def __init__(self, session: "Session"):
+        self.session = session
+        self.cursor = 0
+
+    def render(self) -> None:
+        clear_screen()
+        rows, cols = get_terminal_size()
+
+        print(f"\033[1m Pending Writes: {self.session.name} \033[0m")
+        print()
+
+        if not self.session.pending_writes:
+            print(" No pending writes.")
+            print()
+            print(" \033[90m[Esc] back\033[0m")
+            return
+
+        visible_rows = rows - 8
+        if visible_rows < 3:
+            visible_rows = 3
+
+        start = max(0, self.cursor - visible_rows // 2)
+        visible = self.session.pending_writes[start : start + visible_rows]
+
+        for i, write_data in enumerate(visible):
+            idx = start + i
+            pointer = "\033[36m>\033[0m" if idx == self.cursor else " "
+            path = write_data.get("path", "?")
+            remote = "\033[33m[R]\033[0m" if write_data.get("remote") else "   "
+
+            # Calculate size
+            content_b64 = write_data.get("content_b64", "")
+            import base64
+            try:
+                size = len(base64.b64decode(content_b64))
+                size_str = f"{size:,} B" if size < 1024 else f"{size/1024:.1f} KB"
+            except Exception:
+                size_str = "?"
+
+            display_path = path[: cols - 25]
+            if len(path) > cols - 25:
+                display_path += "..."
+
+            print(f" {pointer} {remote} {display_path:<50} {size_str:>10}")
+
+        print()
+        print(" \033[90m[Up/Down] select  [Enter] view diff  [Esc] back\033[0m")
+
+    def handle_key(self, key: str) -> Action | View | None:
+        if not self.session.pending_writes:
+            if key in ("b", "\x1b"):
+                return Action("back")
+            return None
+
+        if key in ("b", "\x1b"):
+            return Action("back")
+
+        elif key in ("j", "\x1b[B"):
+            self.cursor = (self.cursor + 1) % len(self.session.pending_writes)
+
+        elif key in ("k", "\x1b[A"):
+            self.cursor = (self.cursor - 1) % len(self.session.pending_writes)
+
+        elif key == "\r":
+            return PendingWriteDiffView(self.session, self.cursor)
+
+        return None
+
+
+# ==============================================================================
+# Pending Write Diff View
+# ==============================================================================
+
+
+class PendingWriteDiffView(View):
+    """View diff for a single pending write."""
+
+    def __init__(self, session: "Session", write_index: int):
+        self.session = session
+        self.write_index = write_index
+        self.write_data = session.pending_writes[write_index]
+        self.scroll = 0
+        self._build_diff()
+
+    def _build_diff(self):
+        """Build diff lines from write data."""
+        from .pending_write import PendingWrite
+
+        pending = PendingWrite.from_dict(self.write_data)
+        diff = pending.get_diff()
+        self.diff_lines = diff.splitlines()
+        self.path = pending.path
+        self.is_remote = pending.remote
+
+    def render(self) -> None:
+        clear_screen()
+        rows, cols = get_terminal_size()
+
+        remote_tag = " \033[33m[remote]\033[0m" if self.is_remote else ""
+        print(f"\033[1m Write: {self.path}{remote_tag} \033[0m")
+        print()
+
+        visible_rows = rows - 6
+        if visible_rows < 3:
+            visible_rows = 3
+        visible_lines = self.diff_lines[self.scroll : self.scroll + visible_rows]
+
+        for line in visible_lines:
+            # Colorize diff output
+            if line.startswith("+") and not line.startswith("+++"):
+                print(f" \033[32m{line[: cols - 2]}\033[0m")
+            elif line.startswith("-") and not line.startswith("---"):
+                print(f" \033[31m{line[: cols - 2]}\033[0m")
+            elif line.startswith("@@"):
+                print(f" \033[36m{line[: cols - 2]}\033[0m")
+            else:
+                print(f" {line[: cols - 2]}")
+
+        print()
+        print(" \033[90m[Up/Down] scroll  [Esc] back\033[0m")
+
+    def handle_key(self, key: str) -> Action | None:
+        rows, _ = get_terminal_size()
+        visible_rows = max(3, rows - 6)
+        max_scroll = max(0, len(self.diff_lines) - visible_rows)
+
+        if key in ("b", "\x1b"):
+            return Action("back")
+
+        elif key in ("j", "\x1b[B"):
+            self.scroll = min(self.scroll + 1, max_scroll)
+
+        elif key in ("k", "\x1b[A"):
+            self.scroll = max(self.scroll - 1, 0)
+
+        return None
+
+
+# ==============================================================================
 # Confirm View
 # ==============================================================================
 
@@ -351,7 +519,10 @@ class ConfirmView(View):
         print()
 
         for s in self.sessions:
-            print(f"   - {s.name} ({len(s.commands)} commands)")
+            counts = f"{len(s.commands)} commands"
+            if s.pending_writes:
+                counts += f", {len(s.pending_writes)} writes"
+            print(f"   - {s.name} ({counts})")
 
         print()
         print(" \033[90m[y] yes  [n] no\033[0m")
@@ -675,6 +846,13 @@ def main():
         print(f"\nCommands ({len(session.commands)}):")
         for i, cmd in enumerate(session.commands, 1):
             print(f"  {i}. {cmd}")
+
+        if session.pending_writes:
+            print(f"\nFile Writes ({len(session.pending_writes)}):")
+            for i, write_data in enumerate(session.pending_writes, 1):
+                path = write_data.get("path", "?")
+                remote = " [remote]" if write_data.get("remote") else ""
+                print(f"  {i}. {path}{remote}")
         return 0
 
     # Execute mode

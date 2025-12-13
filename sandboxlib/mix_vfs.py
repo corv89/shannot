@@ -208,11 +208,16 @@ def vfs_signature(sig, filearg=None):
 
 
 class MixVFS(object):
-    """A virtual, read-only file system.
+    """A virtual file system with optional write tracking.
 
     Call with 'vfs_root = root directory' in the constructor or by
     adding an attribute 'vfs_root' on the subclass directory.
     This should be a hierarchy built using the classes above.
+
+    Write tracking:
+        When vfs_track_writes is True, file writes are captured and
+        queued in file_writes_pending for later approval instead of
+        being executed immediately.
     """
 
     # The allowed 'fd' to return.  You might increase the range if your
@@ -224,6 +229,10 @@ class MixVFS(object):
     # (notably with pypy2-sandbox, but not with pypy3-sandbox).
     virtual_fd_directories = 20
 
+    # Write tracking
+    vfs_track_writes = False  # When True, queue writes for approval
+    file_writes_pending = []  # List of PendingWrite objects
+
 
     def __init__(self, *args, **kwds):
         try:
@@ -234,6 +243,7 @@ class MixVFS(object):
                 "a vfs_root class attribute directory in the subclass")
         self.vfs_open_fds = {}
         self.vfs_open_dirs = {}
+        self.vfs_write_buffers = {}  # fd -> (path, BytesIO, node) for write mode files
         super(MixVFS, self).__init__(*args, **kwds)
 
     s_mkdir          = sigerror("mkdir(pi)i", errno.EPERM, -1)
@@ -351,23 +361,106 @@ class MixVFS(object):
 
     @vfs_signature("open(pii)i", filearg=0)
     def s_open(self, p_pathname, flags, mode):
-        node = self.vfs_getnode(p_pathname)
+        path = self.vfs_fetch_path(p_pathname)
         write_mode = flags & (os.O_RDONLY|os.O_WRONLY|os.O_RDWR) != os.O_RDONLY
-        if not node.access(os.W_OK if write_mode else os.R_OK):
+        create_mode = flags & os.O_CREAT
+
+        # Handle write mode with tracking
+        if write_mode:
+            if not self.vfs_track_writes:
+                raise OSError(errno.EPERM, "write mode not enabled")
+
+            # Get original content if file exists
+            original = None
+            try:
+                node = self.vfs_getnode(p_pathname)
+                if not node.is_dir():
+                    try:
+                        f = node.open()
+                        original = f.read()
+                        f.close()
+                    except OSError:
+                        pass
+            except OSError:
+                if not create_mode:
+                    raise
+                node = None
+
+            # Create write buffer
+            write_buf = BytesIO()
+            fd = self._vfs_allocate_write_fd(path, write_buf, original, node)
+            return fd
+
+        # Read-only mode
+        node = self.vfs_getnode(p_pathname)
+        if not node.access(os.R_OK):
             raise OSError(errno.EACCES, node)
-        assert not write_mode, "open: write mode not implemented"
-        # all other flags are ignored
         f = node.open()
         return self.vfs_allocate_fd(f, node)
 
+    def _vfs_allocate_write_fd(self, path, write_buf, original, node):
+        """Allocate fd for write mode file."""
+        for fd in self.virtual_fd_range:
+            if fd not in self.vfs_open_fds and fd not in self.vfs_write_buffers:
+                self.vfs_write_buffers[fd] = (path, write_buf, original, node)
+                return fd
+        raise OSError(errno.EMFILE, "trying to open too many files")
+
     @vfs_signature("close(i)i")
     def s_close(self, fd):
+        # Check if this is a write buffer
+        if fd in self.vfs_write_buffers:
+            path, write_buf, original, node = self.vfs_write_buffers[fd]
+            del self.vfs_write_buffers[fd]
+
+            # Create PendingWrite and queue it
+            content = write_buf.getvalue()
+            if content or original:  # Only queue if there's actual content
+                from .pending_write import PendingWrite
+
+                # Check if it's a remote file
+                is_remote = hasattr(node, 'remote_path') if node else False
+
+                pending = PendingWrite(
+                    path=path,
+                    content=content,
+                    original=original,
+                    remote=is_remote,
+                )
+                self.file_writes_pending.append(pending)
+                sys.stderr.write(f"[QUEUED WRITE] {path} ({len(content)} bytes)\n")
+            return
+
+        # Regular file close
         f = self.vfs_get_file(fd)
         del self.vfs_open_fds[fd]
         f.close()
 
+    @vfs_signature("write(ipi)i")
+    def s_write(self, fd, p_buf, count):
+        # Check if this is a write buffer
+        if fd in self.vfs_write_buffers:
+            path, write_buf, original, node = self.vfs_write_buffers[fd]
+            if count < 0:
+                count = 0
+            data = self.sandio.read_buffer(p_buf, min(count, 256*1024))
+            write_buf.write(data)
+            return len(data)
+
+        # Delegate stdout/stderr to parent
+        return super(MixVFS, self).s_write(fd, p_buf, count)
+
     @vfs_signature("read(ipi)i")
     def s_read(self, fd, p_buf, count):
+        # Check if this is a write buffer (for read/write mode)
+        if fd in self.vfs_write_buffers:
+            path, write_buf, original, node = self.vfs_write_buffers[fd]
+            if count < 0:
+                count = 0
+            data = write_buf.read(min(count, 256*1024))
+            self.sandio.write_buffer(p_buf, data)
+            return len(data)
+
         try:
             f = self.vfs_get_file(fd)
         except OSError:
@@ -385,6 +478,13 @@ class MixVFS(object):
             raise OSError(errno.EINVAL, "bad value for lseek(whence)")
         if fd in (0, 1, 2):
             raise OSError(errno.ESPIPE, "seeking on stdin/stdout/stderr")
+
+        # Check if this is a write buffer
+        if fd in self.vfs_write_buffers:
+            path, write_buf, original, node = self.vfs_write_buffers[fd]
+            write_buf.seek(offset, whence)
+            return write_buf.tell()
+
         f = self.vfs_get_file(fd)
         f.seek(offset, whence)
         return f.tell()

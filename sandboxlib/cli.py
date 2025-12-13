@@ -77,6 +77,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         argv.append(f"--script-name={args.script_name}")
     if args.analysis:
         argv.append(f"--analysis={args.analysis}")
+    if args.target:
+        argv.append(f"--target={args.target}")
 
     # Add executable and script args
     argv.append(args.executable)
@@ -183,6 +185,10 @@ def main() -> int:
     run_parser.add_argument(
         "--analysis",
         help="Description of script purpose",
+    )
+    run_parser.add_argument(
+        "--target",
+        help="SSH target for remote execution (user@host)",
     )
     run_parser.set_defaults(func=cmd_run)
 

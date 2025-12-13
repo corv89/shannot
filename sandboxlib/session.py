@@ -22,6 +22,7 @@ class Session:
     name: str  # Human-readable name
     script_path: str  # Original script path
     commands: list[str] = field(default_factory=list)  # Queued commands
+    pending_writes: list[dict] = field(default_factory=list)  # Queued file writes
     analysis: str = ""  # Description of what script does
     status: SessionStatus = "pending"
     created_at: str = ""  # ISO timestamp
@@ -124,6 +125,7 @@ def create_session(
     name: str | None = None,
     analysis: str = "",
     sandbox_args: dict | None = None,
+    pending_writes: list[dict] | None = None,
 ) -> Session:
     """Create a new session from a dry-run execution."""
     if name is None:
@@ -134,6 +136,7 @@ def create_session(
         name=name,
         script_path=script_path,
         commands=commands,
+        pending_writes=pending_writes or [],
         analysis=analysis,
         sandbox_args=sandbox_args or {},
     )
