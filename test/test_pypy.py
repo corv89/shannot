@@ -1,9 +1,8 @@
 import pytest
 import os
-from io import BytesIO
 from sandboxlib import VirtualizedProc
 from sandboxlib.mix_pypy import MixPyPy
-from sandboxlib.mix_vfs import MixVFS, Dir, File, RealDir
+from sandboxlib.mix_vfs import MixVFS, Dir
 from sandboxlib.mix_grab_output import MixGrabOutput
 from . import support
 

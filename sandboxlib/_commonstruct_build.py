@@ -1,4 +1,3 @@
-import os
 import cffi
 ffibuilder = cffi.FFI()
 

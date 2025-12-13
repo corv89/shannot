@@ -695,7 +695,7 @@ def main():
             session.save()
             exit_code = execute_session(session)
             if exit_code == 0:
-                print(f"  + Completed successfully")
+                print("  + Completed successfully")
             else:
                 print(f"  x Failed (exit {exit_code})")
         return 0

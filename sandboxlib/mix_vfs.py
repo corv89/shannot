@@ -1,5 +1,7 @@
 import sys
-import os, errno, stat
+import os
+import errno
+import stat
 from io import BytesIO
 from .virtualizedproc import signature, sigerror
 from .sandboxio import NULL

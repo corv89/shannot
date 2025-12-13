@@ -1,6 +1,4 @@
 from __future__ import print_function
-import py
-import os
 import subprocess
 import time
 from sandboxlib.mix_grab_output import MixGrabOutput

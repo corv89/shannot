@@ -245,7 +245,7 @@ def main(argv):
         if session:
             print(f"\n*** Session created: {session.id} ***")
             print(f"    Commands queued: {len(session.commands)}")
-            print(f"    Run 'shannot approve' to review and execute.")
+            print("    Run 'shannot approve' to review and execute.")
         else:
             print("\n*** No commands were queued. ***")
 

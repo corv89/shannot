@@ -1,5 +1,7 @@
-import sys, types
-import os, errno, time
+import sys
+import types
+import errno
+import time
 from . import sandboxio
 from .sandboxio import Ptr, NULL, ptr_size
 from ._commonstruct_cffi import ffi
