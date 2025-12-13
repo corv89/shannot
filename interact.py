@@ -106,11 +106,14 @@ def main(argv):
         "analysis": None,
     }
 
+    lib_path_specified = False
+
     for option, value in options:
         if option == "--tmp":
             SandboxedProc.vfs_root.entries["tmp"] = RealDir(value)
             sandbox_args["tmp"] = value
         elif option == "--lib-path":
+            lib_path_specified = True
             SandboxedProc.vfs_root.entries["lib"] = MixVFS.vfs_pypy_lib_directory(value)
             arguments[0] = "/lib/pypy"
             sandbox_args["lib_path"] = value
@@ -142,6 +145,30 @@ def main(argv):
             return help()
         else:
             raise ValueError(option)
+
+    # Auto-detect runtime if --lib-path not specified
+    if not lib_path_specified:
+        from sandboxlib.runtime import get_runtime_path
+
+        runtime_path = get_runtime_path()
+        if runtime_path:
+            # Build VFS with stubs overlaid on lib_pypy
+            from sandboxlib.mix_vfs import Dir, File, OverlayDir
+            from sandboxlib.stubs import get_stubs
+
+            stubs = {name: File(content) for name, content in get_stubs().items()}
+
+            SandboxedProc.vfs_root.entries["lib"] = Dir(
+                {
+                    "pypy": File(b"", mode=0o111),
+                    "lib-python": RealDir(str(runtime_path / "lib-python")),
+                    "lib_pypy": OverlayDir(
+                        str(runtime_path / "lib_pypy"), overrides=stubs
+                    ),
+                }
+            )
+            arguments[0] = "/lib/pypy"
+            sandbox_args["lib_path"] = str(runtime_path)
 
     if color:
         SandboxedProc.dump_stdout_fmt = SandboxedProc.dump_get_ansi_color_fmt(32)

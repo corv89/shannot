@@ -9,9 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-SessionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
+from .config import SESSIONS_DIR
 
-SESSIONS_DIR = Path.home() / ".local/share/shannot/sessions"
+SessionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
 
 
 @dataclass
