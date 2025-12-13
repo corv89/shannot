@@ -4,30 +4,33 @@ import subprocess as real_subprocess
 import sys
 
 from .virtualizedproc import signature
-from .queue import read_approvals, write_pending, read_persistent
+from .queue import write_pending
 
 
 class MixSubprocess:
     """
     Mixin to handle system() calls from the sandbox.
 
-    Security tiers:
-        subprocess_allowlist: set - execute immediately
-        subprocess_requires_approval: set - queue for human approval
-        subprocess_denylist: set - always deny
+    Security tiers (checked in order):
+        1. subprocess_always_deny: set - never execute
+        2. subprocess_approved: set - session-approved commands
+        3. subprocess_auto_approve: set - execute immediately (from profile)
+        4. Everything else: queue for review
+
+    Profile-based configuration:
+        - .shannot/profile.json (project-local, takes precedence)
+        - ~/.config/shannot/profile.json (global fallback)
+        - DEFAULT_PROFILE if no file exists
 
     Modes:
-        subprocess_default_deny: bool - deny unknown commands (default True)
         subprocess_dry_run: bool - log all, execute none
     """
 
-    # Command sets
-    subprocess_allowlist = set()  # Always allowed
-    subprocess_requires_approval = set()  # Need human approval
-    subprocess_denylist = set()  # Always denied
+    # Command sets (populated by load_profile() and load_session_commands())
+    subprocess_auto_approve = set()  # Execute immediately (from profile)
+    subprocess_always_deny = set()  # Never execute (from profile)
 
     # Behavior
-    subprocess_default_deny = True  # Deny commands not in any list
     subprocess_dry_run = False  # Log but don't execute
 
     # State
@@ -64,34 +67,32 @@ class MixSubprocess:
 
     def _check_permission(self, cmd):
         """
+        Check permission for a command.
+
         Returns: 'allow', 'deny', or 'queue'
+
+        Permission flow:
+            1. always_deny -> deny
+            2. session approved -> allow
+            3. auto_approve -> allow
+            4. everything else -> queue
         """
         base, parts = self._parse_command(cmd)
 
-        # Check denylist first
-        if base in self.subprocess_denylist or cmd in self.subprocess_denylist:
+        # 1. Check always_deny first (never run these)
+        if base in self.subprocess_always_deny or cmd in self.subprocess_always_deny:
             return "deny"
 
-        # Check if previously approved this session
+        # 2. Check if previously approved this session
         if cmd in self.subprocess_approved:
             return "allow"
 
-        # Check allowlist
-        if base in self.subprocess_allowlist or cmd in self.subprocess_allowlist:
+        # 3. Check auto_approve (profile-trusted commands)
+        if base in self.subprocess_auto_approve or cmd in self.subprocess_auto_approve:
             return "allow"
 
-        # Check if requires approval
-        if (
-            base in self.subprocess_requires_approval
-            or cmd in self.subprocess_requires_approval
-        ):
-            return "queue"
-
-        # Default behavior for unknown commands
-        if self.subprocess_default_deny:
-            return "deny"
-        else:
-            return "queue"
+        # 4. Everything else queues for review
+        return "queue"
 
     @signature("system(p)i")
     def s_system(self, p_command):
@@ -142,13 +143,13 @@ class MixSubprocess:
         """Return list of commands awaiting approval."""
         return list(self.subprocess_pending)
 
-    def load_session_approvals(self):
-        """Load session approvals into subprocess_approved."""
-        self.subprocess_approved.update(read_approvals())
+    def load_profile(self):
+        """Load security profile into class attributes."""
+        from .config import load_profile
 
-    def load_persistent_allowlist(self):
-        """Load persistent allowlist into subprocess_allowlist."""
-        self.subprocess_allowlist.update(read_persistent())
+        profile = load_profile()
+        self.subprocess_auto_approve.update(profile.get("auto_approve", []))
+        self.subprocess_always_deny.update(profile.get("always_deny", []))
 
     def save_pending(self):
         """Write pending commands to queue file."""

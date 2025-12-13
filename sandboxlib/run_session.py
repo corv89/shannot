@@ -49,9 +49,8 @@ def main():
     if args.get("raw_stdout"):
         cmd.append("--raw-stdout")
 
-    # Add pre-approved commands to allowlist
-    for approved_cmd in session.commands:
-        cmd.extend(["--allow-cmd", approved_cmd])
+    # Pass session ID so interact.py can load pre-approved commands
+    cmd.extend(["--session-id", session.id])
 
     # Add PyPy executable
     pypy_exe = args.get("pypy_exe", "pypy3-c-sandbox")

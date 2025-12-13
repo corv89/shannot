@@ -23,19 +23,18 @@ Options:
 
     --dry-run       log system() calls but don't execute them
 
-    --allow-cmd=CMD add CMD to immediate allowlist (can repeat)
-
-    --approve-cmd=CMD
-                    add CMD to requires-approval list (can repeat)
-
-    --deny-cmd=CMD  add CMD to denylist (can repeat)
-
-    --default-allow allow unknown commands (default is deny)
+    --session-id=ID load an approved session's commands as pre-approved
+                    (used by run_session.py for session re-execution)
 
     --script-name=NAME
                     human-readable name for the session (used in dry-run)
 
     --analysis=TEXT description of what the script does (used in dry-run)
+
+Command approval is controlled by profile files:
+    - .shannot/profile.json (project-local, takes precedence)
+    - ~/.config/shannot/profile.json (global fallback)
+    - Built-in defaults if no profile exists
 
 Note that you can get readline-like behavior with a tool like 'ledit',
 provided you use enough -u options:
@@ -69,10 +68,7 @@ def main(argv):
             "debug",
             "help",
             "dry-run",
-            "allow-cmd=",
-            "approve-cmd=",
-            "deny-cmd=",
-            "default-allow",
+            "session-id=",
             "script-name=",
             "analysis=",
         ],
@@ -107,6 +103,7 @@ def main(argv):
     }
 
     lib_path_specified = False
+    session_id = None
 
     for option, value in options:
         if option == "--tmp":
@@ -127,14 +124,8 @@ def main(argv):
             SandboxedProc.debug_errors = True
         elif option == "--dry-run":
             SandboxedProc.subprocess_dry_run = True
-        elif option == "--allow-cmd":
-            SandboxedProc.subprocess_allowlist.add(value)
-        elif option == "--approve-cmd":
-            SandboxedProc.subprocess_requires_approval.add(value)
-        elif option == "--deny-cmd":
-            SandboxedProc.subprocess_denylist.add(value)
-        elif option == "--default-allow":
-            SandboxedProc.subprocess_default_deny = False
+        elif option == "--session-id":
+            session_id = value
         elif option == "--script-name":
             SandboxedProc.subprocess_script_name = value
             sandbox_args["script_name"] = value
@@ -231,6 +222,20 @@ def main(argv):
                         virtualizedproc.subprocess_script_content = f.read()
                 except Exception:
                     pass
+
+    # Load security profile (populates auto_approve, always_deny)
+    virtualizedproc.load_profile()
+
+    # Load session commands if re-executing an approved session
+    # (must be after profile so session commands take precedence)
+    if session_id:
+        from sandboxlib.session import Session
+
+        try:
+            session = Session.load(session_id)
+            virtualizedproc.load_session_commands(session)
+        except FileNotFoundError:
+            sys.stderr.write(f"Warning: Session not found: {session_id}\n")
 
     virtualizedproc.run()
 

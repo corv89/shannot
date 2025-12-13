@@ -84,14 +84,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         cmd.append(f"--script-name={args.script_name}")
     if args.analysis:
         cmd.append(f"--analysis={args.analysis}")
-    for allow_cmd in args.allow_cmd or []:
-        cmd.append(f"--allow-cmd={allow_cmd}")
-    for approve_cmd in args.approve_cmd or []:
-        cmd.append(f"--approve-cmd={approve_cmd}")
-    for deny_cmd in args.deny_cmd or []:
-        cmd.append(f"--deny-cmd={deny_cmd}")
-    if args.default_allow:
-        cmd.append("--default-allow")
 
     # Add executable and script args
     cmd.append(args.executable)
@@ -199,26 +191,6 @@ def main() -> int:
     run_parser.add_argument(
         "--analysis",
         help="Description of script purpose",
-    )
-    run_parser.add_argument(
-        "--allow-cmd",
-        action="append",
-        help="Pre-allow a command (repeatable)",
-    )
-    run_parser.add_argument(
-        "--approve-cmd",
-        action="append",
-        help="Require approval for command (repeatable)",
-    )
-    run_parser.add_argument(
-        "--deny-cmd",
-        action="append",
-        help="Deny a command (repeatable)",
-    )
-    run_parser.add_argument(
-        "--default-allow",
-        action="store_true",
-        help="Allow unknown commands by default",
     )
     run_parser.set_defaults(func=cmd_run)
 
