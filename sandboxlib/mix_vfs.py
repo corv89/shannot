@@ -14,6 +14,12 @@ INO_COUNTER = 0
 
 
 class FSObject(object):
+    """Base class for virtual filesystem objects.
+
+    Subclasses implement specific node types (files, directories).
+    The read_only flag controls virtual ownership: read-only files
+    appear owned by root, read-write files by the virtual user.
+    """
     read_only = True
 
     def stat(self):
@@ -68,6 +74,10 @@ class FSObject(object):
 
 
 class Dir(FSObject):
+    """Virtual directory with in-memory entries.
+
+    Entries is a dict mapping names to FSObject instances.
+    """
     kind = stat.S_IFDIR
     def __init__(self, entries={}):
         self.entries = entries
@@ -80,6 +90,10 @@ class Dir(FSObject):
             raise OSError(errno.ENOENT, name)
 
 class RealDir(Dir):
+    """Directory backed by a real filesystem path.
+
+    Provides controlled access to real directories with filtering options.
+    """
     # If show_dotfiles=False, we pretend that all files whose name starts
     # with '.' simply don't exist.  If follow_links=True, then symlinks are
     # transparently followed (they look like a regular file or directory to
@@ -147,6 +161,7 @@ class OverlayDir(RealDir):
         return super().join(name)
 
 class File(FSObject):
+    """Virtual file with in-memory content."""
     kind = stat.S_IFREG
     def __init__(self, data, mode=0):
         self.data = data
@@ -157,6 +172,7 @@ class File(FSObject):
         return BytesIO(self.data)
 
 class RealFile(File):
+    """File backed by a real filesystem path (read-only access)."""
     def __init__(self, path, mode=0):
         self.path = path
         self.kind |= mode
@@ -172,6 +188,7 @@ class RealFile(File):
 
 
 class OpenDir(object):
+    """Iterator state for an open directory (used by opendir/readdir)."""
     def __init__(self, node):
         self.node = node
         self.iter_names = iter(node.keys())
@@ -225,7 +242,7 @@ class MixVFS(object):
     virtual_fd_range = range(3, 50)
 
     # This is the number of simultaneous open directories.  The value of 0
-    # prevnts opendir() from working at all, which is fine in some situations
+    # prevents opendir() from working at all, which is fine in some situations
     # (notably with pypy2-sandbox, but not with pypy3-sandbox).
     virtual_fd_directories = 20
 
@@ -238,9 +255,10 @@ class MixVFS(object):
         try:
             self.vfs_root = kwds.pop('vfs_root')
         except KeyError:
-            assert hasattr(self, 'vfs_root'), (
-                "must pass a vfs_root argument to the constructor, or assign "
-                "a vfs_root class attribute directory in the subclass")
+            if not hasattr(self, 'vfs_root'):
+                raise ValueError(
+                    "must pass a vfs_root argument to the constructor, or assign "
+                    "a vfs_root class attribute directory in the subclass")
         self.vfs_open_fds = {}
         self.vfs_open_dirs = {}
         self.vfs_write_buffers = {}  # fd -> (path, BytesIO, node) for write mode files
@@ -306,7 +324,8 @@ class MixVFS(object):
         self.sandio.write_buffer(p_statbuf, bytes_data)
 
     def vfs_allocate_fd(self, f, node):
-        assert not node.is_dir()
+        if node.is_dir():
+            raise ValueError("cannot allocate fd for directory")
         for fd in self.virtual_fd_range:
             if fd not in self.vfs_open_fds:
                 self.vfs_open_fds[fd] = (f, node)

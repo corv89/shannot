@@ -8,6 +8,18 @@ from ._commonstruct_cffi import ffi
 
 
 def signature(sig):
+    """Decorator that registers a method as a system call handler.
+
+    The signature string format is: "funcname(argtypes)rettype"
+    where argtypes and rettype use single-character codes:
+        p = pointer (Ptr)
+        i = integer (64-bit)
+        f = float (double)
+        v = void
+
+    Example: @signature("read(ipi)i") defines a read syscall taking
+    (int fd, ptr buf, int count) and returning int.
+    """
     def decorator(func):
         func._sandbox_sig_ = sig
         return func
@@ -16,6 +28,16 @@ def signature(sig):
 FATAL = object()
 
 def sigerror(sig, error=FATAL, returns=FATAL):
+    """Create a stub syscall handler that returns an error.
+
+    Args:
+        sig: Signature string (see @signature decorator)
+        error: errno value to set, or FATAL to terminate subprocess
+        returns: Return value (-1 for int, NULL for pointer, etc.)
+
+    If error is FATAL (default), the stub raises an exception to
+    terminate the sandboxed process when called.
+    """
     if error is FATAL:
         assert returns is FATAL, (
             "changing 'returns' makes no sense without also setting an 'error'")
@@ -111,6 +133,13 @@ class VirtualizedProc(object):
         return errors
 
     def run(self):
+        """Main execution loop for the sandboxed process.
+
+        Reads syscall requests from the subprocess via IPC, dispatches
+        them to the appropriate @signature-decorated handler methods,
+        and writes results back. Continues until the subprocess exits
+        (EOFError) or a fatal error occurs.
+        """
         cls_signatures = self.collect_signatures()
         sandio = self.sandio
         while True:

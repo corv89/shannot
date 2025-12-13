@@ -11,10 +11,12 @@ class MixAcceptInput(object):
         if fd != 0:
             return super(MixAcceptInput, self).s_read(fd, p_buf, count)
 
-        assert count >= 0
+        if count < 0:
+            raise ValueError("count must be non-negative")
         f = self.input_stdin or sys.stdin
         fileno = f.fileno()     # for now, must be a real file
         data = os.read(fileno, count)
-        assert len(data) <= count
+        if len(data) > count:
+            raise RuntimeError("os.read returned more data than requested")
         self.sandio.write_buffer(p_buf, data)
         return len(data)
