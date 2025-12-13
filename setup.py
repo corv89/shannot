@@ -8,7 +8,6 @@ setup(name='sandboxlib',
       entry_points={
           'console_scripts': [
               'shannot=sandboxlib.cli:main',
-              'shannot-approve=sandboxlib.approve:main',
           ],
       },
       )

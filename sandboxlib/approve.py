@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-shannot-approve: Interactive approval tool for sandbox sessions.
+shannot approve: Interactive approval tool for sandbox sessions.
 
 Usage:
-    shannot-approve              # Interactive session list
-    shannot-approve list         # List pending sessions
-    shannot-approve show <id>    # Show session details
-    shannot-approve execute <id> # Execute specific session
-    shannot-approve history      # Show recent sessions
+    shannot approve              # Interactive session list
+    shannot approve list         # List pending sessions
+    shannot approve show <id>    # Show session details
+    shannot approve execute <id> # Execute specific session
+    shannot approve history      # Show recent sessions
 """
 
 from __future__ import annotations
@@ -603,7 +603,7 @@ def run_tui():
 def main():
     parser = argparse.ArgumentParser(
         description="Approve pending sandbox sessions",
-        prog="shannot-approve",
+        prog="shannot approve",
     )
     parser.add_argument(
         "action",
@@ -656,7 +656,7 @@ def main():
     # Show mode
     if args.action == "show":
         if not args.args:
-            print("Usage: shannot-approve show <session_id>")
+            print("Usage: shannot approve show <session_id>")
             return 1
 
         try:
@@ -680,7 +680,7 @@ def main():
     # Execute mode
     if args.action == "execute":
         if not args.args:
-            print("Usage: shannot-approve execute <session_id> [session_id...]")
+            print("Usage: shannot approve execute <session_id> [session_id...]")
             return 1
 
         for session_id in args.args:

@@ -99,7 +99,7 @@ def cmd_approve(args: argparse.Namespace) -> int:
     from .approve import main as approve_main
 
     # Reconstruct sys.argv for approve module
-    sys.argv = ["shannot-approve"] + (args.approve_args or [])
+    sys.argv = ["shannot approve"] + (args.approve_args or [])
     return approve_main()
 
 
