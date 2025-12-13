@@ -1,5 +1,4 @@
-import sys
-from .virtualizedproc import signature
+from .virtualizedproc import sigerror
 
 
 class MixSocket(object):

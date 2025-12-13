@@ -40,7 +40,7 @@ class MixDumpOutput(object):
             fmt = self.dump_stderr_fmt
             raw = self.raw_stderr
         else:
-            return super(MixGrabOutput, self).s_write(fd, p_buf, count)
+            return super(MixDumpOutput, self).s_write(fd, p_buf, count)
 
         data = self.sandio.read_buffer(p_buf, count)
         if not raw:

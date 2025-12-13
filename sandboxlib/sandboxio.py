@@ -52,7 +52,8 @@ class SandboxedIO(object):
         pack_args = ['=']
         codes = []
         for c in data[i1+1:i2]:
-            if isinstance(c, int): c = chr(c)   # Python 3
+            if isinstance(c, int):
+                c = chr(c)   # Python 3
             if c == 'p':
                 pack_args.append(_ptr_code)
             elif c == 'i':

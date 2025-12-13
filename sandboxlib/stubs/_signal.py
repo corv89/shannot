@@ -36,4 +36,5 @@ class Signals:
 class Handlers:
     pass
 
-valid_signals = lambda: set()
+def valid_signals():
+    return set()
