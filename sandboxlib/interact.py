@@ -1,45 +1,7 @@
-#! /usr/bin/env python
+"""
+Sandbox process controller.
 
-"""Interacts with a subprocess translated with --sandbox.
-
-Usage:
-    interact.py [options] <executable> <args...>
-
-Options:
-    --lib-path=DIR  the real directory that contains lib-python and lib_pypy
-                    directories (only needed if executable is a pypy sandbox)
-
-    --tmp=DIR       the real directory that corresponds to the virtual /tmp,
-                    which is the virtual current dir (always read-only for now)
-
-    --nocolor       turn off coloring of the sandboxed-produced output
-
-    --raw-stdout    turn off all sanitization (and coloring) of stdout
-                    (only if you need binary output---don't let it go to
-                    a terminal!)
-
-    --debug         check if all "system calls" of the subprocess are handled
-                    and dump all errors reported to the subprocess
-
-    --dry-run       log system() calls but don't execute them
-
-    --session-id=ID load an approved session's commands as pre-approved
-                    (used by run_session.py for session re-execution)
-
-    --script-name=NAME
-                    human-readable name for the session (used in dry-run)
-
-    --analysis=TEXT description of what the script does (used in dry-run)
-
-Command approval is controlled by profile files:
-    - .shannot/profile.json (project-local, takes precedence)
-    - ~/.config/shannot/profile.json (global fallback)
-    - Built-in defaults if no profile exists
-
-Note that you can get readline-like behavior with a tool like 'ledit',
-provided you use enough -u options:
-
-    ledit python -u interact.py --lib-path=/path/lib /path/pypy-c-sandbox -u -i
+Internal module - use 'shannot run' CLI instead.
 """
 
 import subprocess
@@ -75,7 +37,10 @@ def main(argv):
     )
 
     def help():
-        sys.stderr.write(__doc__)
+        sys.stderr.write(
+            "Usage: shannot run [options] <executable> <args...>\n"
+            "See 'shannot run --help' for details.\n"
+        )
         return 2
 
     if len(arguments) < 1:
@@ -215,7 +180,9 @@ def main(argv):
         if sandbox_args.get("tmp"):
             import os
 
-            real_script_path = os.path.join(sandbox_args["tmp"], os.path.basename(script_args[0]))
+            real_script_path = os.path.join(
+                sandbox_args["tmp"], os.path.basename(script_args[0])
+            )
             if os.path.exists(real_script_path):
                 try:
                     with open(real_script_path, "r") as f:
@@ -259,10 +226,3 @@ def main(argv):
             % (popen.returncode,)
         )
         return 1
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2 or sys.argv[1] == "--help":
-        print(__doc__, file=sys.stderr)
-        sys.exit(2)
-    sys.exit(main(sys.argv[1:]))

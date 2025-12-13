@@ -10,12 +10,12 @@ pre-approved commands loaded into the sandbox's allowlist.
 """
 from __future__ import annotations
 
+import io
 import os
-import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
-from pathlib import Path
 
 
 def main():
@@ -33,28 +33,26 @@ def main():
         print(f"Session not found: {session_id}", file=sys.stderr)
         sys.exit(1)
 
-    # Build interact.py command from structured sandbox_args
+    # Build argv for interact.main() from structured sandbox_args
     args = session.sandbox_args
-    interact_path = Path(__file__).parent.parent / "interact.py"
-
-    cmd = [sys.executable, str(interact_path)]
+    argv = []
 
     # Reconstruct sandbox options
     if args.get("lib_path"):
-        cmd.append(f"--lib-path={args['lib_path']}")
+        argv.append(f"--lib-path={args['lib_path']}")
     if args.get("tmp"):
-        cmd.append(f"--tmp={args['tmp']}")
+        argv.append(f"--tmp={args['tmp']}")
     if args.get("nocolor"):
-        cmd.append("--nocolor")
+        argv.append("--nocolor")
     if args.get("raw_stdout"):
-        cmd.append("--raw-stdout")
+        argv.append("--raw-stdout")
 
-    # Pass session ID so interact.py can load pre-approved commands
-    cmd.extend(["--session-id", session.id])
+    # Pass session ID so interact can load pre-approved commands
+    argv.extend(["--session-id", session.id])
 
     # Add PyPy executable
     pypy_exe = args.get("pypy_exe", "pypy3-c-sandbox")
-    cmd.append(pypy_exe)
+    argv.append(pypy_exe)
 
     # Determine script to run
     script_content = session.load_script()
@@ -81,18 +79,20 @@ def main():
         script_path = session.script_path
 
     # Add -S flag and script path (PyPy convention)
-    cmd.extend(["-S", script_path])
+    argv.extend(["-S", script_path])
 
     # Execute and capture output
+    from .interact import main as interact_main
+
+    stdout_capture = io.StringIO()
+    stderr_capture = io.StringIO()
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        exit_code = result.returncode
-        stdout = result.stdout
-        stderr = result.stderr
+        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+            exit_code = interact_main(argv) or 0
     except Exception as e:
         exit_code = 1
-        stdout = ""
-        stderr = str(e)
+        stderr_capture.write(str(e))
     finally:
         # Clean up temp script
         if temp_script and os.path.exists(temp_script):
@@ -100,6 +100,9 @@ def main():
                 os.unlink(temp_script)
             except Exception:
                 pass
+
+    stdout = stdout_capture.getvalue()
+    stderr = stderr_capture.getvalue()
 
     # Update session with results
     session.stdout = stdout

@@ -10,9 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
-from pathlib import Path
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
@@ -43,24 +41,19 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Handle 'shannot run' command - wrapper around interact.py."""
+    """Handle 'shannot run' command."""
+    from .interact import main as interact_main
     from .runtime import get_runtime_path
 
-    # Find interact.py relative to this file
-    interact_path = Path(__file__).parent.parent / "interact.py"
-    if not interact_path.exists():
-        print(f"Error: interact.py not found at {interact_path}", file=sys.stderr)
-        return 1
-
-    cmd = [sys.executable, str(interact_path)]
+    argv = []
 
     # Auto-detect lib-path if not specified
     if args.lib_path:
-        cmd.append(f"--lib-path={args.lib_path}")
+        argv.append(f"--lib-path={args.lib_path}")
     else:
         runtime_path = get_runtime_path()
         if runtime_path:
-            cmd.append(f"--lib-path={runtime_path}")
+            argv.append(f"--lib-path={runtime_path}")
         else:
             print(
                 "Error: No --lib-path specified and runtime not installed.",
@@ -71,27 +64,26 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     # Pass through other options
     if args.tmp:
-        cmd.append(f"--tmp={args.tmp}")
+        argv.append(f"--tmp={args.tmp}")
     if args.nocolor:
-        cmd.append("--nocolor")
+        argv.append("--nocolor")
     if args.raw_stdout:
-        cmd.append("--raw-stdout")
+        argv.append("--raw-stdout")
     if args.debug:
-        cmd.append("--debug")
+        argv.append("--debug")
     if args.dry_run:
-        cmd.append("--dry-run")
+        argv.append("--dry-run")
     if args.script_name:
-        cmd.append(f"--script-name={args.script_name}")
+        argv.append(f"--script-name={args.script_name}")
     if args.analysis:
-        cmd.append(f"--analysis={args.analysis}")
+        argv.append(f"--analysis={args.analysis}")
 
     # Add executable and script args
-    cmd.append(args.executable)
-    cmd.extend(args.script_args)
+    argv.append(args.executable)
+    argv.extend(args.script_args)
 
-    # Execute
-    result = subprocess.run(cmd)
-    return result.returncode
+    # Execute directly
+    return interact_main(argv)
 
 
 def cmd_approve(args: argparse.Namespace) -> int:
