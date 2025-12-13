@@ -4,6 +4,7 @@ import subprocess as real_subprocess
 import sys
 
 from .virtualizedproc import signature
+from .queue import read_approvals, write_pending, read_persistent
 
 
 class MixSubprocess:
@@ -32,6 +33,9 @@ class MixSubprocess:
     # State
     subprocess_pending = []  # Commands awaiting approval
     subprocess_approved = set()  # Commands approved this session
+
+    # Persistence
+    subprocess_auto_persist = True  # Auto-save pending when queuing
 
     def _parse_command(self, cmd):
         """Extract base command from shell string."""
@@ -89,6 +93,8 @@ class MixSubprocess:
         # Dry-run mode: log everything, execute nothing
         if self.subprocess_dry_run:
             self.subprocess_pending.append(cmd)
+            if self.subprocess_auto_persist:
+                self.save_pending()
             sys.stderr.write(f"[DRY-RUN] {cmd}\n")
             return 0
 
@@ -100,6 +106,8 @@ class MixSubprocess:
 
         elif permission == "queue":
             self.subprocess_pending.append(cmd)
+            if self.subprocess_auto_persist:
+                self.save_pending()
             sys.stderr.write(f"[QUEUED] {cmd}\n")
             # Return fake success - script continues, but command didn't run
             return 0
@@ -126,3 +134,15 @@ class MixSubprocess:
     def get_pending(self):
         """Return list of commands awaiting approval."""
         return list(self.subprocess_pending)
+
+    def load_session_approvals(self):
+        """Load session approvals into subprocess_approved."""
+        self.subprocess_approved.update(read_approvals())
+
+    def load_persistent_allowlist(self):
+        """Load persistent allowlist into subprocess_allowlist."""
+        self.subprocess_allowlist.update(read_persistent())
+
+    def save_pending(self):
+        """Write pending commands to queue file."""
+        write_pending(self.subprocess_pending)
