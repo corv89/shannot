@@ -72,6 +72,15 @@ class Session:
             return script_path.read_text()
         return None
 
+    def save_stubs(self) -> None:
+        """Copy stubs to session directory for reproducibility."""
+        from sandboxlib.stubs import get_stubs
+
+        stubs_dir = self.session_dir / "lib_pypy"
+        stubs_dir.mkdir(parents=True, exist_ok=True)
+        for name, content in get_stubs().items():
+            (stubs_dir / name).write_bytes(content)
+
     def delete(self) -> None:
         """Remove session from disk."""
         if self.session_dir.exists():
@@ -129,6 +138,7 @@ def create_session(
         sandbox_args=sandbox_args or {},
     )
     session.save()
+    session.save_stubs()
 
     if script_content:
         session.save_script(script_content)

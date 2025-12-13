@@ -9,6 +9,7 @@ Usage:
     shannot-approve execute <id> # Execute specific session
     shannot-approve history      # Show recent sessions
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
 @dataclass
 class Action:
     """Action returned from views to be handled by main loop."""
+
     name: str  # "execute", "reject", "view", "back", "quit"
     sessions: list["Session"] = None
 
@@ -119,6 +121,7 @@ class SessionListView(View):
     def __init__(self, sessions: list["Session"] = None):
         if sessions is None:
             from .session import Session
+
             sessions = Session.list_pending()
         self.sessions = sessions
         self.cursor = 0
@@ -220,7 +223,7 @@ class SessionDetailView(View):
         if s.analysis:
             print(" \033[1mAnalysis:\033[0m")
             for line in s.analysis.split("\n")[:5]:
-                print(f"   {line[:cols - 4]}")
+                print(f"   {line[: cols - 4]}")
             print()
 
         print(f" \033[1mCommands ({len(s.commands)}):\033[0m")
@@ -261,7 +264,7 @@ class SessionDetailView(View):
         elif key in ("k", "\x1b[A"):
             self.scroll = max(self.scroll - 1, 0)
 
-        elif key == "v":
+        elif key in ("v", "\r"):
             return ScriptView(self.session)
 
         elif key == "x":
@@ -558,7 +561,12 @@ def run_tui():
 
                 elif result.name == "execute":
                     # Confirm then execute
-                    push_view(ConfirmView(f"Execute {len(result.sessions)} session(s)?", result.sessions))
+                    push_view(
+                        ConfirmView(
+                            f"Execute {len(result.sessions)} session(s)?",
+                            result.sessions,
+                        )
+                    )
 
                 elif result.name == "confirmed":
                     # User confirmed execution

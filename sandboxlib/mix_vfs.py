@@ -121,6 +121,29 @@ class RealDir(Dir):
             # don't allow access to symlinks and other special files
             raise OSError(errno.EACCES, path)
 
+
+class OverlayDir(RealDir):
+    """RealDir with virtual file overrides.
+
+    Files in the overrides dict take precedence over real files.
+    Useful for injecting stubs into real directories.
+    """
+    def __init__(self, path, overrides=None, **kwargs):
+        super().__init__(path, **kwargs)
+        self.overrides = overrides or {}
+
+    def __repr__(self):
+        return '<OverlayDir %s (+%d overrides)>' % (self.path, len(self.overrides))
+
+    def keys(self):
+        real_keys = set(super().keys())
+        return sorted(real_keys | set(self.overrides.keys()))
+
+    def join(self, name):
+        if name in self.overrides:
+            return self.overrides[name]
+        return super().join(name)
+
 class File(FSObject):
     kind = stat.S_IFREG
     def __init__(self, data, mode=0):
@@ -227,17 +250,26 @@ class MixVFS(object):
 
         'library_path' must be the real directory that contains the
         'lib-python' and 'lib_pypy' directories to use.
+
+        Stubs from sandboxlib.stubs are automatically injected into lib_pypy,
+        overriding any real files with the same names.
         """
+        from sandboxlib.stubs import get_stubs
+
         lib_python = os.path.join(library_path, "lib-python")
         lib_pypy = os.path.join(library_path, "lib_pypy")
         if not os.path.isdir(lib_python):
             raise IOError("directory not found: %r" % (lib_python,))
         if not os.path.isdir(lib_pypy):
             raise IOError("directory not found: %r" % (lib_pypy,))
+
+        # Build stub overrides for lib_pypy
+        stubs = {name: File(content) for name, content in get_stubs().items()}
+
         return Dir({
                  'pypy': File('', mode=0o111),
                  'lib-python': RealDir(lib_python, exclude=exclude),
-                 'lib_pypy': RealDir(lib_pypy, exclude=exclude),
+                 'lib_pypy': OverlayDir(lib_pypy, overrides=stubs, exclude=exclude),
                  })
 
     def vfs_fetch_path(self, p_pathname):
