@@ -32,6 +32,11 @@ Options:
 
     --default-allow allow unknown commands (default is deny)
 
+    --script-name=NAME
+                    human-readable name for the session (used in dry-run)
+
+    --analysis=TEXT description of what the script does (used in dry-run)
+
 Note that you can get readline-like behavior with a tool like 'ledit',
 provided you use enough -u options:
 
@@ -68,6 +73,8 @@ def main(argv):
             "approve-cmd=",
             "deny-cmd=",
             "default-allow",
+            "script-name=",
+            "analysis=",
         ],
     )
 
@@ -88,16 +95,31 @@ def main(argv):
     raw_stdout = False
     executable = arguments[0]
 
+    # Capture sandbox args as structured dict for session re-execution
+    sandbox_args = {
+        "lib_path": None,
+        "tmp": None,
+        "pypy_exe": executable,
+        "nocolor": False,
+        "raw_stdout": False,
+        "script_name": None,
+        "analysis": None,
+    }
+
     for option, value in options:
         if option == "--tmp":
             SandboxedProc.vfs_root.entries["tmp"] = RealDir(value)
+            sandbox_args["tmp"] = value
         elif option == "--lib-path":
             SandboxedProc.vfs_root.entries["lib"] = MixVFS.vfs_pypy_lib_directory(value)
             arguments[0] = "/lib/pypy"
+            sandbox_args["lib_path"] = value
         elif option == "--nocolor":
             color = False
+            sandbox_args["nocolor"] = True
         elif option == "--raw-stdout":
             raw_stdout = True
+            sandbox_args["raw_stdout"] = True
         elif option == "--debug":
             SandboxedProc.debug_errors = True
         elif option == "--dry-run":
@@ -110,6 +132,12 @@ def main(argv):
             SandboxedProc.subprocess_denylist.add(value)
         elif option == "--default-allow":
             SandboxedProc.subprocess_default_deny = False
+        elif option == "--script-name":
+            SandboxedProc.subprocess_script_name = value
+            sandbox_args["script_name"] = value
+        elif option == "--analysis":
+            SandboxedProc.subprocess_analysis = value
+            sandbox_args["analysis"] = value
         elif option in ["-h", "--help"]:
             return help()
         else:
@@ -158,7 +186,36 @@ def main(argv):
     )
     virtualizedproc = SandboxedProc(popen.stdin, popen.stdout)
 
+    # Set sandbox args for session re-execution
+    virtualizedproc.subprocess_sandbox_args = sandbox_args
+
+    # Capture script path from arguments (look for .py files after the executable)
+    script_args = [a for a in arguments[1:] if a.endswith(".py")]
+    if script_args:
+        virtualizedproc.subprocess_script_path = script_args[0]
+        # Try to read script content from VFS if tmp is mapped
+        if sandbox_args.get("tmp"):
+            import os
+
+            real_script_path = os.path.join(sandbox_args["tmp"], os.path.basename(script_args[0]))
+            if os.path.exists(real_script_path):
+                try:
+                    with open(real_script_path, "r") as f:
+                        virtualizedproc.subprocess_script_content = f.read()
+                except Exception:
+                    pass
+
     virtualizedproc.run()
+
+    # Session finalization for dry-run mode
+    if SandboxedProc.subprocess_dry_run:
+        session = virtualizedproc.finalize_session()
+        if session:
+            print(f"\n*** Session created: {session.id} ***")
+            print(f"    Commands queued: {len(session.commands)}")
+            print(f"    Run 'shannot-approve' to review and execute.")
+        else:
+            print("\n*** No commands were queued. ***")
 
     popen.terminate()
     popen.wait()

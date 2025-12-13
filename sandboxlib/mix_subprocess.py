@@ -37,6 +37,13 @@ class MixSubprocess:
     # Persistence
     subprocess_auto_persist = True  # Auto-save pending when queuing
 
+    # Session context (set by interact.py before run)
+    subprocess_script_name = None  # str | None
+    subprocess_script_path = None  # str | None
+    subprocess_script_content = None  # str | None
+    subprocess_analysis = None  # str | None
+    subprocess_sandbox_args = {}  # dict - Structured args for re-execution
+
     def _parse_command(self, cmd):
         """Extract base command from shell string."""
         # Handle pipes, redirects, etc.
@@ -146,3 +153,38 @@ class MixSubprocess:
     def save_pending(self):
         """Write pending commands to queue file."""
         write_pending(self.subprocess_pending)
+
+    def finalize_session(self):
+        """
+        Create a Session from queued commands after script completes.
+
+        Call this at the end of a dry-run execution to bundle all
+        queued commands into a reviewable session.
+
+        Returns the created Session, or None if no commands were queued.
+        """
+        if not self.subprocess_pending:
+            return None
+
+        from .session import create_session
+
+        session = create_session(
+            script_path=self.subprocess_script_path or "<unknown>",
+            commands=list(self.subprocess_pending),
+            script_content=self.subprocess_script_content,
+            name=self.subprocess_script_name,
+            analysis=self.subprocess_analysis or "",
+            sandbox_args=self.subprocess_sandbox_args,
+        )
+
+        self.subprocess_pending.clear()
+        return session
+
+    def load_session_commands(self, session):
+        """
+        Load a session's commands as pre-approved.
+
+        Use this when re-executing an approved session.
+        """
+        for cmd in session.commands:
+            self.subprocess_approved.add(cmd)

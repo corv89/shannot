@@ -1,5 +1,20 @@
-"""Shared persistence for command queue and approvals."""
+"""
+DEPRECATED: Command-level queue persistence.
+
+This module is deprecated. Use session.py for new code.
+
+The session module provides script-level session management which
+groups commands from a single script execution into reviewable sessions.
+"""
 from __future__ import annotations
+
+import warnings
+
+warnings.warn(
+    "sandboxlib.queue is deprecated, use sandboxlib.session instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import json
 from pathlib import Path
