@@ -31,6 +31,7 @@ import sys, subprocess
 from sandboxlib import VirtualizedProc
 from sandboxlib.mix_pypy import MixPyPy
 from sandboxlib.mix_vfs import MixVFS, Dir, RealDir
+from sandboxlib.vfs_procfs import build_proc, build_sys
 from sandboxlib.mix_dump_output import MixDumpOutput
 from sandboxlib.mix_accept_input import MixAcceptInput
 
@@ -83,6 +84,17 @@ def main(argv):
             SandboxedProc.dump_get_ansi_color_fmt(31)
     if raw_stdout:
         SandboxedProc.raw_stdout = True
+
+    # Add virtual /proc and /sys filesystems
+    SandboxedProc.vfs_root.entries['proc'] = build_proc(
+        cmdline=arguments,
+        exe_path=arguments[0],
+        cwd=SandboxedProc.virtual_cwd,
+        pid=SandboxedProc.virtual_pid,
+        uid=SandboxedProc.virtual_uid,
+        gid=SandboxedProc.virtual_gid,
+    )
+    SandboxedProc.vfs_root.entries['sys'] = build_sys()
 
     if SandboxedProc.debug_errors:
         popen1 = subprocess.Popen(arguments[:1], executable=executable,
