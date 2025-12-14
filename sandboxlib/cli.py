@@ -294,6 +294,85 @@ def cmd_remote_remove(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    """Handle 'shannot status' command."""
+    # Determine what to show
+    show_all = not args.runtime and not args.targets
+    show_runtime = args.runtime or show_all
+    show_targets = args.targets or show_all
+    show_sessions = show_all
+
+    # Runtime status
+    if show_runtime:
+        from .config import RUNTIME_DIR
+        from .runtime import is_runtime_installed
+
+        print("Runtime:")
+        if is_runtime_installed():
+            print(f"  ✓ Stdlib: {RUNTIME_DIR}")
+        else:
+            print("  ✗ Stdlib not installed (run 'shannot setup')")
+        if show_all:
+            print()
+
+    # Targets status
+    if show_targets:
+        from .config import load_remotes, resolve_target
+        from .ssh import SSHConfig, SSHConnection
+
+        print("Targets:")
+        try:
+            remotes = load_remotes()
+        except RuntimeError as e:
+            print(f"  ✗ Error loading remotes: {e}")
+            remotes = {}
+
+        if not remotes:
+            print("  No remotes configured")
+        else:
+            for name, remote in sorted(remotes.items()):
+                user, host, port = resolve_target(name)
+                target_str = remote.target_string
+                if remote.port != 22:
+                    target_str += f":{remote.port}"
+
+                # Test connection with short timeout
+                config = SSHConfig(
+                    target=f"{user}@{host}", port=port, connect_timeout=5
+                )
+                try:
+                    with SSHConnection(config) as ssh:
+                        if ssh.connect():
+                            result = ssh.run("echo OK", timeout=5)
+                            if result.returncode == 0:
+                                print(f"  ✓ {name} ({target_str}) — connected")
+                            else:
+                                print(f"  ✗ {name} ({target_str}) — command failed")
+                        else:
+                            print(f"  ✗ {name} ({target_str}) — connection failed")
+                except Exception as e:
+                    print(f"  ✗ {name} ({target_str}) — {e}")
+        if show_all:
+            print()
+
+    # Sessions status
+    if show_sessions:
+        from .session import Session
+
+        print("Sessions:")
+        try:
+            pending = Session.list_pending()
+            count = len(pending)
+            if count > 0:
+                print(f"  {count} pending (shannot approve to review)")
+            else:
+                print("  No pending sessions")
+        except Exception as e:
+            print(f"  ✗ Error: {e}")
+
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="shannot",
@@ -503,6 +582,24 @@ def main() -> int:
         return 0
 
     remote_parser.set_defaults(func=print_remote_help)
+
+    # ===== status subcommand =====
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show system status",
+        description="Display runtime, targets, and session status",
+    )
+    status_parser.add_argument(
+        "--runtime",
+        action="store_true",
+        help="Check runtime installation only",
+    )
+    status_parser.add_argument(
+        "--targets",
+        action="store_true",
+        help="Test target connections only",
+    )
+    status_parser.set_defaults(func=cmd_status)
 
     # Parse and execute
     args = parser.parse_args()
