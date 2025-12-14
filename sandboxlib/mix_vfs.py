@@ -5,7 +5,10 @@ import stat
 from io import BytesIO
 from .virtualizedproc import signature, sigerror
 from .sandboxio import NULL
-from ._commonstruct_cffi import ffi, lib
+from .structs import (
+    new_stat, new_dirent, struct_to_bytes,
+    SIZEOF_DIRENT, DT_REG, DT_DIR
+)
 
 MAX_PATH = 256
 UID = 1000
@@ -39,14 +42,14 @@ class FSObject(object):
         else:
             st_uid = UID     # read-write files are owned by this virtual user
             st_gid = GID
-        return ffi.new("struct stat *", dict(
-            st_ino = st_ino,
-            st_dev = 1,
-            st_nlink = 1,
-            st_size = self.getsize(),
-            st_mode = st_mode,
-            st_uid = st_uid,
-            st_gid = st_gid))
+        return new_stat(
+            st_ino=st_ino,
+            st_dev=1,
+            st_nlink=1,
+            st_size=self.getsize(),
+            st_mode=st_mode,
+            st_uid=st_uid,
+            st_gid=st_gid)
 
     def access(self, mode):
         s = self.stat()
@@ -319,8 +322,8 @@ class MixVFS(object):
         return all_components[-1]
 
     def vfs_write_stat(self, p_statbuf, node):
-        ffi_stat = node.stat()
-        bytes_data = ffi.buffer(ffi_stat)[:]
+        stat_struct = node.stat()
+        bytes_data = struct_to_bytes(stat_struct)
         self.sandio.write_buffer(p_statbuf, bytes_data)
 
     def vfs_allocate_fd(self, f, node):
@@ -341,14 +344,14 @@ class MixVFS(object):
             raise OSError(errno.EBADF, "bad file descriptor")
 
     def vfs_stat_for_pipe(self, p_statbuf):
-        ffi_stat = ffi.new("struct stat *", dict(
-            st_ino = 120,
-            st_dev = 12,
-            st_nlink = 1,
-            st_mode = stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR,
-            st_uid = UID,
-            st_gid = GID))
-        bytes_data = ffi.buffer(ffi_stat)[:]
+        stat_struct = new_stat(
+            st_ino=120,
+            st_dev=12,
+            st_nlink=1,
+            st_mode=stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR,
+            st_uid=UID,
+            st_gid=GID)
+        bytes_data = struct_to_bytes(stat_struct)
         self.sandio.write_buffer(p_statbuf, bytes_data)
 
     @vfs_signature("stat64(pp)i", filearg=0)
@@ -518,7 +521,7 @@ class MixVFS(object):
             raise OSError(errno.EMFILE, "trying to open too many directories")
         node = self.vfs_getnode(p_name)
         fdir = OpenDir(node)
-        p = self.sandio.malloc(b'\x00' * ffi.sizeof("struct dirent"))
+        p = self.sandio.malloc(b'\x00' * SIZEOF_DIRENT)
         self.vfs_open_dirs[p.addr] = fdir
         return p
 
@@ -536,19 +539,15 @@ class MixVFS(object):
             except OSError:
                 continue
             break
-        dirent = ffi.new("struct dirent *")
+        dirent = new_dirent()
         dirent.d_ino = st.st_ino
-        dirent.d_reclen = ffi.sizeof("struct dirent")
-        if subnode.is_dir():
-            dirent.d_type = lib.DT_DIR
-        else:
-            dirent.d_type = lib.DT_REG
-        name = name.encode('utf-8') + b'\x00'
-        n = len(name)
-        if n > ffi.sizeof(dirent.d_name):
+        dirent.d_reclen = SIZEOF_DIRENT
+        dirent.d_type = DT_DIR if subnode.is_dir() else DT_REG
+        name = name.encode('utf-8')
+        if len(name) > 255:  # d_name is 256 bytes including null terminator
             raise OSError(errno.EOVERFLOW, subnode)
-        ffi.memmove(dirent.d_name, name, n)
-        bytes_data = ffi.buffer(dirent)[:]
+        dirent.d_name = name
+        bytes_data = struct_to_bytes(dirent)
         self.sandio.write_buffer(p_dir, bytes_data)
         return p_dir
 

@@ -7,7 +7,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING
 
 from .mix_vfs import FSObject, Dir, INO_COUNTER, UID, GID
-from ._commonstruct_cffi import ffi
+from .structs import new_stat
 
 if TYPE_CHECKING:
     from .ssh import SSHConnection
@@ -47,7 +47,7 @@ class RemoteFile(FSObject):
         except OSError:
             # Return a default stat on error
             INO_COUNTER += 1
-            return ffi.new("struct stat *", dict(
+            return new_stat(
                 st_ino=INO_COUNTER,
                 st_dev=1,
                 st_nlink=1,
@@ -55,9 +55,9 @@ class RemoteFile(FSObject):
                 st_mode=self.kind | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
                 st_uid=0,
                 st_gid=0,
-            ))
+            )
 
-        # Convert remote stat to ffi struct
+        # Convert remote stat to Stat struct
         st_mode = remote_stat.st_mode
         if self.read_only:
             st_uid = 0
@@ -66,7 +66,7 @@ class RemoteFile(FSObject):
             st_uid = UID
             st_gid = GID
 
-        return ffi.new("struct stat *", dict(
+        return new_stat(
             st_ino=remote_stat.st_ino,
             st_dev=1,
             st_nlink=remote_stat.st_nlink,
@@ -74,7 +74,7 @@ class RemoteFile(FSObject):
             st_mode=st_mode,
             st_uid=st_uid,
             st_gid=st_gid,
-        ))
+        )
 
     def getsize(self):
         """Return file size."""
@@ -136,7 +136,7 @@ class RemoteDir(FSObject):
             st_uid = UID
             st_gid = GID
 
-        return ffi.new("struct stat *", dict(
+        return new_stat(
             st_ino=st_ino,
             st_dev=1,
             st_nlink=1,
@@ -144,7 +144,7 @@ class RemoteDir(FSObject):
             st_mode=st_mode,
             st_uid=st_uid,
             st_gid=st_gid,
-        ))
+        )
 
     def keys(self):
         """List directory contents."""

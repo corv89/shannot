@@ -4,7 +4,7 @@ import errno
 import time
 from . import sandboxio
 from .sandboxio import Ptr, NULL, ptr_size
-from ._commonstruct_cffi import ffi
+from .structs import new_timeval, struct_to_bytes, pack_time_t, pack_uid_t, pack_gid_t
 
 
 def signature(sig):
@@ -300,7 +300,7 @@ class VirtualizedProc(object):
     def s_time(self, p_tloc):
         t = int(self.virtual_time)
         if p_tloc.addr != 0:
-            bytes_data = ffi.buffer(ffi.new("time_t *", t))[:]
+            bytes_data = pack_time_t(t)
             self.sandio.write_buffer(p_tloc, bytes_data)
         return t
 
@@ -311,7 +311,7 @@ class VirtualizedProc(object):
             assert t >= 0.0
             sec = int(t)
             usec = int((t - sec) * 1000000.0)
-            bytes_data = ffi.buffer(ffi.new("struct timeval *", [sec, usec]))[:]
+            bytes_data = struct_to_bytes(new_timeval(sec, usec))
             self.sandio.write_buffer(p_tv, bytes_data)
         if p_tz.addr != 0:
             raise Exception("subprocess called gettimeofday() with a non-null "
@@ -367,7 +367,7 @@ class VirtualizedProc(object):
 
     @signature("getresuid(ppp)i")
     def s_getresuid(self, p_ruid, p_euid, p_suid):
-        bytes_data = ffi.buffer(ffi.new("uid_t *", self.virtual_uid))[:]
+        bytes_data = pack_uid_t(self.virtual_uid)
         self.sandio.write_buffer(p_ruid, bytes_data)
         self.sandio.write_buffer(p_euid, bytes_data)
         self.sandio.write_buffer(p_suid, bytes_data)
@@ -375,7 +375,7 @@ class VirtualizedProc(object):
 
     @signature("getresgid(ppp)i")
     def s_getresgid(self, p_rgid, p_egid, p_sgid):
-        bytes_data = ffi.buffer(ffi.new("git_t *", self.virtual_gid))[:]
+        bytes_data = pack_gid_t(self.virtual_gid)
         self.sandio.write_buffer(p_rgid, bytes_data)
         self.sandio.write_buffer(p_egid, bytes_data)
         self.sandio.write_buffer(p_sgid, bytes_data)
