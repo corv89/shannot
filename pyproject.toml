@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shannot"
+version = "0.5.0"
+description = "Sandboxed system administration for LLM agents"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+dependencies = []  # Zero dependencies!
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "basedpyright"]
+
+[project.scripts]
+shannot = "sandboxlib.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/corv89/shannot"
+Documentation = "https://corv89.github.io/shannot/"
+
+[tool.setuptools.packages.find]
+include = ["sandboxlib*"]
+
+[tool.setuptools.package-data]
+sandboxlib = ["stubs/*.py"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+
+[tool.basedpyright]
+pythonVersion = "3.11"
