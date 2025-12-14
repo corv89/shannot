@@ -7,10 +7,10 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import VERSION, get_remote_deploy_dir
+from .config import VERSION, get_remote_deploy_dir, resolve_target
 from .deploy import ensure_deployed
 from .session import Session, create_session
-from .ssh import SSHConnection
+from .ssh import SSHConfig, SSHConnection
 
 if TYPE_CHECKING:
     from typing import Optional
@@ -58,7 +58,7 @@ def run_remote_dry_run(
     and returns session with queued commands/writes.
 
     Args:
-        target: SSH target (user@host)
+        target: SSH target (remote name, user@host, or user@host:port)
         script_path: Original script path (for naming)
         script_content: Script content to run (reads from script_path if not provided)
         name: Human-readable session name
@@ -71,7 +71,12 @@ def run_remote_dry_run(
         with open(script_path, "r") as f:
             script_content = f.read()
 
-    with SSHConnection(target) as ssh:
+    # Resolve target to (user, host, port)
+    user, host, port = resolve_target(target)
+    resolved_target = f"{user}@{host}"
+    ssh_config = SSHConfig(target=resolved_target, port=port)
+
+    with SSHConnection(ssh_config) as ssh:
         # Ensure shannot is deployed
         if not ensure_deployed(ssh):
             raise RemoteExecutionError("Failed to deploy shannot to remote")
@@ -161,7 +166,12 @@ def execute_remote_session(session: Session) -> int:
     if not target:
         raise RemoteExecutionError("Session missing target")
 
-    with SSHConnection(target) as ssh:
+    # Resolve target to (user, host, port)
+    user, host, port = resolve_target(target)
+    resolved_target = f"{user}@{host}"
+    ssh_config = SSHConfig(target=resolved_target, port=port)
+
+    with SSHConnection(ssh_config) as ssh:
         deploy_dir = get_remote_deploy_dir()
 
         # Check if remote session still exists

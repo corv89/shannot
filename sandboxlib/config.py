@@ -1,9 +1,13 @@
 """Centralized configuration paths for shannot."""
 from __future__ import annotations
 
+import getpass
 import json
 import os
+import tomllib
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, Optional
 
 # Version
 VERSION = "0.1.0"
@@ -47,6 +51,28 @@ PYPY_SHA256 = "a23d21ca0de0f613732af4b4abb0b0db1cc56134b5bf0e33614eca87ab8805af"
 
 # Profile configuration
 PROFILE_FILENAME = "profile.json"
+
+# Remotes configuration
+REMOTES_FILENAME = "remotes.toml"
+
+
+@dataclass
+class Remote:
+    """SSH remote target configuration."""
+
+    name: str
+    host: str
+    user: str
+    port: int = 22
+
+    @property
+    def target_string(self) -> str:
+        """Return user@host format."""
+        return f"{self.user}@{self.host}"
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for TOML serialization."""
+        return {"host": self.host, "user": self.user, "port": self.port}
 
 DEFAULT_PROFILE = {
     "auto_approve": [
@@ -126,3 +152,147 @@ def load_profile() -> dict:
         }
     except (json.JSONDecodeError, IOError):
         return DEFAULT_PROFILE.copy()
+
+
+def get_remotes_path() -> Path:
+    """Get path to remotes.toml config file."""
+    return CONFIG_DIR / REMOTES_FILENAME
+
+
+def load_remotes() -> Dict[str, Remote]:
+    """
+    Load remotes from TOML config file.
+
+    Returns:
+        Dictionary mapping remote name to Remote object.
+    """
+    remotes_path = get_remotes_path()
+    if not remotes_path.exists():
+        return {}
+
+    try:
+        with open(remotes_path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load remotes.toml: {e}")
+
+    remotes: Dict[str, Remote] = {}
+    for name, config in data.get("remotes", {}).items():
+        remotes[name] = Remote(
+            name=name,
+            host=config.get("host", ""),
+            user=config.get("user", getpass.getuser()),
+            port=config.get("port", 22),
+        )
+    return remotes
+
+
+def save_remotes(remotes: Dict[str, Remote]) -> None:
+    """
+    Save remotes to TOML config file.
+
+    Uses manual TOML formatting to avoid tomli-w dependency.
+    """
+    remotes_path = get_remotes_path()
+    remotes_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = ["# SSH remote targets for shannot", ""]
+
+    for name, remote in sorted(remotes.items()):
+        # Quote names that contain dots or special characters
+        if "." in name or " " in name or '"' in name:
+            quoted_name = f'"{name}"'
+        else:
+            quoted_name = name
+        lines.append(f"[remotes.{quoted_name}]")
+        lines.append(f'host = "{remote.host}"')
+        lines.append(f'user = "{remote.user}"')
+        lines.append(f"port = {remote.port}")
+        lines.append("")
+
+    remotes_path.write_text("\n".join(lines))
+
+
+def add_remote(
+    name: str, host: str, user: Optional[str] = None, port: int = 22
+) -> Remote:
+    """
+    Add a new remote to the configuration.
+
+    Args:
+        name: Unique name for the remote
+        host: Hostname or IP address
+        user: SSH user (defaults to current user)
+        port: SSH port (defaults to 22)
+
+    Returns:
+        The created Remote object.
+
+    Raises:
+        ValueError: If remote name already exists.
+    """
+    remotes = load_remotes()
+    if name in remotes:
+        raise ValueError(f"Remote '{name}' already exists. Use 'remote remove' first.")
+
+    remote = Remote(
+        name=name,
+        host=host,
+        user=user or getpass.getuser(),
+        port=port,
+    )
+    remotes[name] = remote
+    save_remotes(remotes)
+    return remote
+
+
+def remove_remote(name: str) -> bool:
+    """
+    Remove a remote from the configuration.
+
+    Returns:
+        True if remote was removed, False if it didn't exist.
+    """
+    remotes = load_remotes()
+    if name not in remotes:
+        return False
+    del remotes[name]
+    save_remotes(remotes)
+    return True
+
+
+def resolve_target(target: str) -> tuple[str, str, int]:
+    """
+    Resolve a target string to (user, host, port) tuple.
+
+    Supports:
+    - Named remotes from config (e.g., "prod")
+    - user@host format (e.g., "admin@prod.example.com")
+    - host-only format (e.g., "prod.example.com") - uses current user
+    - user@host:port format (e.g., "admin@prod.example.com:2222")
+
+    Returns:
+        Tuple of (user, host, port)
+    """
+    # Check if it's a saved remote name
+    remotes = load_remotes()
+    if target in remotes:
+        r = remotes[target]
+        return (r.user, r.host, r.port)
+
+    # Parse user@host:port format
+    user = getpass.getuser()
+    port = 22
+    host = target
+
+    if "@" in target:
+        user, host = target.split("@", 1)
+
+    if ":" in host:
+        host, port_str = host.rsplit(":", 1)
+        try:
+            port = int(port_str)
+        except ValueError:
+            pass  # Keep default port if parsing fails
+
+    return (user, host, port)

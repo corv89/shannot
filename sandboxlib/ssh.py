@@ -24,6 +24,7 @@ class SSHConfig:
     connect_timeout: int = 10
     command_timeout: int = 30
     control_path: Path = field(default=None)
+    port: int = 22
 
     def __post_init__(self):
         if self.control_path is None:
@@ -64,7 +65,7 @@ class SSHConnection:
 
     def _base_ssh_args(self) -> list[str]:
         """Base SSH arguments with ControlMaster options."""
-        return [
+        args = [
             "ssh",
             "-o", "ControlMaster=auto",
             "-o", f"ControlPath={self.config.control_path}",
@@ -73,6 +74,10 @@ class SSHConnection:
             "-o", "BatchMode=yes",  # Never prompt for password
             "-o", "StrictHostKeyChecking=accept-new",
         ]
+        # Add port if non-default
+        if self.config.port != 22:
+            args.extend(["-p", str(self.config.port)])
+        return args
 
     def connect(self) -> bool:
         """

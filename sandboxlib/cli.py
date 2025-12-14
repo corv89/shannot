@@ -188,6 +188,112 @@ def cmd_execute(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def cmd_remote_add(args: argparse.Namespace) -> int:
+    """Handle 'shannot remote add' command."""
+    import getpass
+
+    from .config import add_remote
+
+    try:
+        user = args.user or getpass.getuser()
+        remote = add_remote(
+            name=args.name,
+            host=args.host,
+            user=user,
+            port=args.port,
+        )
+        print(f"Added remote '{args.name}': {remote.user}@{remote.host}:{remote.port}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_remote_list(args: argparse.Namespace) -> int:
+    """Handle 'shannot remote list' command."""
+    from .config import load_remotes
+
+    try:
+        remotes = load_remotes()
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not remotes:
+        print("No remotes configured.")
+        print("Use 'shannot remote add <name> <host>' to add one.")
+        return 0
+
+    # Calculate column widths
+    name_width = max(len(name) for name in remotes.keys())
+    name_width = max(name_width, 4)  # Minimum "NAME" header width
+
+    print(f"{'NAME':<{name_width}}  TARGET")
+    print(f"{'-' * name_width}  {'-' * 30}")
+
+    for name, remote in sorted(remotes.items()):
+        target = f"{remote.user}@{remote.host}"
+        if remote.port != 22:
+            target += f":{remote.port}"
+        print(f"{name:<{name_width}}  {target}")
+
+    return 0
+
+
+def cmd_remote_test(args: argparse.Namespace) -> int:
+    """Handle 'shannot remote test' command."""
+    from .config import resolve_target
+    from .ssh import SSHConfig, SSHConnection
+
+    try:
+        user, host, port = resolve_target(args.name)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    target = f"{user}@{host}"
+    print(f"Testing connection to {target}:{port}...")
+
+    # Create SSHConfig with resolved values
+    config = SSHConfig(target=target, port=port, connect_timeout=args.timeout)
+
+    with SSHConnection(config) as ssh:
+        if not ssh.connect():
+            print(f"FAILED: Could not connect to {target}:{port}")
+            return 1
+
+        # Run a simple command to verify
+        result = ssh.run("echo OK")
+        if result.returncode == 0 and b"OK" in result.stdout:
+            print(f"SUCCESS: Connected to {target}:{port}")
+            # Get remote hostname for verification
+            hostname_result = ssh.run("hostname")
+            if hostname_result.returncode == 0:
+                hostname = hostname_result.stdout.decode().strip()
+                print(f"  Remote hostname: {hostname}")
+            return 0
+        else:
+            print("FAILED: Connection succeeded but test command failed")
+            if result.stderr:
+                print(f"  Error: {result.stderr.decode()}")
+            return 1
+
+
+def cmd_remote_remove(args: argparse.Namespace) -> int:
+    """Handle 'shannot remote remove' command."""
+    from .config import remove_remote
+
+    if remove_remote(args.name):
+        print(f"Removed remote '{args.name}'")
+        return 0
+    else:
+        print(f"Error: Remote '{args.name}' not found", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="shannot",
@@ -313,6 +419,90 @@ def main() -> int:
         help="Output results as JSON",
     )
     execute_parser.set_defaults(func=cmd_execute)
+
+    # ===== remote subcommand (with sub-subcommands) =====
+    remote_parser = subparsers.add_parser(
+        "remote",
+        help="Manage SSH remote targets",
+        description="Add, list, test, and remove named SSH targets",
+    )
+    remote_subparsers = remote_parser.add_subparsers(
+        dest="remote_command", help="Remote commands"
+    )
+
+    # remote add
+    remote_add_parser = remote_subparsers.add_parser(
+        "add",
+        help="Add a new remote target",
+        description="Save a named SSH target for easy reuse",
+    )
+    remote_add_parser.add_argument(
+        "name",
+        help="Unique name for the remote (e.g., 'prod', 'staging')",
+    )
+    remote_add_parser.add_argument(
+        "host",
+        help="Hostname or IP address",
+    )
+    remote_add_parser.add_argument(
+        "--user",
+        "-u",
+        help="SSH username (defaults to current user)",
+    )
+    remote_add_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=22,
+        help="SSH port (default: 22)",
+    )
+    remote_add_parser.set_defaults(func=cmd_remote_add)
+
+    # remote list
+    remote_list_parser = remote_subparsers.add_parser(
+        "list",
+        help="List configured remotes",
+        description="Show all saved SSH targets",
+    )
+    remote_list_parser.set_defaults(func=cmd_remote_list)
+
+    # remote test
+    remote_test_parser = remote_subparsers.add_parser(
+        "test",
+        help="Test connection to a remote",
+        description="Verify SSH connectivity to a saved or ad-hoc target",
+    )
+    remote_test_parser.add_argument(
+        "name",
+        help="Remote name or user@host target",
+    )
+    remote_test_parser.add_argument(
+        "--timeout",
+        "-t",
+        type=int,
+        default=10,
+        help="Connection timeout in seconds (default: 10)",
+    )
+    remote_test_parser.set_defaults(func=cmd_remote_test)
+
+    # remote remove
+    remote_remove_parser = remote_subparsers.add_parser(
+        "remove",
+        help="Remove a remote target",
+        description="Delete a saved SSH target",
+    )
+    remote_remove_parser.add_argument(
+        "name",
+        help="Name of remote to remove",
+    )
+    remote_remove_parser.set_defaults(func=cmd_remote_remove)
+
+    # Handle 'shannot remote' with no subcommand
+    def print_remote_help(args: argparse.Namespace) -> int:
+        remote_parser.print_help()
+        return 0
+
+    remote_parser.set_defaults(func=print_remote_help)
 
     # Parse and execute
     args = parser.parse_args()
