@@ -1,0 +1,269 @@
+"""Remote execution protocol for shannot."""
+from __future__ import annotations
+
+import json
+import sys
+import uuid
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from .config import VERSION, get_remote_deploy_dir, resolve_target
+from .deploy import ensure_deployed
+from .session import Session, create_session
+from .ssh import SSHConfig, SSHConnection
+
+if TYPE_CHECKING:
+    from typing import Optional
+
+
+class RemoteExecutionError(Exception):
+    """Remote execution failed."""
+
+    pass
+
+
+def _create_remote_workdir(ssh: SSHConnection) -> str:
+    """Create temporary work directory on remote."""
+    work_id = uuid.uuid4().hex[:8]
+    workdir = f"/tmp/shannot-work-{work_id}"
+    result = ssh.run(f"mkdir -p {workdir}")
+    if result.returncode != 0:
+        raise RemoteExecutionError(f"Failed to create workdir: {result.stderr.decode()}")
+    return workdir
+
+
+def _cleanup_remote_workdir(ssh: SSHConnection, workdir: str) -> None:
+    """Remove remote work directory."""
+    ssh.run(f"rm -rf {workdir}")
+
+
+def _upload_script(ssh: SSHConnection, workdir: str, script_content: str) -> str:
+    """Upload script to remote and return remote path."""
+    remote_path = f"{workdir}/script.py"
+    ssh.write_file(remote_path, script_content.encode("utf-8"))
+    return remote_path
+
+
+def run_remote_dry_run(
+    target: str,
+    script_path: str,
+    script_content: Optional[str] = None,
+    name: Optional[str] = None,
+    analysis: str = "",
+) -> Optional[Session]:
+    """
+    Run script on remote in dry-run mode.
+
+    Deploys shannot if needed, uploads script, runs in sandbox,
+    and returns session with queued commands/writes.
+
+    Args:
+        target: SSH target (remote name, user@host, or user@host:port)
+        script_path: Original script path (for naming)
+        script_content: Script content to run (reads from script_path if not provided)
+        name: Human-readable session name
+        analysis: Description of script purpose
+
+    Returns:
+        Session object with remote session data, or None if no commands queued
+    """
+    if script_content is None:
+        with open(script_path, "r") as f:
+            script_content = f.read()
+
+    # Resolve target to (user, host, port)
+    user, host, port = resolve_target(target)
+    resolved_target = f"{user}@{host}"
+    ssh_config = SSHConfig(target=resolved_target, port=port)
+
+    with SSHConnection(ssh_config) as ssh:
+        # Ensure shannot is deployed
+        if not ensure_deployed(ssh):
+            raise RemoteExecutionError("Failed to deploy shannot to remote")
+
+        deploy_dir = get_remote_deploy_dir()
+        workdir = _create_remote_workdir(ssh)
+
+        try:
+            # Upload script
+            remote_script = _upload_script(ssh, workdir, script_content)
+
+            # Run in dry-run mode with JSON output
+            cmd = (
+                f"{deploy_dir}/shannot run --dry-run --json-output "
+                f"--tmp={workdir} "
+                f"{deploy_dir}/pypy-c-sandbox -S {remote_script}"
+            )
+
+            result = ssh.run(cmd, timeout=300)
+
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace")
+                raise RemoteExecutionError(f"Remote dry-run failed: {stderr}")
+
+            # Parse JSON response
+            stdout = result.stdout.decode("utf-8")
+            try:
+                response = json.loads(stdout)
+            except json.JSONDecodeError as e:
+                raise RemoteExecutionError(f"Invalid JSON response: {e}\n{stdout}")
+
+            # Check version compatibility
+            remote_version = response.get("version", "unknown")
+            if remote_version != VERSION:
+                sys.stderr.write(
+                    f"[WARN] Version mismatch: local={VERSION}, remote={remote_version}\n"
+                )
+
+            # Extract session data
+            session_data = response.get("session")
+            if session_data is None:
+                # No commands/writes queued - clean up workdir
+                _cleanup_remote_workdir(ssh, workdir)
+                return None
+
+            # Create local session with remote metadata
+            session = create_session(
+                script_path=script_path,
+                commands=session_data.get("commands", []),
+                script_content=script_content,
+                name=name or Path(script_path).stem,
+                analysis=analysis,
+                sandbox_args={
+                    "target": target,
+                    "remote_workdir": workdir,
+                },
+                pending_writes=session_data.get("pending_writes", []),
+            )
+
+            # Mark session as remote
+            session.target = target
+            session.remote_session_id = session_data.get("id")
+            session.save()
+
+            return session
+
+        except (OSError, RemoteExecutionError):
+            # Clean up workdir on error (but not on success - needed for execution)
+            _cleanup_remote_workdir(ssh, workdir)
+            raise
+
+
+def execute_remote_session(session: Session) -> int:
+    """
+    Execute an approved session on the remote target.
+
+    Args:
+        session: Approved session with remote metadata
+
+    Returns:
+        Exit code from remote execution
+    """
+    target = session.target
+    remote_session_id = session.remote_session_id
+    remote_workdir = session.sandbox_args.get("remote_workdir")
+
+    if not target:
+        raise RemoteExecutionError("Session missing target")
+
+    # Resolve target to (user, host, port)
+    user, host, port = resolve_target(target)
+    resolved_target = f"{user}@{host}"
+    ssh_config = SSHConfig(target=resolved_target, port=port)
+
+    with SSHConnection(ssh_config) as ssh:
+        deploy_dir = get_remote_deploy_dir()
+
+        # Check if remote session still exists
+        if remote_session_id:
+            result = ssh.run(f"test -d ~/.local/share/shannot/sessions/{remote_session_id}")
+            if result.returncode != 0:
+                # Remote session was cleaned up - use recovery path
+                sys.stderr.write(
+                    f"[WARN] Remote session {remote_session_id} not found, re-executing with approvals\n"
+                )
+                return run_remote_with_approvals(session, ssh)
+
+        # Execute on remote
+        cmd = f"{deploy_dir}/shannot execute --session-id={remote_session_id} --json-output"
+
+        result = ssh.run(cmd, timeout=600)
+
+        # Parse response
+        try:
+            response = json.loads(result.stdout.decode("utf-8"))
+        except json.JSONDecodeError:
+            # Fallback: use raw output
+            session.stdout = result.stdout.decode("utf-8", errors="replace")
+            session.stderr = result.stderr.decode("utf-8", errors="replace")
+            session.exit_code = result.returncode
+            session.status = "executed" if result.returncode == 0 else "failed"
+            session.save()
+            return result.returncode
+
+        # Update session with results
+        session.stdout = response.get("stdout", "")
+        session.stderr = response.get("stderr", "")
+        session.exit_code = response.get("exit_code", result.returncode)
+        session.status = "executed" if session.exit_code == 0 else "failed"
+        session.save()
+
+        # Clean up remote workdir
+        if remote_workdir:
+            _cleanup_remote_workdir(ssh, remote_workdir)
+
+        return session.exit_code
+
+
+def run_remote_with_approvals(session: Session, ssh: SSHConnection) -> int:
+    """
+    Re-run script on remote with pre-approved commands.
+
+    Used when remote session was cleaned up but local still has approval.
+    Uploads script and runs with --approved-commands flag.
+
+    Args:
+        session: Local session with approved commands
+        ssh: Connected SSH session
+
+    Returns:
+        Exit code from execution
+    """
+    deploy_dir = get_remote_deploy_dir()
+
+    # Create new workdir
+    workdir = _create_remote_workdir(ssh)
+
+    try:
+        # Upload script from local session
+        script_content = session.load_script()
+        if not script_content:
+            raise RemoteExecutionError("Session script content not found")
+
+        remote_script = _upload_script(ssh, workdir, script_content)
+
+        # JSON-encode approved commands
+        approved_commands_json = json.dumps(session.commands)
+
+        # Run with pre-approved commands (not dry-run)
+        cmd = (
+            f"{deploy_dir}/shannot run "
+            f"--tmp={workdir} "
+            f"--approved-commands={json.dumps(approved_commands_json)} "
+            f"{deploy_dir}/pypy-c-sandbox -S {remote_script}"
+        )
+
+        result = ssh.run(cmd, timeout=600)
+
+        # Update session with results
+        session.stdout = result.stdout.decode("utf-8", errors="replace")
+        session.stderr = result.stderr.decode("utf-8", errors="replace")
+        session.exit_code = result.returncode
+        session.status = "executed" if result.returncode == 0 else "failed"
+        session.save()
+
+        return result.returncode
+
+    finally:
+        # Clean up workdir
+        _cleanup_remote_workdir(ssh, workdir)

@@ -1,132 +1,37 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "shannot"
-version = "0.3.0"
-description = "Secure read-only sandboxing for LLM agents and system diagnostics"
+version = "0.5.0"
+description = "Sandboxed system administration for LLM agents"
 readme = "README.md"
-requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
-authors = [
-    {name = "corv89", email = "corv89@users.noreply.github.com"}
-]
-keywords = ["sandbox", "bubblewrap", "security", "read-only", "llm", "diagnostics"]
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Intended Audience :: System Administrators",
-    "Topic :: Security",
-    "Topic :: System :: Systems Administration",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Operating System :: POSIX :: Linux",
-    "Environment :: Console",
-    "Typing :: Typed",
-]
-dependencies = []
+requires-python = ">=3.11"
+dependencies = []  # Zero dependencies!
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "basedpyright"]
+
+[project.scripts]
+shannot = "sandboxlib.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
-Repository = "https://github.com/corv89/shannot"
-"Bug Tracker" = "https://github.com/corv89/shannot/issues"
-Documentation = "https://github.com/corv89/shannot/blob/main/README.md"
-
-[project.scripts]
-shannot = "shannot.cli:main"
-shannot-mcp = "shannot.mcp_main:entrypoint"
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.0",
-    "pre-commit>=3.6.0",
-    "ruff>=0.1.0",
-    "basedpyright>=1.0",
-    "types-setuptools",
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.0.0",
-    "mkdocstrings[python]>=0.24.0",
-]
-mcp = [
-    "mcp>=1.18.0",
-    "asyncssh>=2.14.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "tomli-w>=1.0.0",
-]
-remote = [
-    "asyncssh>=2.14.0",
-    "tomli>=2.0.0; python_version < '3.11'",
-    "tomli-w>=1.0.0",
-]
+Documentation = "https://corv89.github.io/shannot/"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["shannot*"]
+include = ["sandboxlib*"]
 
 [tool.setuptools.package-data]
-shannot = ["py.typed", "../profiles/*.json"]
+sandboxlib = ["stubs/*.py"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "auto"
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-]
-ignore = [
-    # All Python 3.10+ upgrade rules are now enabled
-]
-
-[tool.basedpyright]
-pythonVersion = "3.10"
-typeCheckingMode = "standard"
-reportDeprecated = false
-reportUnnecessaryIsInstance = false
-reportUnusedCallResult = "warning"
-reportAny = "warning"
-reportUnknownVariableType = "warning"
-reportUnknownParameterType = "warning"
-reportUnknownArgumentType = "warning"
-reportUnknownMemberType = "warning"
-reportPrivateUsage = "warning"
-reportUnusedImport = "warning"
-reportUnreachable = "warning"
-reportUnannotatedClassAttribute = "warning"
-reportExplicitAny = "warning"
-reportMissingImports = "warning"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--verbose",
-]
-markers = [
-    "linux_only: marks tests as requiring Linux platform (deselect with '-m \"not linux_only\"')",
-    "requires_bwrap: marks tests as requiring bubblewrap to be installed (deselect with '-m \"not requires_bwrap\"')",
-    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
-]
+testpaths = ["test"]
 
-[tool.coverage.run]
-relative_files = true
+[tool.basedpyright]
+pythonVersion = "3.11"
