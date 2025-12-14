@@ -154,7 +154,12 @@ class SessionListView(View):
             if write_count:
                 counts += f", {write_count} writes"
 
-            print(f" {pointer}{marker} {name:<32} ({counts}) {date}")
+            # Show remote target if present
+            remote_tag = ""
+            if session.is_remote():
+                remote_tag = f" \033[33m@{session.target}\033[0m"
+
+            print(f" {pointer}{marker} {name:<32} ({counts}){remote_tag} {date}")
 
         print()
         print(" \033[90m[Up/Down] move  [Space] select  [a]ll  [n]one\033[0m")
@@ -223,6 +228,8 @@ class SessionDetailView(View):
         print(f"\033[1m Session: {s.name} \033[0m")
         print(f" ID: {s.id}")
         print(f" Script: {s.script_path}")
+        if s.is_remote():
+            print(f" Target: \033[33m{s.target}\033[0m")
         print(f" Created: {s.created_at}")
         print()
 
@@ -840,6 +847,8 @@ def main():
         print(f"ID: {session.id}")
         print(f"Status: {session.status}")
         print(f"Script: {session.script_path}")
+        if session.is_remote():
+            print(f"Target: {session.target}")
         print(f"Created: {session.created_at}")
         if session.analysis:
             print(f"Analysis: {session.analysis}")

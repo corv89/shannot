@@ -33,6 +33,14 @@ class Session:
     stderr: str | None = None  # Captured stderr from execution
     sandbox_args: dict = field(default_factory=dict)  # Structured args for re-execution
 
+    # Remote execution fields
+    target: str | None = None  # SSH target (user@host) if remote
+    remote_session_id: str | None = None  # Session ID on remote
+
+    def is_remote(self) -> bool:
+        """Check if this is a remote session."""
+        return self.target is not None
+
     def __post_init__(self):
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
@@ -153,8 +161,8 @@ def execute_session(session: Session) -> int:
     """
     Execute an approved session by re-running through the sandbox.
 
-    This function delegates to run_session module to reconstruct
-    the sandbox invocation with pre-approved commands.
+    This function delegates to run_session module for local sessions,
+    or to remote module for remote sessions.
 
     Returns the exit code.
     """
@@ -166,6 +174,12 @@ def execute_session(session: Session) -> int:
 
     session.executed_at = datetime.now().isoformat()
 
+    # Handle remote sessions
+    if session.is_remote():
+        from .remote import execute_remote_session
+        return execute_remote_session(session)
+
+    # Local execution
     try:
         # Delegate to run_session module
         result = subprocess.run(

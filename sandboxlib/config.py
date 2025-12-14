@@ -5,6 +5,18 @@ import json
 import os
 from pathlib import Path
 
+# Version
+VERSION = "0.1.0"
+
+# Remote deployment
+REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
+RELEASE_PATH_ENV = "SHANNOT_RELEASE_PATH"
+
+
+def get_remote_deploy_dir() -> str:
+    """Get remote deployment directory path with version filled in."""
+    return REMOTE_DEPLOY_DIR.format(version=VERSION)
+
 
 def _xdg_data_home() -> Path:
     """XDG data directory (~/.local/share or $XDG_DATA_HOME)."""

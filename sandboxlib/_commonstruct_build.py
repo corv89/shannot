@@ -1,7 +1,32 @@
+import sys
 import cffi
+
 ffibuilder = cffi.FFI()
 
-ffibuilder.cdef("""
+# Platform-specific dirent struct
+if sys.platform == "darwin":
+    DIRENT_STRUCT = """
+    struct dirent {
+        unsigned long long d_ino;    /* Inode number */
+        unsigned short d_reclen;     /* Length of this record */
+        unsigned char d_type;        /* Type of file */
+        unsigned char d_namlen;      /* Length of filename */
+        char d_name[256];            /* Null-terminated filename */
+    };
+    """
+else:
+    # Linux
+    DIRENT_STRUCT = """
+    struct dirent {
+        unsigned long d_ino;         /* Inode number */
+        unsigned long d_off;         /* Offset to next dirent */
+        unsigned short d_reclen;     /* Length of this record */
+        unsigned char d_type;        /* Type of file */
+        char d_name[256];            /* Null-terminated filename */
+    };
+    """
+
+ffibuilder.cdef(f"""
     #define DT_REG ...
     #define DT_DIR ...
 
@@ -15,7 +40,7 @@ ffibuilder.cdef("""
     typedef int... time_t;
     typedef int... suseconds_t;
 
-    struct stat {
+    struct stat {{
        dev_t     st_dev;         /* ID of device containing file */
        ino_t     st_ino;         /* Inode number */
        mode_t    st_mode;        /* File type and mode */
@@ -28,22 +53,14 @@ ffibuilder.cdef("""
        time_t    st_mtime;       /* last modification, integer part only */
        time_t    st_ctime;       /* last status change, integer part only */
        ...;
-    };
+    }};
 
-    struct dirent {
-       ino_t          d_ino;       /* Inode number */
-       off_t          d_off;       /* Not an offset; see below */
-       unsigned short d_reclen;    /* Length of this record */
-       unsigned char  d_type;      /* Type of file; not supported
-                                      by all filesystem types */
-       char           d_name[...]; /* Null-terminated filename */
-       ...;
-    };
+    {DIRENT_STRUCT}
 
-    struct timeval {
+    struct timeval {{
        time_t      tv_sec;     /* seconds */
        suseconds_t tv_usec;    /* microseconds */
-    };
+    }};
 """)
 
 ffibuilder.set_source("sandboxlib._commonstruct_cffi", """

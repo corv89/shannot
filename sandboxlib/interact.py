@@ -35,6 +35,8 @@ def main(argv):
             "script-name=",
             "analysis=",
             "target=",
+            "json-output",
+            "approved-commands=",
         ],
     )
 
@@ -56,6 +58,8 @@ def main(argv):
 
     color = True
     raw_stdout = False
+    json_output = False
+    approved_commands = []
     executable = arguments[0]
 
     # Capture sandbox args as structured dict for session re-execution
@@ -104,6 +108,11 @@ def main(argv):
         elif option == "--target":
             SandboxedProc.remote_target = value
             sandbox_args["target"] = value
+        elif option == "--json-output":
+            json_output = True
+        elif option == "--approved-commands":
+            import json as json_module
+            approved_commands = json_module.loads(value)
         elif option in ["-h", "--help"]:
             return help()
         else:
@@ -200,6 +209,10 @@ def main(argv):
     # Load security profile (populates auto_approve, always_deny)
     virtualizedproc.load_profile()
 
+    # Add pre-approved commands (for recovery when remote session was cleaned up)
+    if approved_commands:
+        virtualizedproc.subprocess_approved.extend(approved_commands)
+
     # Load session commands if re-executing an approved session
     # (must be after profile so session commands take precedence)
     if session_id:
@@ -216,7 +229,24 @@ def main(argv):
     # Session finalization for dry-run mode
     if SandboxedProc.subprocess_dry_run:
         session = virtualizedproc.finalize_session()
-        if session:
+
+        if json_output:
+            # JSON output for remote protocol
+            import json as json_module
+            from .config import VERSION
+
+            output = {
+                "version": VERSION,
+                "status": "pending",
+                "session": {
+                    "id": session.id,
+                    "commands": session.commands,
+                    "pending_writes": session.pending_writes,
+                    "script_path": session.script_path,
+                } if session else None,
+            }
+            print(json_module.dumps(output))
+        elif session:
             print(f"\n*** Session created: {session.id} ***")
             print(f"    Commands queued: {len(session.commands)}")
             print(f"    File writes queued: {len(session.pending_writes)}")
