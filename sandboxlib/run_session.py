@@ -98,8 +98,8 @@ def main():
         if temp_script and os.path.exists(temp_script):
             try:
                 os.unlink(temp_script)
-            except Exception:
-                pass
+            except OSError:
+                pass  # Best effort cleanup
 
     stdout = stdout_capture.getvalue()
     stderr = stderr_capture.getvalue()

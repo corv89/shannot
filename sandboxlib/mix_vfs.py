@@ -11,6 +11,7 @@ from .structs import (
 )
 
 MAX_PATH = 256
+MAX_WRITE_CHUNK = 256 * 1024  # 256KB maximum single write/read size
 UID = 1000
 GID = 1000
 INO_COUNTER = 0
@@ -82,8 +83,8 @@ class Dir(FSObject):
     Entries is a dict mapping names to FSObject instances.
     """
     kind = stat.S_IFDIR
-    def __init__(self, entries={}):
-        self.entries = entries
+    def __init__(self, entries=None):
+        self.entries = entries if entries is not None else {}
     def keys(self):
         return sorted(self.entries.keys())
     def join(self, name):
@@ -105,11 +106,11 @@ class RealDir(Dir):
     # file endings that we filter out (note that we also filter out files
     # with the same ending but a different case, to be safe).
     def __init__(self, path, show_dotfiles=False, follow_links=False,
-                 exclude=[]):
+                 exclude=None):
         self.path = path
         self.show_dotfiles = show_dotfiles
         self.follow_links  = follow_links
-        self.exclude       = [excl.lower() for excl in exclude]
+        self.exclude       = [excl.lower() for excl in (exclude or [])]
     def __repr__(self):
         return '<RealDir %s>' % (self.path,)
     def keys(self):
@@ -465,7 +466,7 @@ class MixVFS(object):
             path, write_buf, original, node = self.vfs_write_buffers[fd]
             if count < 0:
                 count = 0
-            data = self.sandio.read_buffer(p_buf, min(count, 256*1024))
+            data = self.sandio.read_buffer(p_buf, min(count, MAX_WRITE_CHUNK))
             write_buf.write(data)
             return len(data)
 
@@ -479,7 +480,7 @@ class MixVFS(object):
             path, write_buf, original, node = self.vfs_write_buffers[fd]
             if count < 0:
                 count = 0
-            data = write_buf.read(min(count, 256*1024))
+            data = write_buf.read(min(count, MAX_WRITE_CHUNK))
             self.sandio.write_buffer(p_buf, data)
             return len(data)
 
@@ -489,8 +490,8 @@ class MixVFS(object):
             return super(MixVFS, self).s_read(fd, p_buf, count)
         if count < 0:
             count = 0
-        # don't try to read more than 256KB at once here
-        data = f.read(min(count, 256*1024))
+        # don't try to read more than MAX_WRITE_CHUNK at once here
+        data = f.read(min(count, MAX_WRITE_CHUNK))
         self.sandio.write_buffer(p_buf, data)
         return len(data)
 

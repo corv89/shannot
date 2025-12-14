@@ -6,7 +6,7 @@ import tempfile
 import shutil
 
 from sandboxlib.mix_vfs import (
-    FSObject, Dir, File, RealDir, RealFile, OverlayDir, MixVFS
+    Dir, File, RealDir, RealFile, OverlayDir, MixVFS
 )
 
 

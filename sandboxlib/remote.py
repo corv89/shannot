@@ -143,7 +143,7 @@ def run_remote_dry_run(
 
             return session
 
-        except Exception:
+        except (OSError, RemoteExecutionError):
             # Clean up workdir on error (but not on success - needed for execution)
             _cleanup_remote_workdir(ssh, workdir)
             raise

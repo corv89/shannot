@@ -406,8 +406,8 @@ class PendingWritesListView(View):
             try:
                 size = len(base64.b64decode(content_b64))
                 size_str = f"{size:,} B" if size < 1024 else f"{size/1024:.1f} KB"
-            except Exception:
-                size_str = "?"
+            except (ValueError, TypeError):
+                size_str = "?"  # Invalid base64 data
 
             display_path = path[: cols - 25]
             if len(path) > cols - 25:

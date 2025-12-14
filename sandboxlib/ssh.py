@@ -112,7 +112,8 @@ class SSHConnection:
             return False
         except subprocess.TimeoutExpired:
             return False
-        except Exception:
+        except OSError:
+            # Connection failures (network unreachable, refused, etc.)
             return False
 
     def run(
@@ -312,15 +313,15 @@ class SSHConnection:
 
         try:
             subprocess.run(args, capture_output=True, timeout=5)
-        except Exception:
+        except (subprocess.TimeoutExpired, OSError):
             pass  # Best effort cleanup
 
         # Remove socket file if it exists
         try:
             if self.config.control_path.exists():
                 self.config.control_path.unlink()
-        except Exception:
-            pass
+        except OSError:
+            pass  # Socket already removed or inaccessible
 
         self._connected = False
 
@@ -335,8 +336,8 @@ class SSHConnection:
         # Backup cleanup in case atexit doesn't run
         try:
             self.disconnect()
-        except Exception:
-            pass
+        except (OSError, subprocess.TimeoutExpired):
+            pass  # Best effort cleanup during garbage collection
 
 
 class _StatResult:

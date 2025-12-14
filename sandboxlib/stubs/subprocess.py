@@ -40,7 +40,7 @@ def run(args, capture_output=False, text=False, shell=False,
                 stdout_data = f.read()
             with open(stderr_file, "rb") as f:
                 stderr_data = f.read()
-        except Exception:
+        except OSError:
             stdout_data = b""
             stderr_data = b""
 

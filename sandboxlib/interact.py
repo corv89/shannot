@@ -203,8 +203,8 @@ def main(argv):
                 try:
                     with open(real_script_path, "r") as f:
                         virtualizedproc.subprocess_script_content = f.read()
-                except Exception:
-                    pass
+                except (OSError, UnicodeDecodeError):
+                    pass  # Script content is optional, continue without it
 
     # Load security profile (populates auto_approve, always_deny)
     virtualizedproc.load_profile()

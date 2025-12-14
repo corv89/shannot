@@ -182,15 +182,24 @@ _EXPECTED_SIZES = {
 
 
 def _validate():
+    import warnings
     key = ("linux" if IS_LINUX else sys.platform, ARCH)
-    if key in _EXPECTED_SIZES:
-        expected = _EXPECTED_SIZES[key]
-        actual_stat = sizeof(Stat)
-        actual_dirent = sizeof(Dirent)
-        assert actual_stat == expected["stat"], \
-            f"stat: got {actual_stat}, expected {expected['stat']} on {key}"
-        assert actual_dirent == expected["dirent"], \
-            f"dirent: got {actual_dirent}, expected {expected['dirent']} on {key}"
+    if key not in _EXPECTED_SIZES:
+        warnings.warn(
+            f"Struct sizes unverified for {sys.platform}/{ARCH}. "
+            "Local sandbox may behave incorrectly. "
+            "Use --target for verified remote execution.",
+            RuntimeWarning,
+            stacklevel=2
+        )
+        return
+    expected = _EXPECTED_SIZES[key]
+    actual_stat = sizeof(Stat)
+    actual_dirent = sizeof(Dirent)
+    assert actual_stat == expected["stat"], \
+        f"stat: got {actual_stat}, expected {expected['stat']} on {key}"
+    assert actual_dirent == expected["dirent"], \
+        f"dirent: got {actual_dirent}, expected {expected['dirent']} on {key}"
 
 
 _validate()
