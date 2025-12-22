@@ -64,7 +64,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest tests/ -v --cov=shannot --cov-report=xml --cov-report=term
+          pytest test/ -v --cov=shannot --cov-report=xml --cov-report=term
 
       - name: Upload coverage artifact
         if: matrix.python-version == '3.11'

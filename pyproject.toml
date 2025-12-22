@@ -4,34 +4,107 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shannot"
-version = "0.5.0"
+version = "0.4.0"
 description = "Sandboxed system administration for LLM agents"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
+authors = [
+    {name = "corv89", email = "corv89@users.noreply.github.com"}
+]
+keywords = ["sandbox", "pypy", "security", "llm", "diagnostics", "system-administration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Environment :: Console",
+    "Typing :: Typed",
+]
 dependencies = []  # Zero dependencies!
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "basedpyright"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pre-commit>=3.6.0",
+    "ruff>=0.1.0",
+    "basedpyright>=1.0",
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.0.0",
+    "mkdocstrings[python]>=0.24.0",
+]
 
 [project.scripts]
-shannot = "sandboxlib.cli:main"
+shannot = "shannot.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
+Repository = "https://github.com/corv89/shannot"
+"Bug Tracker" = "https://github.com/corv89/shannot/issues"
 Documentation = "https://corv89.github.io/shannot/"
 
 [tool.setuptools.packages.find]
-include = ["sandboxlib*"]
+include = ["shannot*"]
 
 [tool.setuptools.package-data]
-sandboxlib = ["stubs/*.py"]
+shannot = ["py.typed", "stubs/*.py"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = []
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--verbose",
+]
 
 [tool.basedpyright]
 pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportDeprecated = false
+reportUnnecessaryIsInstance = false
+reportUnusedCallResult = "warning"
+reportAny = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownArgumentType = "warning"
+reportUnknownMemberType = "warning"
+reportPrivateUsage = "warning"
+reportUnusedImport = "warning"
+reportUnreachable = "warning"
+reportUnannotatedClassAttribute = "warning"
+reportExplicitAny = "warning"
+reportMissingImports = "warning"
+
+[tool.coverage.run]
+relative_files = true

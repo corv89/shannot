@@ -1,12 +1,21 @@
-"""CLI entrypoint for shannot package.
+#!/usr/bin/env python3
+"""
+Main entry point for shannot CLI.
 
-This module allows running shannot as a module:
-    python -m shannot run ls /
+This file establishes package context by importing from the shannot package,
+which allows relative imports in shannot.cli to work correctly when compiled with Nuitka.
 """
 
+import os
 import sys
 
-from .cli import main
+# Force unbuffered - exactly like the working test
+os.environ["PYTHONUNBUFFERED"] = "1"
+
+# Import from the package (not relative import) - exactly like the working test
+from shannot.cli import main
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Call main exactly like the working test
+    exit_code = main()
+    sys.exit(exit_code)
