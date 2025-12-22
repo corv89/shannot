@@ -5,13 +5,18 @@ import json
 import shutil
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 from .config import SESSIONS_DIR
 
-SessionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
+SessionStatus = Literal[
+    "pending", "approved", "rejected", "executed", "failed", "cancelled", "expired"
+]
+
+# Session TTL - pending sessions expire after this duration
+SESSION_TTL = timedelta(hours=1)
 
 
 @dataclass
@@ -26,6 +31,7 @@ class Session:
     analysis: str = ""  # Description of what script does
     status: SessionStatus = "pending"
     created_at: str = ""  # ISO timestamp
+    expires_at: str = ""  # ISO timestamp - when pending session expires
     executed_at: str | None = None
     exit_code: int | None = None
     error: str | None = None
@@ -44,6 +50,26 @@ class Session:
     def __post_init__(self):
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
+        if not self.expires_at:
+            # Set expiry time for new sessions
+            expiry = datetime.now() + SESSION_TTL
+            self.expires_at = expiry.isoformat()
+
+    def is_expired(self) -> bool:
+        """Check if session has expired.
+
+        Returns
+        -------
+        bool
+            True if current time is past expires_at timestamp.
+        """
+        if not self.expires_at:
+            return False
+        try:
+            expiry = datetime.fromisoformat(self.expires_at)
+            return datetime.now() > expiry
+        except (ValueError, TypeError):
+            return False
 
     @property
     def session_dir(self) -> Path:
@@ -114,6 +140,23 @@ class Session:
         # Sort by creation date, newest first
         sessions.sort(key=lambda s: s.created_at, reverse=True)
         return sessions[:limit]
+
+    @classmethod
+    def cleanup_expired(cls) -> int:
+        """Mark expired pending sessions as expired.
+
+        Returns
+        -------
+        int
+            Number of sessions marked as expired.
+        """
+        count = 0
+        for session in cls.list_pending():
+            if session.is_expired():
+                session.status = "expired"
+                session.save()
+                count += 1
+        return count
 
 
 def generate_session_id(name: str = "") -> str:
