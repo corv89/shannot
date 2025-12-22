@@ -3,7 +3,7 @@
 Re-execute an approved session through the sandbox.
 
 Usage:
-    python -m sandboxlib.run_session <session_id>
+    python -m shannot.run_session <session_id>
 
 This module is called by execute_session() to run a script with
 pre-approved commands loaded into the sandbox's allowlist.
@@ -20,7 +20,7 @@ from datetime import datetime
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m sandboxlib.run_session <session_id>", file=sys.stderr)
+        print("Usage: python -m shannot.run_session <session_id>", file=sys.stderr)
         sys.exit(1)
 
     session_id = sys.argv[1]

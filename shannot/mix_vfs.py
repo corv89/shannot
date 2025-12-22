@@ -285,10 +285,10 @@ class MixVFS(object):
         'library_path' must be the real directory that contains the
         'lib-python' and 'lib_pypy' directories to use.
 
-        Stubs from sandboxlib.stubs are automatically injected into lib_pypy,
+        Stubs from shannot.stubs are automatically injected into lib_pypy,
         overriding any real files with the same names.
         """
-        from sandboxlib.stubs import get_stubs
+        from shannot.stubs import get_stubs
 
         lib_python = os.path.join(library_path, "lib-python")
         lib_pypy = os.path.join(library_path, "lib_pypy")

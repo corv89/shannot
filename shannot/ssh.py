@@ -31,7 +31,7 @@ class SSHConfig:
             # Use temp directory for control socket
             # Include target hash to avoid collisions
             target_hash = hashlib.md5(self.target.encode()).hexdigest()[:8]
-            self.control_path = Path(tempfile.gettempdir()) / f"sandboxlib-ssh-{os.getpid()}-{target_hash}"
+            self.control_path = Path(tempfile.gettempdir()) / f"shannot-ssh-{os.getpid()}-{target_hash}"
 
 
 class SSHConnection:

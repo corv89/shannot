@@ -1,15 +1,13 @@
 """Virtual stubs injected into sandbox VFS."""
 from __future__ import annotations
 
-from pathlib import Path
+from importlib.resources import files
 from typing import Dict
-
-_STUBS_DIR = Path(__file__).parent
 
 
 def load_stub(name: str) -> bytes:
     """Load a stub file as bytes."""
-    return (_STUBS_DIR / name).read_bytes()
+    return files("shannot.stubs").joinpath(name).read_bytes()
 
 
 def get_stubs() -> Dict[str, bytes]:

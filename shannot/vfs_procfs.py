@@ -5,7 +5,7 @@ virtual /proc and /sys filesystems. These are static snapshots set at
 sandbox startup time.
 
 Usage:
-    from sandboxlib.vfs_procfs import build_proc, build_sys
+    from shannot.vfs_procfs import build_proc, build_sys
 
     vfs_root = Dir({
         'proc': build_proc(cmdline=['python', 'script.py'], exe_path='/lib/pypy', cwd='/tmp'),

@@ -97,8 +97,9 @@ class VirtualizedProc(object):
         funcs = {}
         for cls1 in cls.__mro__:
             for value in cls1.__dict__.values():
-                if type(value) is types.FunctionType and \
-                        hasattr(value, '_sandbox_sig_'):
+                # Check if it has the signature attribute
+                # Don't check type - Nuitka compiles methods differently
+                if hasattr(value, '_sandbox_sig_'):
                     sig = value._sandbox_sig_.encode('ascii')
                     funcs.setdefault(sig, value)
         return funcs

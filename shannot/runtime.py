@@ -38,6 +38,44 @@ def get_runtime_path() -> Path | None:
     return None
 
 
+def find_pypy_sandbox() -> Path | None:
+    """Find pypy-sandbox binary.
+
+    Checks:
+    1. In PATH (via shutil.which)
+    2. In RUNTIME_DIR (common user location)
+    3. Common build locations
+
+    Returns:
+        Path to pypy-sandbox if found, None otherwise.
+    """
+    import os
+
+    # Check PATH first
+    which_result = shutil.which("pypy-sandbox")
+    if which_result:
+        return Path(which_result)
+
+    # Check RUNTIME_DIR (where users might place it alongside stdlib)
+    runtime_pypy = RUNTIME_DIR / "pypy-sandbox"
+    if runtime_pypy.exists() and os.access(runtime_pypy, os.X_OK):
+        return runtime_pypy
+
+    # Check common build locations relative to home
+    home = Path.home()
+    common_locations = [
+        home / "pypy" / "pypy" / "goal" / "pypy-sandbox",
+        home / "src" / "pypy" / "pypy" / "goal" / "pypy-sandbox",
+        home / ".local" / "bin" / "pypy-sandbox",
+    ]
+
+    for location in common_locations:
+        if location.exists() and os.access(location, os.X_OK):
+            return location
+
+    return None
+
+
 def verify_checksum(filepath: Path, expected_sha256: str) -> bool:
     """Verify SHA256 checksum of a file."""
     sha256 = hashlib.sha256()

@@ -83,7 +83,7 @@ class Session:
 
     def save_stubs(self) -> None:
         """Copy stubs to session directory for reproducibility."""
-        from sandboxlib.stubs import get_stubs
+        from shannot.stubs import get_stubs
 
         stubs_dir = self.session_dir / "lib_pypy"
         stubs_dir.mkdir(parents=True, exist_ok=True)
@@ -183,7 +183,7 @@ def execute_session(session: Session) -> int:
     try:
         # Delegate to run_session module
         result = subprocess.run(
-            [sys.executable, "-m", "sandboxlib.run_session", session.id],
+            [sys.executable, "-m", "shannot.run_session", session.id],
             capture_output=True,
             text=True,
         )

@@ -7,14 +7,14 @@ Internal module - use 'shannot run' CLI instead.
 import subprocess
 import sys
 
-from sandboxlib import VirtualizedProc
-from sandboxlib.mix_accept_input import MixAcceptInput
-from sandboxlib.mix_dump_output import MixDumpOutput
-from sandboxlib.mix_pypy import MixPyPy
-from sandboxlib.mix_remote import MixRemote
-from sandboxlib.mix_subprocess import MixSubprocess
-from sandboxlib.mix_vfs import Dir, MixVFS, RealDir
-from sandboxlib.vfs_procfs import build_proc, build_sys
+from shannot import VirtualizedProc
+from shannot.mix_accept_input import MixAcceptInput
+from shannot.mix_dump_output import MixDumpOutput
+from shannot.mix_pypy import MixPyPy
+from shannot.mix_remote import MixRemote
+from shannot.mix_subprocess import MixSubprocess
+from shannot.mix_vfs import Dir, MixVFS, RealDir
+from shannot.vfs_procfs import build_proc, build_sys
 
 
 def main(argv):
@@ -42,7 +42,7 @@ def main(argv):
 
     def help():
         sys.stderr.write(
-            "Usage: shannot run [options] <executable> <args...>\n"
+            "Usage: shannot run [options] <script.py> [args...]\n"
             "See 'shannot run --help' for details.\n"
         )
         return 2
@@ -118,15 +118,28 @@ def main(argv):
         else:
             raise ValueError(option)
 
+    # Validate executable argument (basic checks)
+    import os
+    if not os.path.exists(executable):
+        sys.stderr.write(f"Error: PyPy sandbox executable not found: {executable}\n\n")
+        sys.stderr.write("Specify a valid path with --pypy-sandbox or ensure it's in PATH.\n")
+        return 1
+
+    if not os.access(executable, os.X_OK):
+        sys.stderr.write(f"Error: PyPy sandbox executable is not executable: {executable}\n\n")
+        sys.stderr.write("Fix permissions with:\n")
+        sys.stderr.write(f"  chmod +x {executable}\n")
+        return 1
+
     # Auto-detect runtime if --lib-path not specified
     if not lib_path_specified:
-        from sandboxlib.runtime import get_runtime_path
+        from shannot.runtime import get_runtime_path
 
         runtime_path = get_runtime_path()
         if runtime_path:
             # Build VFS with stubs overlaid on lib_pypy
-            from sandboxlib.mix_vfs import Dir, File, OverlayDir
-            from sandboxlib.stubs import get_stubs
+            from shannot.mix_vfs import File, OverlayDir
+            from shannot.stubs import get_stubs
 
             stubs = {name: File(content) for name, content in get_stubs().items()}
 
@@ -141,6 +154,18 @@ def main(argv):
             )
             arguments[0] = "/lib/pypy"
             sandbox_args["lib_path"] = str(runtime_path)
+        else:
+            # Runtime stdlib not found
+            from shannot.config import RUNTIME_DIR
+
+            sys.stderr.write("Error: PyPy stdlib not found.\n")
+            sys.stderr.write(f"Expected location: {RUNTIME_DIR}\n\n")
+            sys.stderr.write("The sandbox requires the PyPy stdlib (lib-python, lib_pypy).\n")
+            sys.stderr.write("Run the following to install it:\n\n")
+            sys.stderr.write("  shannot setup\n\n")
+            sys.stderr.write("Or specify a custom path:\n")
+            sys.stderr.write("  shannot run --lib-path /path/to/pypy-stdlib /path/to/pypy-sandbox script.py\n")
+            return 1
 
     if color:
         SandboxedProc.dump_stdout_fmt = SandboxedProc.dump_get_ansi_color_fmt(32)
@@ -216,7 +241,7 @@ def main(argv):
     # Load session commands if re-executing an approved session
     # (must be after profile so session commands take precedence)
     if session_id:
-        from sandboxlib.session import Session
+        from shannot.session import Session
 
         try:
             session = Session.load(session_id)
