@@ -1,7 +1,7 @@
 from __future__ import print_function
 import subprocess
 import time
-from sandboxlib.mix_grab_output import MixGrabOutput
+from shannot.mix_grab_output import MixGrabOutput
 
 
 

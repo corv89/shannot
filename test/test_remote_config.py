@@ -6,7 +6,7 @@ from unittest import mock
 
 import pytest
 
-from sandboxlib.config import (
+from shannot.config import (
     Remote,
     add_remote,
     load_remotes,
@@ -39,7 +39,7 @@ class TestRemotesConfig:
         """Create temp config directory."""
         self.tmpdir = tempfile.mkdtemp()
         self.config_dir_patch = mock.patch(
-            "sandboxlib.config.CONFIG_DIR", Path(self.tmpdir)
+            "shannot.config.CONFIG_DIR", Path(self.tmpdir)
         )
         self.config_dir_patch.start()
 
@@ -118,7 +118,7 @@ class TestResolveTarget:
         """Create temp config directory."""
         self.tmpdir = tempfile.mkdtemp()
         self.config_dir_patch = mock.patch(
-            "sandboxlib.config.CONFIG_DIR", Path(self.tmpdir)
+            "shannot.config.CONFIG_DIR", Path(self.tmpdir)
         )
         self.config_dir_patch.start()
 
@@ -153,7 +153,7 @@ class TestResolveTarget:
         assert host == "example.com"
         assert port == 2222
 
-    @mock.patch("sandboxlib.config.getpass.getuser", return_value="testuser")
+    @mock.patch("shannot.config.getpass.getuser", return_value="testuser")
     def test_resolve_host_only(self, mock_getuser):
         """Resolves host-only format with current user."""
         user, host, port = resolve_target("example.com")

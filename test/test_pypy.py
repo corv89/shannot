@@ -1,9 +1,9 @@
 import pytest
 import os
-from sandboxlib import VirtualizedProc
-from sandboxlib.mix_pypy import MixPyPy
-from sandboxlib.mix_vfs import MixVFS, Dir
-from sandboxlib.mix_grab_output import MixGrabOutput
+from shannot import VirtualizedProc
+from shannot.mix_pypy import MixPyPy
+from shannot.mix_vfs import MixVFS, Dir
+from shannot.mix_grab_output import MixGrabOutput
 from . import support
 
 
@@ -11,9 +11,9 @@ class TestVirtualizedProc(support.BaseTest):
 
     def setup_class(cls):
         cls.pypy_c_sandbox = os.path.join(os.path.dirname(__file__),
-                                          'pypy-c-sandbox')
+                                          'pypy-sandbox')
         if not os.path.exists(cls.pypy_c_sandbox):
-            pytest.skip("make a symlink 'pypy-c-sandbox'")
+            pytest.skip("make a symlink 'pypy-sandbox'")
 
         searchdir = os.path.realpath(cls.pypy_c_sandbox)
         while True:

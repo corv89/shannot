@@ -1,6 +1,6 @@
 """Tests for ctypes struct definitions."""
 
-from sandboxlib.structs import (
+from shannot.structs import (
     new_stat, new_dirent, new_timeval,
     struct_to_bytes, SIZEOF_STAT, SIZEOF_DIRENT, SIZEOF_TIMEVAL,
     pack_time_t, pack_uid_t, pack_gid_t,

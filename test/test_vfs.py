@@ -5,7 +5,7 @@ import pytest
 import tempfile
 import shutil
 
-from sandboxlib.mix_vfs import (
+from shannot.mix_vfs import (
     Dir, File, RealDir, RealFile, OverlayDir, MixVFS
 )
 
