@@ -1,5 +1,29 @@
 # Profile Configuration Reference
 
+> **⚠️ NOTICE: This documents v0.3.0 bubblewrap-based filesystem profiles**
+>
+> The profiles described in this document (with `binds`, `tmpfs_paths`, `network_isolation`, `seccomp_profile`) were used in Shannot v0.3.0's bubblewrap-based architecture and are not applicable to v0.4.0.
+>
+> **v0.4.0 uses command approval profiles instead**, with a different structure:
+> ```json
+> {
+>   "auto_approve": ["ls", "cat", "grep", ...],
+>   "always_deny": ["rm -rf /", "dd if=/dev/zero", ...]
+> }
+> ```
+>
+> These control which commands can execute immediately vs. require approval, not filesystem access.
+>
+> Profile locations in v0.4.0:
+> - Project-local: `.shannot/profile.json`
+> - Global: `~/.config/shannot/profile.json`
+>
+> See [README.md](../README.md#configuration) for current profile usage.
+
+---
+
+# Profile Configuration Reference (v0.3.0 - Historical)
+
 Shannot uses JSON profiles to define sandbox behavior. This document describes all available configuration options.
 
 ## Profile Structure

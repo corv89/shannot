@@ -6,13 +6,13 @@ Run diagnostic scripts in a sandbox with human approval.
 
 ```bash
 # Run a script locally
-shannot run /path/to/pypy-c-sandbox -S /tmp/script.py
+shannot run /path/to/pypy-sandbox -S /tmp/script.py
 
 # Run against a remote host (files fetched via SSH)
-shannot run /path/to/pypy-c-sandbox -S /tmp/script.py --target user@host
+shannot run /path/to/pypy-sandbox -S /tmp/script.py --target user@host
 
 # Dry-run mode (queue all operations for review)
-shannot run /path/to/pypy-c-sandbox -S /tmp/script.py --dry-run
+shannot run /path/to/pypy-sandbox -S /tmp/script.py --dry-run
 ```
 
 After running with `--dry-run`, instruct the user to open `shannot approve` to review and execute queued operations.

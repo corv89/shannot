@@ -1,5 +1,22 @@
 # Python API Reference
 
+> **⚠️ NOTICE: This documents the v0.3.0 bubblewrap-based Python API**
+>
+> The API described in this document (`SandboxManager`, `SandboxProfile`, `ProcessResult`, `load_profile_from_path`) was available in Shannot v0.3.0 and has been removed in v0.4.0.
+>
+> **v0.4.0 Python API is limited**: Only low-level PyPy sandbox primitives are exported:
+> - `VirtualizedProc` - Core PyPy sandbox process controller
+> - `signature` - Sandbox I/O signature
+> - `sigerror` - Sandbox I/O error signature
+>
+> These are intended for internal use. The high-level API will be redesigned for PyPy sandbox in a future version.
+>
+> For current v0.4.0 usage, use the CLI: `shannot run`, `shannot approve`, etc. See [README.md](../README.md).
+
+---
+
+# Python API Reference (v0.3.0 - Historical)
+
 This guide covers using Shannot programmatically from Python code.
 
 ## Quick Start

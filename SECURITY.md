@@ -2,7 +2,7 @@
 
 ## Overview
 
-Shannot is a security tool designed to provide read-only sandboxed execution environments using Linux namespaces and Bubblewrap. While it provides strong isolation for many use cases, **it is not a complete security boundary** and should be used as part of a defense-in-depth strategy.
+Shannot is a security tool designed to provide sandboxed execution environments using PyPy's sandbox mode with system call interception. While it provides strong isolation for many use cases, **it is not a complete security boundary** and should be used as part of a defense-in-depth strategy.
 
 ## Supported Versions
 
@@ -10,9 +10,8 @@ We provide security updates for the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+| 0.4.x   | :white_check_mark: |
+| < 0.4.0 | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -54,34 +53,36 @@ We do not currently offer a bug bounty program, but we deeply appreciate securit
 
 Shannot provides strong isolation through:
 
-- **Read-only filesystem access**: Host filesystem mounted read-only (except tmpfs)
-- **Namespace isolation**: Separate PID, mount, network, IPC, and UTS namespaces
-- **Command filtering**: Only allowed commands can be executed
-- **Network isolation**: Network access disabled by default
-- **Minimal attack surface**: No daemon, runs as regular user
+- **System call interception**: All system calls from sandboxed code are intercepted and mediated by the host process
+- **Virtual filesystem**: File operations are virtualized, providing controlled access to the real filesystem
+- **Subprocess approval workflow**: Commands executed by sandboxed code require explicit approval
+- **Network isolation**: Socket operations are disabled in the sandbox
+- **Minimal attack surface**: No daemon, runs as regular user, zero external dependencies
 
 ### Known Limitations
 
 ⚠️ **Important**: Shannot is NOT a complete security boundary. Known limitations include:
 
-#### 1. Kernel Exploits
+#### 1. PyPy Sandbox Interpreter Vulnerabilities
 
-- **Risk**: Sandbox escapes possible via kernel vulnerabilities
+- **Risk**: Vulnerabilities in the PyPy sandbox implementation could allow escape
+- **Impact**: Attacker could gain access to host system
 - **Mitigation**:
-  - Keep kernel updated with latest security patches
-  - Use hardened kernel configurations
-  - Consider SELinux or AppArmor for additional MAC (Mandatory Access Control)
-  - Add seccomp filters to restrict system calls (see [docs/seccomp.md](docs/seccomp.md))
+  - Keep PyPy sandbox updated with latest security patches
+  - Monitor PyPy security announcements
+  - Use defense-in-depth: don't rely solely on sandbox isolation
+  - Consider running Shannot itself in a VM or container for high-risk workloads
 
 #### 2. Information Disclosure
 
-- **Risk**: Read-only access still exposes system information
-- **Impact**: Users can read mounted paths and see some system state
+- **Risk**: Sandboxed code can read files through the virtual filesystem
+- **Impact**: Sensitive information in mapped paths may be exposed
 - **Mitigation**:
-  - Carefully control which paths are mounted in profiles
-  - Review profiles to ensure no sensitive data is exposed
-  - Use restrictive bind mounts (only mount what's needed)
+  - Carefully control which directories are accessible to the sandbox
+  - Use minimal directory mappings (only what's needed)
+  - Review what files are visible before running untrusted code
   - Consider using separate machines for truly sensitive data
+  - Audit approval profiles to ensure safe commands only
 
 #### 3. Resource Exhaustion
 
@@ -101,14 +102,15 @@ CPUQuota=50%
 TasksMax=100
 ```
 
-#### 4. Side-Channel Attacks
+#### 4. Subprocess Execution
 
-- **Risk**: Timing attacks, speculative execution vulnerabilities
-- **Impact**: Potential information leakage through timing or cache behavior
+- **Risk**: Approval workflow depends on human review
+- **Impact**: Approved commands execute with host privileges
 - **Mitigation**:
-  - Keep CPU microcode updated
-  - Use kernel mitigations (KPTI, IBPB, etc.)
-  - Don't run untrusted code alongside sensitive workloads
+  - Use restrictive approval profiles (only safe commands in auto-approve list)
+  - Review command queues carefully before approving
+  - Use dry-run mode to preview operations
+  - Implement audit logging for all approvals
 
 #### 5. Privilege Escalation
 
@@ -116,18 +118,18 @@ TasksMax=100
 - **Impact**: If sandbox is compromised, attacker has root access
 - **Mitigation**:
   - **Never run Shannot as root unless absolutely necessary**
-  - Use unprivileged user namespaces when possible
+  - Use unprivileged user accounts
   - Apply principle of least privilege
   - Use dedicated service accounts with minimal permissions
 
-#### 6. Bubblewrap Dependencies
+#### 6. PyPy Sandbox Dependencies
 
-- **Risk**: Security relies on Bubblewrap being correctly implemented
-- **Impact**: Vulnerabilities in Bubblewrap affect Shannot
+- **Risk**: Security relies on PyPy sandbox implementation being correct
+- **Impact**: Vulnerabilities in PyPy affect Shannot
 - **Mitigation**:
-  - Keep Bubblewrap updated (install from distro packages for security updates)
-  - Monitor Bubblewrap security advisories
-  - Follow Bubblewrap best practices
+  - Keep PyPy sandbox updated (auto-downloaded version is checked)
+  - Monitor PyPy security advisories
+  - Follow PyPy sandbox best practices
 
 ## Security Best Practices
 
@@ -138,39 +140,36 @@ TasksMax=100
 1. **Principle of Least Privilege**
    ```json
    {
-     "name": "minimal",
-     "allowed_commands": ["ls", "cat"],  // Only what's needed
-     "binds": [
-       {"source": "/usr", "target": "/usr", "read_only": true},
-       {"source": "/etc", "target": "/etc", "read_only": true}
+     "auto_approve": [
+       "ls", "cat", "grep"
      ],
-     "network_isolation": true  // Keep network disabled unless needed
+     "always_deny": [
+       "rm -rf /",
+       "dd if=/dev/zero",
+       "chmod 777"
+     ]
    }
    ```
 
-2. **Avoid Mounting Sensitive Paths**
-   - Don't mount `/root`, `/home`, or SSH keys unless absolutely required
-   - Be cautious with `/etc` (contains passwords, configs)
-   - Review all bind mounts for sensitive data
+2. **Use Restrictive Auto-Approve Lists**
+   - Only include truly safe, read-only commands
+   - Avoid commands that can modify system state
+   - Review the default profile and customize for your needs
 
-3. **Enable Network Isolation**
-   - Keep `network_isolation: true` (default) unless network is required
-   - If network needed, use firewall rules to restrict connections
-
-4. **Add Seccomp Filters**
-   - Use seccomp to restrict system calls (see [docs/seccomp.md](docs/seccomp.md))
-   - Start with restrictive filters and expand as needed
+3. **Always Deny Dangerous Commands**
+   - Block destructive operations
+   - Prevent privilege escalation attempts
+   - Add patterns for risky command combinations
 
 #### Production Deployment
 
 1. **Defense in Depth**
    ```bash
    # Layer security controls
-   - Shannot sandbox (namespace isolation)
-   - SELinux/AppArmor (MAC)
-   - Seccomp filters (syscall filtering)
+   - Shannot sandbox (syscall interception)
    - systemd resource limits (resource control)
    - Firewall rules (network control)
+   - SELinux/AppArmor (optional, for additional MAC)
    ```
 
 2. **Run as Unprivileged User**
@@ -179,19 +178,19 @@ TasksMax=100
    sudo useradd -r -s /bin/false shannot-runner
 
    # Run sandbox as that user
-   sudo -u shannot-runner shannot ls /
+   sudo -u shannot-runner shannot run script.py
    ```
 
 3. **Monitor and Audit**
    - Log all sandbox invocations
    - Monitor for unexpected behavior
-   - Review logs regularly for anomalies
-   - Use auditd to track system calls
+   - Review approval logs regularly
+   - Track session execution patterns
 
 4. **Update Regularly**
-   - Keep Shannot updated: `pipx upgrade shannot`
-   - Keep Bubblewrap updated via distro packages
-   - Keep kernel updated with security patches
+   - Keep Shannot updated: `pip install --upgrade shannot`
+   - Keep Python updated with security patches
+   - Monitor for PyPy sandbox updates
 
 #### SSH Remote Execution
 
@@ -203,7 +202,7 @@ TasksMax=100
 2. **Restrict SSH Commands**
    ```
    # In ~/.ssh/authorized_keys
-   command="shannot ls /" ssh-rsa AAAA...
+   command="shannot execute --session-id ${SSH_ORIGINAL_COMMAND}" ssh-rsa AAAA...
    ```
 
 3. **Use Non-Root SSH User**
@@ -216,7 +215,7 @@ TasksMax=100
 
 1. **Review Security Implications**
    - Consider how changes affect sandbox isolation
-   - Review bind mounts and namespace configuration
+   - Review virtual filesystem and syscall interception code
    - Test with malicious inputs
 
 2. **Add Tests**
@@ -234,18 +233,15 @@ TasksMax=100
 
 ### Documentation
 
-- [Seccomp Filters Guide](docs/seccomp.md) - Adding syscall restrictions
-- [Deployment Guide](docs/deployment.md) - Production deployment patterns
-- [Profile Configuration](docs/profiles.md) - Secure profile setup
-- [Troubleshooting](docs/troubleshooting.md) - Common security issues
+- [README.md](README.md) - Overview and usage
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Development guidelines
+- [BUILDING.md](BUILDING.md) - Binary building guide
 
 ### External Resources
 
-- [Bubblewrap](https://github.com/containers/bubblewrap) - Underlying sandboxing tool
-- [Linux Namespaces](https://man7.org/linux/man-pages/man7/namespaces.7.html) - Namespace documentation
-- [Seccomp](https://www.kernel.org/doc/html/latest/userspace-api/seccomp_filter.html) - Seccomp filter documentation
-- [SELinux](https://selinuxproject.org/) - Mandatory Access Control
-- [AppArmor](https://apparmor.net/) - Application security framework
+- [PyPy Sandbox](https://doc.pypy.org/en/latest/sandbox.html) - PyPy sandbox documentation
+- [Python Security](https://python.org/dev/security/) - Python security resources
+- [OWASP](https://owasp.org/) - Web application security
 
 ### Security Advisories
 
@@ -259,8 +255,8 @@ Subscribe to repository releases to receive security notifications.
 
 Shannot is designed for legitimate use cases:
 - **✅ System diagnostics and monitoring**
-- **✅ Read-only access for automation**
-- **✅ LLM agent sandboxing**
+- **✅ Safe code exploration for LLM agents**
+- **✅ Controlled script execution**
 - **✅ Security research and testing**
 
 ## Acknowledgments

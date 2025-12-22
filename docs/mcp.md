@@ -1,5 +1,17 @@
 # MCP Server Integration
 
+> **⚠️ NOTICE: MCP support has been removed in v0.4.0**
+>
+> This documentation describes the MCP integration that was available in Shannot v0.3.0 (bubblewrap-based architecture). MCP support was temporarily removed during the transition to the PyPy sandbox architecture in v0.4.0.
+>
+> **MCP support will be reintroduced in a future version** with the new PyPy sandbox backend. This documentation is kept for reference and will be updated when MCP functionality is restored.
+>
+> For current v0.4.0 functionality, see [README.md](../README.md).
+
+---
+
+# MCP Server Integration (v0.3.0 - Historical)
+
 This guide explains how to use Shannot's MCP (Model Context Protocol) server to give Claude Desktop,
 Claude Code, or Codex CLI secure, read-only access to your Linux system.
 

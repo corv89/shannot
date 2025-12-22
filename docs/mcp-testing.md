@@ -1,5 +1,17 @@
 # MCP Server Testing with mcp-probe
 
+> **⚠️ NOTICE: MCP support has been removed in v0.4.0**
+>
+> This documentation describes MCP testing procedures for Shannot v0.3.0 (bubblewrap-based architecture). MCP support was temporarily removed during the transition to the PyPy sandbox architecture in v0.4.0.
+>
+> **MCP support will be reintroduced in a future version** with the new PyPy sandbox backend. This documentation is kept for reference and will be updated when MCP functionality is restored.
+>
+> For current v0.4.0 testing, see test/ directory.
+
+---
+
+# MCP Server Testing with mcp-probe (v0.3.0 - Historical)
+
 This document describes how to test the Shannot MCP server using [mcp-probe](https://github.com/conikeec/mcp-probe), a comprehensive testing tool for Model Context Protocol (MCP) servers.
 
 ## Overview
