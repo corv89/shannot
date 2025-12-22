@@ -341,6 +341,89 @@ def cmd_remote_remove(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_mcp_install(args: argparse.Namespace) -> int:
+    """Handle 'shannot mcp install' command."""
+    import json
+    import os
+    from pathlib import Path
+
+    client = args.client
+
+    if client == "claude-desktop":
+        # Determine config path based on platform
+        if sys.platform == "darwin":
+            config_path = Path(
+                "~/Library/Application Support/Claude/claude_desktop_config.json"
+            ).expanduser()
+        elif sys.platform == "win32":
+            appdata = os.environ.get("APPDATA")
+            if not appdata:
+                print("Error: APPDATA environment variable not set", file=sys.stderr)
+                return 1
+            config_path = Path(appdata) / "Claude" / "claude_desktop_config.json"
+        else:
+            print(
+                "Error: Claude Desktop not supported on Linux (use claude-code)",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Load existing config or create new
+        if config_path.exists():
+            with open(config_path) as f:
+                config = json.load(f)
+        else:
+            config = {}
+
+        # Ensure mcpServers key exists
+        if "mcpServers" not in config:
+            config["mcpServers"] = {}
+
+        # Add shannot-mcp server
+        config["mcpServers"]["shannot"] = {
+            "command": "shannot-mcp",
+            "args": [],
+            "env": {},
+        }
+
+        # Write back config
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+            f.write("\n")
+
+        print(f"✓ Updated {config_path}")
+        print()
+        print("Restart Claude Desktop to see Shannot MCP server.")
+
+    elif client == "claude-code":
+        # Output .mcp.json snippet for project
+        snippet = {
+            "mcpServers": {
+                "shannot": {"command": "shannot-mcp", "args": [], "env": {}}
+            }
+        }
+
+        print("Add this to your project's .mcp.json file:")
+        print()
+        print(json.dumps(snippet, indent=2))
+        print()
+        print("Or add to user config at:")
+        if sys.platform == "darwin":
+            print("  ~/Library/Application Support/Claude/claude_code_config.json")
+        elif sys.platform == "win32":
+            print("  %APPDATA%\\Claude\\claude_code_config.json")
+        else:
+            print("  ~/.config/Claude/claude_code_config.json")
+
+    else:
+        print(f"Error: Unknown client '{client}'", file=sys.stderr)
+        print("Supported clients: claude-desktop, claude-code", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Handle 'shannot status' command."""
     # Determine what to show
@@ -667,6 +750,38 @@ def main() -> int:
         help="Test target connections only",
     )
     status_parser.set_defaults(func=cmd_status)
+
+    # ===== mcp subcommand (with sub-subcommands) =====
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help="MCP server installation and management",
+        description="Install and manage Model Context Protocol (MCP) server for Claude Desktop/Code",
+    )
+    mcp_subparsers = mcp_parser.add_subparsers(
+        dest="mcp_command", help="MCP commands"
+    )
+
+    # mcp install
+    mcp_install_parser = mcp_subparsers.add_parser(
+        "install",
+        help="Install MCP server configuration",
+        description="Configure Claude Desktop or Claude Code to use Shannot MCP server",
+    )
+    mcp_install_parser.add_argument(
+        "--client",
+        "-c",
+        choices=["claude-desktop", "claude-code"],
+        default="claude-desktop",
+        help="MCP client to configure (default: claude-desktop)",
+    )
+    mcp_install_parser.set_defaults(func=cmd_mcp_install)
+
+    # Handle 'shannot mcp' with no subcommand
+    def print_mcp_help(args: argparse.Namespace) -> int:
+        mcp_parser.print_help()
+        return 0
+
+    mcp_parser.set_defaults(func=print_mcp_help)
 
     # Parse and execute
     args = parser.parse_args()

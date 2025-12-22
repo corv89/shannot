@@ -40,9 +40,15 @@ dev = [
     "mkdocs-material>=9.0.0",
     "mkdocstrings[python]>=0.24.0",
 ]
+mcp-testing = [
+    "pytest>=7.0",
+    # Note: mcp-probe (Rust CLI) must be installed separately
+    # See https://github.com/conikeec/mcp-probe/releases
+]
 
 [project.scripts]
 shannot = "shannot.cli:main"
+shannot-mcp = "shannot.mcp_main:main"
 
 [project.urls]
 Homepage = "https://github.com/corv89/shannot"
