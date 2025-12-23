@@ -158,7 +158,7 @@ Runtime status and configuration.
 **Returns:** Status object
 ```json
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "runtime_available": true,
   "profiles": ["minimal", "readonly", "diagnostics"],
   "runtime": {

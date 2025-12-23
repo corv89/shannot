@@ -387,7 +387,7 @@ Runtime status and configuration:
 
 ```json
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "runtime_available": true,
   "profiles": ["minimal", "readonly", "diagnostics"],
   "runtime": {
