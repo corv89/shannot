@@ -17,6 +17,55 @@ shannot run /path/to/pypy-sandbox -S /tmp/script.py --dry-run
 
 After running with `--dry-run`, instruct the user to open `shannot approve` to review and execute queued operations.
 
+## MCP Integration (v0.5.0+)
+
+Shannot provides MCP (Model Context Protocol) integration for LLM agents like Claude.
+
+### Available Tools
+
+**sandbox_run** - Execute Python 3.6 scripts with profile-based approval:
+- **Fast path**: Auto-approved operations execute immediately
+- **Review path**: Unapproved operations create sessions for user approval
+- **Blocked path**: Denied operations rejected immediately
+
+**session_result** - Poll status of pending sessions
+
+### Profiles
+
+- **minimal**: ls, cat, grep, find
+- **readonly**: minimal + head, tail, file, stat, wc, du
+- **diagnostics**: readonly + df, free, ps, uptime, hostname, uname, env, id
+
+### Example MCP Usage
+
+```python
+# Check disk space (diagnostics profile auto-approves df)
+sandbox_run({
+  "script": "import subprocess\nsubprocess.call(['df', '-h'])",
+  "profile": "diagnostics"
+})
+# → Returns immediately with disk usage
+
+# Search files (minimal profile doesn't include find in /home)
+sandbox_run({
+  "script": "import subprocess\nsubprocess.call(['find', '/home', '-name', '*.log'])",
+  "profile": "minimal"
+})
+# → Returns session ID for user approval
+# User reviews: shannot approve show <session_id>
+# User approves: shannot approve --execute <session_id>
+# Poll results: session_result({"session_id": "<session_id>"})
+```
+
+### Installation
+
+```bash
+# Install for Claude Desktop/Code
+shannot mcp install --client claude-code
+```
+
+See [MCP Documentation](docs/mcp.md) for complete guide.
+
 ## Writing Scripts
 
 Scripts run in a virtualized environment with Python 3.6 syntax.

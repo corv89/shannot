@@ -21,7 +21,7 @@
 * Let Claude and other AI assistants explore systems safely
 * Command approval profiles control what executes automatically
 * Interactive TUI for reviewing queued operations
-* MCP integration planned for future release (temporarily removed in v0.4.0)
+* MCP (Model Context Protocol) integration restored in v0.5.0
 
 🌐 **Control Remote Systems**
 * Run sandboxed scripts on Linux servers from any platform via SSH
