@@ -93,6 +93,9 @@ addopts = [
     "--strict-config",
     "--verbose",
 ]
+markers = [
+    "integration: marks tests requiring external tools (mcp-probe, PyPy sandbox)",
+]
 
 [tool.basedpyright]
 pythonVersion = "3.11"

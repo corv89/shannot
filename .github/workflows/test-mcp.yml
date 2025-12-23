@@ -9,8 +9,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 jobs:
   test-mcp:
@@ -79,46 +77,17 @@ jobs:
           which shannot-mcp
           shannot-mcp --help
 
-      - name: Run MCP integration tests (pytest)
+      - name: Run MCP tests
         run: |
-          pytest tests/test_mcp_integration.py -v --tb=short
+          pytest test/ -v --tb=short -m integration --junitxml=mcp-results.xml
 
-      - name: Run MCP server tests (Python script)
-        run: |
-          python scripts/test_mcp_server.py \
-            --report-dir ./mcp-reports \
-            --timeout 120 \
-            --no-color
-
-      - name: Upload MCP test reports
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-test-reports-py${{ matrix.python-version }}
-          path: ./mcp-reports/
+          name: mcp-test-results-py${{ matrix.python-version }}
+          path: mcp-results.xml
           if-no-files-found: warn
-
-      - name: Comment test results on PR
-        if: matrix.python-version == '3.11' && github.event_name == 'pull_request' && always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = './mcp-reports/test-summary.md';
-
-            if (!fs.existsSync(path)) {
-              console.log('No test summary found, skipping comment');
-              return;
-            }
-
-            const summary = fs.readFileSync(path, 'utf8');
-
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## MCP Server Test Results\n\n${summary}`
-            });
 
   test-mcp-with-config:
     name: Test MCP Server with Config
@@ -196,17 +165,14 @@ jobs:
           kill $SERVER_PID || true
           echo "Server started successfully with --target local"
 
-      - name: Run comprehensive MCP tests
+      - name: Run MCP tests
         run: |
-          python scripts/test_mcp_server.py \
-            --report-dir ./mcp-reports-config \
-            --timeout 120 \
-            --no-color
+          pytest test/ -v --tb=short -m integration --junitxml=mcp-results.xml
 
-      - name: Upload test reports
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-test-reports-with-config
-          path: ./mcp-reports-config/
+          name: mcp-test-results-with-config
+          path: mcp-results.xml
           if-no-files-found: warn

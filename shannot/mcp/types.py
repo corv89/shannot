@@ -223,16 +223,22 @@ class ServerInfo:
         return {"name": self.name, "version": self.version}
 
 
+# MCP protocol version (spec date)
+PROTOCOL_VERSION = "2024-11-05"
+
+
 @dataclass
 class InitializationOptions:
     """Server initialization options."""
 
     server_info: ServerInfo
     capabilities: ServerCapabilities
+    protocol_version: str = PROTOCOL_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dict."""
         return {
+            "protocolVersion": self.protocol_version,
             "serverInfo": self.server_info.to_dict(),
             "capabilities": self.capabilities.to_dict(),
         }
