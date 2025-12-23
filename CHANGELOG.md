@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2025-12-23
+
+### Features
+
+- Add automatic sandbox binary download to `shannot setup`
+- Download pre-built PyPy sandbox from GitHub releases with SHA256 verification
+- Support Linux amd64 and arm64 platforms
+
+### Enhancements
+
+- `shannot setup --status` shows both stdlib and sandbox status
+- Graceful failure on unsupported platforms with build-from-source instructions
+
 ## [0.5.1] - 2025-12-23
 
 ### Bug Fixes

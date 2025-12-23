@@ -55,6 +55,21 @@ PYPY_VERSION = "7.3.3"
 PYPY_DOWNLOAD_URL = "https://downloads.python.org/pypy/pypy3.6-v7.3.3-src.tar.bz2"
 PYPY_SHA256 = "a23d21ca0de0f613732af4b4abb0b0db1cc56134b5bf0e33614eca87ab8805af"
 
+# PyPy sandbox binary download
+SANDBOX_VERSION = "pypy3-sandbox-7.3.6"  # Release tag
+SANDBOX_RELEASES_URL = "https://github.com/corv89/pypy/releases/download"
+SANDBOX_BINARY_NAME = "pypy3-c"  # Binary name inside tarball
+SANDBOX_LIB_NAME = "libpypy3-c.so"  # Shared library
+SANDBOX_BINARY_PATH = RUNTIME_DIR / SANDBOX_BINARY_NAME
+SANDBOX_LIB_PATH = RUNTIME_DIR / SANDBOX_LIB_NAME
+
+# Platform-specific checksums
+SANDBOX_CHECKSUMS: dict[str, str] = {
+    "linux-amd64": "b5498d3ea1bd3d4d9de337e57e0784ed6bcb5ff669f160f9bc3e789d64aa812a",
+    "linux-arm64": "ee4423ae2fc40ed65bf563568d1c05edfbe4e33e43c958c40f876583005688a6",
+    # "darwin-arm64": "",  # Future
+}
+
 # Profile configuration
 PROFILE_FILENAME = "profile.json"
 

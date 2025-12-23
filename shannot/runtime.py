@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import platform
 import shutil
 import sys
 import tarfile
@@ -18,6 +20,13 @@ from .config import (
     RUNTIME_DIR,
     RUNTIME_LIB_PYPY,
     RUNTIME_LIB_PYTHON,
+    SANDBOX_BINARY_NAME,
+    SANDBOX_BINARY_PATH,
+    SANDBOX_CHECKSUMS,
+    SANDBOX_LIB_NAME,
+    SANDBOX_LIB_PATH,
+    SANDBOX_RELEASES_URL,
+    SANDBOX_VERSION,
 )
 
 
@@ -39,40 +48,56 @@ def get_runtime_path() -> Path | None:
     return None
 
 
-def find_pypy_sandbox() -> Path | None:
-    """Find pypy-sandbox binary.
-
-    Checks:
-    1. In PATH (via shutil.which)
-    2. In RUNTIME_DIR (common user location)
-    3. Common build locations
+def get_platform_tag() -> str | None:
+    """Detect platform tag for sandbox binary download.
 
     Returns:
-        Path to pypy-sandbox if found, None otherwise.
+        Platform tag (e.g., 'linux-amd64') or None if unsupported.
     """
-    import os
+    system = platform.system().lower()
+    machine = platform.machine()
 
-    # Check PATH first
-    which_result = shutil.which("pypy-sandbox")
+    # Normalize machine names to match release asset naming
+    if machine in ("x86_64", "AMD64"):
+        arch = "amd64"
+    elif machine in ("aarch64", "arm64"):
+        arch = "arm64"
+    else:
+        return None
+
+    if system == "linux":
+        return f"linux-{arch}"
+    # elif system == "darwin":
+    #     return f"darwin-{arch}"  # Future
+
+    return None
+
+
+def is_sandbox_installed() -> bool:
+    """Check if sandbox binary and library are installed at expected location."""
+    binary_ok = SANDBOX_BINARY_PATH.exists() and os.access(SANDBOX_BINARY_PATH, os.X_OK)
+    lib_ok = SANDBOX_LIB_PATH.exists()
+    return binary_ok and lib_ok
+
+
+def find_pypy_sandbox() -> Path | None:
+    """Find pypy3-c (sandbox) binary.
+
+    Checks:
+    1. SANDBOX_BINARY_PATH (downloaded or manually placed)
+    2. In PATH (via shutil.which)
+
+    Returns:
+        Path to sandbox binary if found, None otherwise.
+    """
+    # Check standard location first
+    if SANDBOX_BINARY_PATH.exists() and os.access(SANDBOX_BINARY_PATH, os.X_OK):
+        return SANDBOX_BINARY_PATH
+
+    # Check PATH
+    which_result = shutil.which("pypy3-c")
     if which_result:
         return Path(which_result)
-
-    # Check RUNTIME_DIR (where users might place it alongside stdlib)
-    runtime_pypy = RUNTIME_DIR / "pypy-sandbox"
-    if runtime_pypy.exists() and os.access(runtime_pypy, os.X_OK):
-        return runtime_pypy
-
-    # Check common build locations relative to home
-    home = Path.home()
-    common_locations = [
-        home / "pypy" / "pypy" / "goal" / "pypy-sandbox",
-        home / "src" / "pypy" / "pypy" / "goal" / "pypy-sandbox",
-        home / ".local" / "bin" / "pypy-sandbox",
-    ]
-
-    for location in common_locations:
-        if location.exists() and os.access(location, os.X_OK):
-            return location
 
     return None
 
@@ -270,4 +295,132 @@ def remove_runtime(verbose: bool = True) -> bool:
     shutil.rmtree(RUNTIME_DIR)
     if verbose:
         print(f"Runtime removed from {RUNTIME_DIR}")
+    return True
+
+
+def download_sandbox(
+    force: bool = False,
+    verbose: bool = True,
+    version: str = SANDBOX_VERSION,
+) -> bool:
+    """
+    Download pre-built PyPy sandbox binary from GitHub releases.
+
+    Args:
+        force: Reinstall even if already present
+        verbose: Print progress to stdout
+        version: Release version/tag to download
+
+    Returns:
+        True if installation succeeded
+
+    Raises:
+        SetupError: If download or verification fails
+    """
+    # Check if already installed
+    if is_sandbox_installed() and not force:
+        if verbose:
+            print(f"Sandbox binary already installed at {SANDBOX_BINARY_PATH}")
+            print("Use --force to reinstall.")
+        return True
+
+    # Detect platform
+    platform_tag = get_platform_tag()
+    if not platform_tag:
+        raise SetupError(
+            f"Unsupported platform: {platform.system()} {platform.machine()}\n"
+            "Supported: Linux x86_64, Linux aarch64\n"
+            "You can build from source: https://github.com/corv89/pypy"
+        )
+
+    # Check if we have a checksum for this platform
+    expected_sha256 = SANDBOX_CHECKSUMS.get(platform_tag, "")
+    if not expected_sha256:
+        raise SetupError(
+            f"No pre-built binary available for {platform_tag}\n"
+            "You can build from source: https://github.com/corv89/pypy"
+        )
+
+    # Construct download URL
+    # Format: https://github.com/corv89/pypy/releases/download/pypy3-sandbox-7.3.6/pypy3-sandbox-linux-amd64.tar.gz
+    archive_name = f"pypy3-sandbox-{platform_tag}.tar.gz"
+    download_url = f"{SANDBOX_RELEASES_URL}/{version}/{archive_name}"
+
+    if verbose:
+        print(f"Downloading PyPy sandbox ({version}) for {platform_tag}...")
+        print(f"  URL: {download_url}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive_path = Path(tmpdir) / archive_name
+
+        # Download with progress
+        def download_progress(downloaded: int, total: int) -> None:
+            if total > 0:
+                pct = downloaded * 100 // total
+                mb_down = downloaded / (1024 * 1024)
+                mb_total = total / (1024 * 1024)
+                sys.stdout.write(f"\r  Downloading: {mb_down:.1f}/{mb_total:.1f} MB ({pct}%)")
+                sys.stdout.flush()
+
+        try:
+            download_with_progress(
+                download_url,
+                archive_path,
+                progress_callback=download_progress if verbose else None,
+            )
+            if verbose:
+                print()
+        except Exception as e:
+            raise SetupError(f"Download failed: {e}") from e
+
+        # Verify checksum
+        if verbose:
+            sys.stdout.write("  Verifying checksum... ")
+            sys.stdout.flush()
+
+        if not verify_checksum(archive_path, expected_sha256):
+            if verbose:
+                print("FAILED")
+            raise SetupError("Checksum verification failed!")
+
+        if verbose:
+            print("\u2713")  # checkmark
+
+        # Extract binary and shared library
+        if verbose:
+            print("  Extracting...")
+
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
+        with tarfile.open(archive_path, "r:gz") as tar:
+            # Find and extract pypy3-c binary
+            binary_member = None
+            lib_member = None
+            for member in tar.getmembers():
+                basename = Path(member.name).name
+                if basename == SANDBOX_BINARY_NAME:
+                    binary_member = member
+                elif basename == SANDBOX_LIB_NAME:
+                    lib_member = member
+
+            if not binary_member:
+                raise SetupError(f"Binary '{SANDBOX_BINARY_NAME}' not found in archive")
+
+            # Extract binary
+            binary_member.name = SANDBOX_BINARY_NAME  # Flatten path
+            tar.extract(binary_member, RUNTIME_DIR)
+            SANDBOX_BINARY_PATH.chmod(0o755)
+
+            # Extract shared library if present
+            if lib_member:
+                lib_member.name = SANDBOX_LIB_NAME  # Flatten path
+                tar.extract(lib_member, RUNTIME_DIR)
+                SANDBOX_LIB_PATH.chmod(0o644)
+
+    if verbose:
+        print("\nInstalled:")
+        print(f"  {SANDBOX_BINARY_PATH}")
+        if SANDBOX_LIB_PATH.exists():
+            print(f"  {SANDBOX_LIB_PATH}")
+
     return True
