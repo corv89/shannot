@@ -15,7 +15,7 @@ try:
     VERSION = version("shannot")
 except Exception:
     # Fallback for development/edge cases
-    VERSION = "0.4.0-dev"
+    VERSION = "0.5.0-dev"
 
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
