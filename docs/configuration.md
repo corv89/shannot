@@ -1,506 +1,277 @@
 # Configuration Guide
 
-Shannot's configuration system lets you manage multiple execution targets - run sandboxed commands locally or on remote Linux servers via SSH.
+Shannot's configuration system for approval profiles, remote targets, and MCP integration.
 
 ## Overview
 
-Shannot uses a TOML configuration file to manage **executors** - the backends that run sandbox commands. Define multiple executors (local Linux, SSH remotes) and switch between them seamlessly.
+Shannot uses a **zero-dependency** philosophy - pure Python stdlib only. Configuration is straightforward:
 
-### Configuration File Location
+- **Approval Profiles** - JSON files controlling command approval behavior
+- **Remote Targets** - TOML file for SSH host configuration
+- **MCP Setup** - Configuration for Claude Desktop and Claude Code
 
-Platform-specific locations (auto-detected):
+## Approval Profiles
 
-- **Linux**: `~/.config/shannot/config.toml`
-- **macOS**: `~/Library/Application Support/shannot/config.toml`
-- **Windows**: `%APPDATA%\Local\shannot\config.toml`
+Profiles control which subprocess commands execute automatically vs. require approval.
 
-No configuration file needed for basic local usage - Shannot works out-of-the-box on Linux.
+### Profile Structure
 
-## Quick Start
-
-### Add a Remote Server
-
-```bash
-# Add an SSH remote with all options
-shannot remote add prod \
-  --host prod-server.example.com \
-  --user admin \
-  --key ~/.ssh/id_rsa \
-  --port 22 \
-  --profile diagnostics
-
-# Simple remote (uses SSH config and defaults)
-shannot remote add staging staging.internal
-
-# List all configured remotes
-shannot remote list
-
-# Test the connection
-shannot remote test prod
+```json
+{
+  "auto_approve": [
+    "cat", "head", "tail", "less",
+    "ls", "find", "stat", "file",
+    "df", "du", "free", "uptime",
+    "ps", "pgrep", "uname", "hostname"
+  ],
+  "always_deny": [
+    "rm -rf /",
+    "dd if=/dev/zero",
+    "mkfs",
+    ":(){ :|:& };:",
+    "> /dev/sda"
+  ]
+}
 ```
 
-### Use the Remote
+### Profile Locations
+
+Profiles are loaded in order of precedence:
+
+1. **Project-local**: `.shannot/profile.json`
+2. **Global**: `~/.config/shannot/profile.json`
+3. **Built-in**: Default profile (if no files found)
+
+### Creating a Profile
 
 ```bash
-# Run commands on remote system
-shannot --target prod df -h
-shannot --target prod cat /etc/os-release
-shannot -t staging ls /var/log
+# Create global config directory
+mkdir -p ~/.config/shannot
 
-# Use different profile for specific command
-shannot --target prod --profile minimal.json ls /
-
-# Set as default target (via environment)
-export SHANNOT_TARGET=prod
-shannot df -h  # Runs on prod
-
-# Use with Claude Desktop (MCP)
-shannot mcp install --target prod
+# Create profile
+cat > ~/.config/shannot/profile.json << 'EOF'
+{
+  "auto_approve": [
+    "cat", "ls", "find", "grep", "head", "tail",
+    "df", "du", "free", "uptime", "ps"
+  ],
+  "always_deny": [
+    "rm -rf /",
+    "dd if=/dev/zero"
+  ]
+}
+EOF
 ```
 
-## Complete Examples
+### Project-Local Profiles
 
-### Example 1: Simple Setup
+For project-specific settings, create a `.shannot/` directory:
 
 ```bash
-# 1. Add remote server
-shannot remote add webserver web1.company.com
+mkdir -p .shannot
 
-# 2. Test connection
-shannot remote test webserver
-
-# 3. Run commands
-shannot -t webserver df -h
-shannot -t webserver free -h
-shannot -t webserver uptime
+cat > .shannot/profile.json << 'EOF'
+{
+  "auto_approve": [
+    "npm", "yarn", "pnpm",
+    "cat", "ls", "grep"
+  ],
+  "always_deny": []
+}
+EOF
 ```
 
-### Example 2: Multiple Environments
+See [Profile Configuration](profiles.md) for detailed profile options.
 
-```bash
-# Add production server (restricted access)
-shannot remote add prod \
-  --host prod.example.com \
-  --user readonly \
-  --key ~/.ssh/prod_readonly_key \
-  --profile minimal
+## Remote Targets
 
-# Add staging server (more access)
-shannot remote add staging \
-  --host staging.example.com \
-  --user developer \
-  --profile diagnostics
+Remote targets are SSH hosts where sandboxed scripts can execute.
 
-# Add dev VM (local)
-shannot remote add dev \
-  --host localhost \
-  --user devuser \
-  --port 2222
+### Configuration File
 
-# List all remotes
-shannot remote list
-
-# Use them
-shannot -t prod cat /etc/os-release      # Minimal commands only
-shannot -t staging df -h                  # Full diagnostics
-shannot -t dev ps aux                     # Dev environment
-```
-
-### Example 3: Team Configuration
-
-Share this configuration with your team by committing `~/.config/shannot/config.toml`:
+Remote targets are stored in `~/.config/shannot/remotes.toml`:
 
 ```toml
-default_executor = "local"
+# SSH remote targets for shannot
 
-[executor.local]
-type = "local"
+[remotes.prod]
+host = "prod.example.com"
+user = "deploy"
+port = 22
 
-[executor.prod]
-type = "ssh"
-host = "prod.company.internal"
-username = "monitoring"
-key_file = "~/.ssh/company_monitoring_key"
-profile = "minimal"
+[remotes.staging]
+host = "staging.example.com"
+user = "admin"
+port = 22
 
-[executor.staging]
-type = "ssh"
-host = "staging.company.internal"
-username = "monitoring"
-key_file = "~/.ssh/company_monitoring_key"
-profile = "diagnostics"
-
-[executor.dev]
-type = "ssh"
-host = "dev.company.internal"
-username = "developer"
-key_file = "~/.ssh/company_dev_key"
-profile = "diagnostics"
+[remotes.dev]
+host = "192.168.1.100"
+user = "developer"
 port = 2222
 ```
 
-Team members can then:
-```bash
-# Everyone uses the same remote names
-shannot -t prod df -h
-shannot -t staging cat /var/log/app.log
-shannot -t dev ps aux
-```
-
-## Configuration File Format
-
-### Basic Structure
-
-```toml
-# Default executor when not specified
-default_executor = "local"
-
-# Local execution (Linux only)
-[executor.local]
-type = "local"
-
-# SSH remote
-[executor.prod]
-type = "ssh"
-host = "prod-server.example.com"
-username = "admin"
-key_file = "~/.ssh/id_rsa"
-port = 22
-profile = "diagnostics"  # Optional: default profile
-```
-
-### Executor Types
-
-#### Local Executor
-
-Runs commands on the local Linux system using bubblewrap.
-
-```toml
-[executor.local]
-type = "local"
-bwrap_path = "/usr/bin/bwrap"  # Optional: explicit path
-```
-
-**Requirements**:
-- Linux operating system
-- bubblewrap installed (`apt install bubblewrap` or `dnf install bubblewrap`)
-
-#### SSH Executor
-
-Runs commands on a remote Linux system via SSH.
-
-```toml
-[executor.prod]
-type = "ssh"
-host = "prod-server.example.com"     # Required
-username = "admin"                    # Optional (uses SSH config)
-key_file = "~/.ssh/id_rsa"           # Optional (uses SSH agent)
-port = 22                             # Optional (default: 22)
-connection_pool_size = 5              # Optional (default: 5)
-profile = "diagnostics"               # Optional (default profile)
-known_hosts = "~/.ssh/known_hosts"    # Optional (defaults to SSH config)
-strict_host_key = true                # Optional (default true; disable only for throwaway hosts)
-```
-
-**Requirements**:
-- SSH access to remote system
-- bubblewrap installed on remote
-- SSH key-based authentication
- - Valid host key entry in `known_hosts` (unless `strict_host_key = false`)
-
-## CLI Commands
-
-### Managing Remotes
+### Managing Remotes via CLI
 
 ```bash
 # Add a remote
-shannot remote add NAME --host HOSTNAME [OPTIONS]
+shannot remote add prod --host prod.example.com --user deploy
 
-Options:
-  --user, --username USERNAME    SSH username
-  --key, --key-file PATH         SSH private key file
-  --port PORT                    SSH port (default: 22)
-  --profile PROFILE              Default profile for this remote
+# Shorthand format
+shannot remote add staging admin@staging.example.com
 
-# List all configured executors
+# With custom port
+shannot remote add dev --host 192.168.1.100 --user developer --port 2222
+
+# List configured remotes
 shannot remote list
 
-# Test connection to a remote
-shannot remote test NAME
+# Test connection
+shannot remote test prod
 
 # Remove a remote
-shannot remote remove NAME
+shannot remote remove staging
 ```
 
-### Using Executors
+### Using Remote Targets
 
 ```bash
-# Run command with specific executor
-shannot --target NAME COMMAND [ARGS...]
+# Execute on remote
+shannot run script.py --target prod
 
-# Examples
-shannot --target prod ls /
-shannot --target staging df -h
-shannot --target local cat /etc/os-release
-
-# Without --target, uses default_executor from config
-shannot df -h
+# With MCP (Claude Desktop/Code)
+# The `target` parameter in sandbox_run tool
 ```
 
-## Host Key Verification
+### Auto-Deployment
 
-Shannot enforces strict SSH host-key validation by default (matching OpenSSH). Make sure each remote's host key is present in your `known_hosts` file before using it via Shannot or Claude. You can point at a specific file with `known_hosts = "~/.ssh/known_hosts"`.
+When targeting a remote for the first time:
 
-If you set `strict_host_key = false`, host keys will not be checked—this is insecure and should only be used for disposable lab environments.
+1. Shannot deploys itself to `/tmp/shannot-v{version}/`
+2. No manual installation required on the remote
+3. Deployment is cached (fast `test -x` check on subsequent runs)
 
-### MCP Integration
+## MCP Configuration
+
+### Claude Desktop
+
+Install MCP configuration for Claude Desktop:
 
 ```bash
-# Install MCP with specific executor
-shannot mcp install --target prod
-
-# Claude Desktop will now execute on prod server
-# Restart Claude Desktop after installation
+shannot mcp install
+# or
+shannot mcp install --client claude-desktop
 ```
 
-## Configuration Examples
+This adds to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
-### Single Remote Server
-
-```toml
-default_executor = "prod"
-
-[executor.prod]
-type = "ssh"
-host = "server.example.com"
-username = "admin"
-key_file = "~/.ssh/id_rsa"
+```json
+{
+  "mcpServers": {
+    "shannot": {
+      "command": "shannot-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
 ```
 
-### Multiple Environments
+### Claude Code
 
-```toml
-default_executor = "local"
-
-[executor.local]
-type = "local"
-
-[executor.prod]
-type = "ssh"
-host = "prod.example.com"
-username = "deploy"
-key_file = "~/.ssh/prod_key"
-profile = "minimal"
-
-[executor.staging]
-type = "ssh"
-host = "staging.example.com"
-username = "deploy"
-key_file = "~/.ssh/staging_key"
-profile = "diagnostics"
-
-[executor.dev]
-type = "ssh"
-host = "dev.example.com"
-username = "developer"
-key_file = "~/.ssh/dev_key"
-port = 2222
-```
-
-### Team Configuration
-
-Share this file with your team:
-
-```toml
-default_executor = "local"
-
-[executor.local]
-type = "local"
-
-# Production (read-only)
-[executor.prod]
-type = "ssh"
-host = "prod.company.internal"
-username = "readonly"
-key_file = "~/.ssh/company_readonly"
-profile = "minimal"
-
-# Staging (diagnostics)
-[executor.staging]
-type = "ssh"
-host = "staging.company.internal"
-username = "deploy"
-key_file = "~/.ssh/company_deploy"
-profile = "diagnostics"
-```
-
-## SSH Setup
-
-### Generate SSH Key
+Install for Claude Code:
 
 ```bash
-# Generate new SSH key
-ssh-keygen -t ed25519 -f ~/.ssh/shannot_key -C "shannot@mycompany"
-
-# Copy to remote server
-ssh-copy-id -i ~/.ssh/shannot_key.pub user@remote-server
+shannot mcp install --client claude-code
 ```
 
-### Test SSH Connection
+Generates `.mcp.json` or updates user config.
 
-```bash
-# Test SSH manually
-ssh -i ~/.ssh/shannot_key user@remote-server
+### Manual Configuration
 
-# Test with Shannot
-shannot remote add myserver \
-  --host remote-server \
-  --user user \
-  --key ~/.ssh/shannot_key
-
-shannot remote test myserver
+```json
+{
+  "mcpServers": {
+    "shannot": {
+      "command": "shannot-mcp",
+      "args": ["--verbose"],
+      "env": {}
+    }
+  }
+}
 ```
 
-### SSH Config Integration
+### MCP with Remote Target
 
-Shannot respects your `~/.ssh/config`:
+To execute on a specific remote by default:
 
-```
-# ~/.ssh/config
-Host prod
-    HostName prod.example.com
-    User admin
-    IdentityFile ~/.ssh/prod_key
-    Port 22
-```
-
-Then in Shannot config:
-
-```toml
-[executor.prod]
-type = "ssh"
-host = "prod"  # Uses SSH config
+```json
+{
+  "mcpServers": {
+    "shannot": {
+      "command": "shannot-mcp",
+      "args": ["--profile", "diagnostics"],
+      "env": {}
+    }
+  }
+}
 ```
 
-## Troubleshooting
+Then use the `target` parameter in `sandbox_run` tool calls.
 
-### "Executor 'NAME' not found"
+See [MCP Integration](mcp.md) for complete MCP documentation.
 
-Check your configuration:
-```bash
-shannot remote list
+## Directory Structure
+
+Shannot follows XDG Base Directory specification:
+
+```
+~/.config/shannot/
+├── profile.json          # Global approval profile
+└── remotes.toml          # SSH remote targets
+
+~/.local/share/shannot/
+├── runtime/              # PyPy sandbox runtime
+│   ├── lib-python/       # Python stdlib
+│   └── lib_pypy/         # PyPy-specific modules
+└── sessions/             # Session data
+    └── 20250115-abc123/  # Individual session
+        └── session.json
+
+.shannot/                 # Project-local (optional)
+└── profile.json          # Project-specific profile
 ```
 
-### "Connection failed" for SSH
+## Environment Variables
 
-1. Test SSH manually:
-   ```bash
-   ssh -i ~/.ssh/key user@host
-   ```
+| Variable | Description |
+|----------|-------------|
+| `XDG_CONFIG_HOME` | Config directory (default: `~/.config`) |
+| `XDG_DATA_HOME` | Data directory (default: `~/.local/share`) |
+| `SHANNOT_RELEASE_PATH` | Custom release tarball path for deployment |
 
-2. Check SSH key permissions:
-   ```bash
-   chmod 600 ~/.ssh/key
-   ```
+## Best Practices
 
-3. Verify bubblewrap on remote:
-   ```bash
-   ssh user@host "which bwrap"
-   ```
+### Profiles
 
-### "No module named 'asyncssh'"
+1. **Start minimal** - Add commands to `auto_approve` as needed
+2. **Use project-local profiles** - Different projects have different needs
+3. **Block dangerous commands** - Always populate `always_deny`
 
-This error indicates you installed the minimal version of Shannot. Reinstall with full dependencies:
-```bash
-pip install --user shannot
-```
+### Remote Targets
 
-### MCP not using remote executor
+1. **Use SSH keys** - Password authentication is not supported
+2. **Use SSH agent** - Avoid storing unencrypted keys
+3. **Limit permissions** - Use dedicated service accounts on remotes
 
-1. Check Claude Desktop config:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Roaming\Claude\claude_desktop_config.json`
+### Security
 
-2. Verify `args` includes `--target`:
-   ```json
-   {
-     "mcpServers": {
-       "shannot": {
-         "command": "shannot-mcp",
-         "args": ["--target", "prod"]
-       }
-     }
-   }
-   ```
-
-3. Restart Claude Desktop completely.
-
-## Advanced Topics
-
-### Custom bwrap Path
-
-If bubblewrap is in a non-standard location:
-
-```toml
-[executor.local]
-type = "local"
-bwrap_path = "/opt/custom/bin/bwrap"
-```
-
-### Connection Pooling
-
-SSH executor maintains a pool of connections for performance:
-
-```toml
-[executor.prod]
-type = "ssh"
-host = "prod.example.com"
-connection_pool_size = 10  # More connections = better concurrency
-```
-
-### Per-Executor Profiles
-
-Set a default profile for each executor:
-
-```toml
-[executor.prod]
-type = "ssh"
-host = "prod.example.com"
-profile = "minimal"  # Always use minimal profile
-
-[executor.dev]
-type = "ssh"
-host = "dev.example.com"
-profile = "diagnostics"  # Always use diagnostics
-```
-
-## Security Considerations
-
-### SSH Keys
-
-- **Use dedicated keys**: Don't reuse your personal SSH key
-- **Set permissions**: `chmod 600 ~/.ssh/key`
-- **Use passphrases**: Protect keys with strong passphrases
-- **Rotate regularly**: Change keys periodically
-
-### Least Privilege
-
-- **Read-only access**: Use SSH users with minimal privileges
-- **Minimal profiles**: Use `minimal.json` for production
-- **Command restrictions**: Limit allowed commands in profiles
-
-### Monitoring
-
-- **Audit logs**: Monitor SSH access logs on remote systems
-- **MCP logging**: Enable verbose logging for MCP server
-- **Alert on failures**: Set up alerts for failed connections
+1. **Review sessions** - Don't blindly approve all operations
+2. **Use read-only access** - Sandboxed code can only read by default
+3. **Monitor execution** - Check session history regularly
 
 ## Next Steps
 
-- See [MCP Guide](mcp.md) for Claude Desktop integration
-- See [Profiles Guide](profiles.md) for profile configuration
-- See [Deployment Guide](deployment.md) for production deployment scenarios
-
----
-
-**Questions?** Open an issue on GitHub or check the troubleshooting section above.
+- [Profile Configuration](profiles.md) - Detailed profile options
+- [MCP Integration](mcp.md) - Claude Desktop/Code setup
+- [Deployment Guide](deployment.md) - Production deployment
+- [Troubleshooting](troubleshooting.md) - Common issues

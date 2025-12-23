@@ -1,419 +1,323 @@
-"""Configuration management for Shannot.
+"""Centralized configuration paths for shannot."""
 
-This module handles loading and managing executor configurations from TOML files.
-"""
+from __future__ import annotations
 
+import getpass
+import json
 import os
-import sys
-from dataclasses import dataclass, field
+import tomllib
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomli as tomllib  # type: ignore[import-not-found]
-    except ImportError as exc:
-        raise ImportError(  # type: ignore[unreachable]
-            "tomli is required for Python < 3.11. Install with: pip install tomli"
-        ) from exc
+# Version - read from package metadata (pyproject.toml is source of truth)
+try:
+    from importlib.metadata import version
 
-from .execution import SandboxExecutor
+    VERSION = version("shannot")
+except Exception:
+    # Fallback for development/edge cases
+    VERSION = "0.5.1-dev"
 
-if TYPE_CHECKING:
-    from .executors.local import LocalExecutor
-    from .executors.ssh import SSHExecutor
-from .validation import (
-    ValidationError,
-    validate_bool,
-    validate_int_range,
-    validate_literal,
-    validate_path,
-    validate_type,
-)
-
-ExecutorType = Literal["local", "ssh"]
+# Remote deployment
+REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
+RELEASE_PATH_ENV = "SHANNOT_RELEASE_PATH"
 
 
-@dataclass
-class ExecutorConfig:
-    """Base configuration for an executor."""
+def get_remote_deploy_dir() -> str:
+    """Get remote deployment directory path with version filled in."""
+    return REMOTE_DEPLOY_DIR.format(version=VERSION)
 
-    type: ExecutorType
-    profile: str | None = None  # Default profile for this executor
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExecutorConfig":
-        """Create ExecutorConfig from dictionary.
+def _xdg_data_home() -> Path:
+    """XDG data directory (~/.local/share or $XDG_DATA_HOME)."""
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
 
-        Args:
-            data: Dictionary containing configuration
 
-        Returns:
-            ExecutorConfig instance
+def _xdg_config_home() -> Path:
+    """XDG config directory (~/.config or $XDG_CONFIG_HOME)."""
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 
-        Raises:
-            ValidationError: If validation fails
-        """
-        # Discriminate based on type field
-        exec_type = data.get("type")
-        if exec_type == "local":
-            return LocalExecutorConfig.from_dict(data)
-        elif exec_type == "ssh":
-            return SSHExecutorConfig.from_dict(data)
-        else:
-            raise ValidationError(
-                f"type must be 'local' or 'ssh', got {exec_type!r}",
-                "type",
-            )
+
+# Data directories
+DATA_DIR = _xdg_data_home() / "shannot"
+SESSIONS_DIR = DATA_DIR / "sessions"
+RUNTIME_DIR = DATA_DIR / "runtime"
+
+# Runtime paths (after setup)
+RUNTIME_LIB_PYTHON = RUNTIME_DIR / "lib-python"
+RUNTIME_LIB_PYPY = RUNTIME_DIR / "lib_pypy"
+
+# Config directories
+CONFIG_DIR = _xdg_config_home() / "shannot"
+
+# PyPy download source
+PYPY_VERSION = "7.3.3"
+PYPY_DOWNLOAD_URL = "https://downloads.python.org/pypy/pypy3.6-v7.3.3-src.tar.bz2"
+PYPY_SHA256 = "a23d21ca0de0f613732af4b4abb0b0db1cc56134b5bf0e33614eca87ab8805af"
+
+# Profile configuration
+PROFILE_FILENAME = "profile.json"
+
+# Remotes configuration
+REMOTES_FILENAME = "remotes.toml"
 
 
 @dataclass
-class LocalExecutorConfig(ExecutorConfig):
-    """Configuration for local executor."""
+class Remote:
+    """SSH remote target configuration."""
 
-    type: Literal["local"] = "local"  # type: ignore[assignment]
-    bwrap_path: Path | None = None  # Explicit path to bwrap if needed
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LocalExecutorConfig":
-        """Create LocalExecutorConfig from dictionary.
-
-        Args:
-            data: Dictionary containing configuration
-
-        Returns:
-            LocalExecutorConfig instance
-
-        Raises:
-            ValidationError: If validation fails
-        """
-        exec_type = data.get("type", "local")
-        validate_literal(exec_type, ("local",), "type")
-
-        profile = data.get("profile")
-        if profile is not None:
-            validate_type(profile, str, "profile")
-
-        bwrap_path_raw = data.get("bwrap_path")
-        bwrap_path = (
-            validate_path(bwrap_path_raw, "bwrap_path", expand=True) if bwrap_path_raw else None
-        )
-
-        return cls(
-            type="local",
-            profile=profile,
-            bwrap_path=bwrap_path,
-        )
-
-
-@dataclass
-class SSHExecutorConfig(ExecutorConfig):
-    """Configuration for SSH executor."""
-
-    type: Literal["ssh"] = "ssh"  # type: ignore[assignment]
-    host: str = ""
-    username: str | None = None
-    key_file: Path | None = None
+    name: str
+    host: str
+    user: str
     port: int = 22
-    connection_pool_size: int = 5
-    known_hosts: Path | None = None
-    strict_host_key: bool = True
 
-    def __post_init__(self):
-        """Expand paths after initialization."""
-        if self.key_file is not None:
-            self.key_file = self.key_file.expanduser()
-        if self.known_hosts is not None:
-            self.known_hosts = self.known_hosts.expanduser()
+    @property
+    def target_string(self) -> str:
+        """Return user@host format."""
+        return f"{self.user}@{self.host}"
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "SSHExecutorConfig":
-        """Create SSHExecutorConfig from dictionary.
-
-        Args:
-            data: Dictionary containing configuration
-
-        Returns:
-            SSHExecutorConfig instance
-
-        Raises:
-            ValidationError: If validation fails
-        """
-        exec_type = data.get("type", "ssh")
-        validate_literal(exec_type, ("ssh",), "type")
-
-        profile = data.get("profile")
-        if profile is not None:
-            validate_type(profile, str, "profile")
-
-        host = data.get("host")
-        if not host:
-            raise ValidationError("host is required for SSH executor", "host")
-        validate_type(host, str, "host")
-
-        username = data.get("username")
-        if username is not None:
-            validate_type(username, str, "username")
-
-        key_file_raw = data.get("key_file")
-        key_file = validate_path(key_file_raw, "key_file", expand=True) if key_file_raw else None
-
-        port = data.get("port", 22)
-        validate_int_range(port, "port", min_val=1, max_val=65535)
-
-        connection_pool_size = data.get("connection_pool_size", 5)
-        validate_int_range(connection_pool_size, "connection_pool_size", min_val=1)
-
-        known_hosts_raw = data.get("known_hosts")
-        known_hosts = (
-            validate_path(known_hosts_raw, "known_hosts", expand=True) if known_hosts_raw else None
-        )
-
-        strict_host_key = data.get("strict_host_key", True)
-        validate_bool(strict_host_key, "strict_host_key")
-
-        return cls(
-            type="ssh",
-            profile=profile,
-            host=host,
-            username=username,
-            key_file=key_file,
-            port=port,
-            connection_pool_size=connection_pool_size,
-            known_hosts=known_hosts,
-            strict_host_key=strict_host_key,
-        )
+    def to_dict(self) -> dict:
+        """Convert to dictionary for TOML serialization."""
+        return {"host": self.host, "user": self.user, "port": self.port}
 
 
-@dataclass
-class ShannotConfig:
-    """Complete Shannot configuration."""
-
-    default_executor: str = "local"
-    executor: dict[str, LocalExecutorConfig | SSHExecutorConfig] = field(default_factory=dict)
-
-    def get_executor_config(
-        self, name: str | None = None
-    ) -> LocalExecutorConfig | SSHExecutorConfig:
-        """Get executor config by name, or default if name is None."""
-        executor_name = name or self.default_executor
-
-        if executor_name not in self.executor:
-            available = ", ".join(self.executor.keys())
-            raise ValidationError(
-                f"'{executor_name}' not found. Available executors: {available}", "executor"
-            )
-
-        return self.executor[executor_name]
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ShannotConfig":
-        """Create ShannotConfig from dictionary.
-
-        Args:
-            data: Dictionary containing configuration
-
-        Returns:
-            ShannotConfig instance
-
-        Raises:
-            ValidationError: If validation fails
-        """
-        default_executor = data.get("default_executor", "local")
-        validate_type(default_executor, str, "default_executor")
-
-        executor_data = data.get("executor", {})
-        if not isinstance(executor_data, dict):
-            raise ValidationError(
-                f"expected dict, got {type(executor_data).__name__}",
-                "executor",
-            )
-
-        executors: dict[str, LocalExecutorConfig | SSHExecutorConfig] = {}
-        for name, exec_config_data in executor_data.items():
-            if not isinstance(name, str):
-                raise ValidationError(
-                    f"executor keys must be strings, got {type(name).__name__}",
-                    "executor",
-                )
-            if not isinstance(exec_config_data, dict):
-                raise ValidationError(
-                    f"executor values must be dicts, got {type(exec_config_data).__name__}",
-                    f"executor.{name}",
-                )
-
-            try:
-                executors[name] = ExecutorConfig.from_dict(exec_config_data)  # type: ignore[assignment]
-            except ValidationError as e:
-                # Re-raise with context about which executor failed
-                raise ValidationError(str(e), f"executor.{name}") from e
-
-        return cls(
-            default_executor=default_executor,
-            executor=executors,
-        )
+DEFAULT_PROFILE = {
+    "auto_approve": [
+        "cat",
+        "head",
+        "tail",
+        "less",
+        "ls",
+        "find",
+        "stat",
+        "file",
+        "df",
+        "du",
+        "free",
+        "uptime",
+        "ps",
+        "top",
+        "htop",
+        "pgrep",
+        "systemctl status",
+        "journalctl",
+        "uname",
+        "hostname",
+        "whoami",
+        "id",
+        "env",
+        "printenv",
+        "ip",
+        "ss",
+        "netstat",
+        "date",
+        "cal",
+    ],
+    "always_deny": [
+        "rm -rf /",
+        "dd if=/dev/zero",
+        "mkfs",
+        ":(){ :|:& };:",
+        "> /dev/sda",
+    ],
+}
 
 
-def get_config_path() -> Path:
-    """Get the path to the Shannot config file.
+def find_project_root() -> Path | None:
+    """Walk up from cwd to find .shannot directory."""
+    current = Path.cwd()
+    while current != current.parent:
+        shannot_dir = current / ".shannot"
+        if shannot_dir.is_dir():
+            return shannot_dir
+        current = current.parent
+    return None
 
-    Returns:
-        Path to ~/.config/shannot/config.toml (or Windows/macOS equivalent)
+
+def get_profile_path() -> Path | None:
     """
-    if sys.platform == "win32":
-        config_dir = Path.home() / "AppData" / "Local" / "shannot"
-    elif sys.platform == "darwin":
-        config_dir = Path.home() / "Library" / "Application Support" / "shannot"
-    else:
-        # Linux and other Unix-like systems
-        xdg_config = Path(os.environ.get("XDG_CONFIG_HOME", "~/.config")).expanduser()
-        config_dir = xdg_config / "shannot"
+    Get profile path with precedence:
+    1. .shannot/profile.json in project root
+    2. ~/.config/shannot/profile.json (global)
 
-    return config_dir / "config.toml"
-
-
-def load_config(config_path: Path | None = None) -> ShannotConfig:
-    """Load Shannot configuration from TOML file.
-
-    Args:
-        config_path: Optional path to config file. If not provided, uses default.
-
-    Returns:
-        Loaded configuration
-
-    Raises:
-        FileNotFoundError: If config file doesn't exist
-        ValueError: If config file is invalid
+    Returns path if exists, None otherwise.
     """
-    if config_path is None:
-        config_path = get_config_path()
+    # Check project-local first
+    project_dir = find_project_root()
+    if project_dir:
+        project_profile = project_dir / PROFILE_FILENAME
+        if project_profile.exists():
+            return project_profile
 
-    if not config_path.exists():
-        # Return default config (local only)
-        return ShannotConfig(
-            default_executor="local",
-            executor={"local": LocalExecutorConfig(type="local")},
-        )
+    # Fall back to global
+    global_profile = CONFIG_DIR / PROFILE_FILENAME
+    if global_profile.exists():
+        return global_profile
+
+    return None
+
+
+def load_profile() -> dict:
+    """
+    Load security profile from file.
+
+    Returns dict with:
+        - auto_approve: list[str] - commands to execute immediately
+        - always_deny: list[str] - commands to never execute
+
+    Uses DEFAULT_PROFILE if no profile file found.
+    """
+    profile_path = get_profile_path()
+    if profile_path is None:
+        return DEFAULT_PROFILE.copy()
 
     try:
-        with open(config_path, "rb") as f:
-            data: dict[str, object] = tomllib.load(f)
+        data = json.loads(profile_path.read_text())
+        return {
+            "auto_approve": data.get("auto_approve", []),
+            "always_deny": data.get("always_deny", []),
+        }
+    except (OSError, json.JSONDecodeError):
+        return DEFAULT_PROFILE.copy()
+
+
+def get_remotes_path() -> Path:
+    """Get path to remotes.toml config file."""
+    return CONFIG_DIR / REMOTES_FILENAME
+
+
+def load_remotes() -> dict[str, Remote]:
+    """
+    Load remotes from TOML config file.
+
+    Returns:
+        Dictionary mapping remote name to Remote object.
+    """
+    remotes_path = get_remotes_path()
+    if not remotes_path.exists():
+        return {}
+
+    try:
+        with open(remotes_path, "rb") as f:
+            data = tomllib.load(f)
     except Exception as e:
-        raise ValueError(f"Failed to parse config file {config_path}: {e}") from e
+        raise RuntimeError(f"Failed to load remotes.toml: {e}") from e
 
-    try:
-        return ShannotConfig.from_dict(data)  # type: ignore[arg-type]
-    except ValidationError as e:
-        raise ValueError(f"Invalid config file {config_path}: {e}") from e
+    remotes: dict[str, Remote] = {}
+    for name, config in data.get("remotes", {}).items():
+        remotes[name] = Remote(
+            name=name,
+            host=config.get("host", ""),
+            user=config.get("user", getpass.getuser()),
+            port=config.get("port", 22),
+        )
+    return remotes
 
 
-def save_config(config: ShannotConfig, config_path: Path | None = None) -> None:
-    """Save Shannot configuration to TOML file.
-
-    Args:
-        config: Configuration to save
-        config_path: Optional path to config file. If not provided, uses default.
+def save_remotes(remotes: dict[str, Remote]) -> None:
     """
-    if config_path is None:
-        config_path = get_config_path()
+    Save remotes to TOML config file.
 
-    # Ensure directory exists
-    _ = config_path.parent.mkdir(parents=True, exist_ok=True)
+    Uses manual TOML formatting to avoid tomli-w dependency.
+    """
+    remotes_path = get_remotes_path()
+    remotes_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Convert to TOML format manually
-    lines = [
-        f'default_executor = "{config.default_executor}"',
-        "",
-    ]
+    lines = ["# SSH remote targets for shannot", ""]
 
-    for name, executor_config in config.executor.items():
-        lines.append(f"[executor.{name}]")
-        lines.append(f'type = "{executor_config.type}"')
-
-        if executor_config.profile:
-            lines.append(f'profile = "{executor_config.profile}"')
-
-        if isinstance(executor_config, SSHExecutorConfig):
-            lines.append(f'host = "{executor_config.host}"')
-            if executor_config.username:
-                lines.append(f'username = "{executor_config.username}"')
-            if executor_config.key_file:
-                lines.append(f'key_file = "{executor_config.key_file}"')
-            if executor_config.port != 22:
-                lines.append(f"port = {executor_config.port}")
-            if executor_config.connection_pool_size != 5:
-                lines.append(f"connection_pool_size = {executor_config.connection_pool_size}")
-            if executor_config.known_hosts:
-                lines.append(f'known_hosts = "{executor_config.known_hosts}"')
-            if not executor_config.strict_host_key:
-                lines.append("strict_host_key = false")
-        elif isinstance(executor_config, LocalExecutorConfig):
-            if executor_config.bwrap_path:
-                lines.append(f'bwrap_path = "{executor_config.bwrap_path}"')
-
+    for name, remote in sorted(remotes.items()):
+        # Quote names that contain dots or special characters
+        if "." in name or " " in name or '"' in name:
+            quoted_name = f'"{name}"'
+        else:
+            quoted_name = name
+        lines.append(f"[remotes.{quoted_name}]")
+        lines.append(f'host = "{remote.host}"')
+        lines.append(f'user = "{remote.user}"')
+        lines.append(f"port = {remote.port}")
         lines.append("")
 
-    with open(config_path, "w") as f:
-        f.write("\n".join(lines))
+    remotes_path.write_text("\n".join(lines))
 
 
-def create_executor(
-    config: ShannotConfig, executor_name: str | None = None
-) -> "LocalExecutor | SSHExecutor":
-    """Create an executor from configuration.
+def add_remote(name: str, host: str, user: str | None = None, port: int = 22) -> Remote:
+    """
+    Add a new remote to the configuration.
 
     Args:
-        config: Shannot configuration
-        executor_name: Name of executor to create, or None for default
+        name: Unique name for the remote
+        host: Hostname or IP address
+        user: SSH user (defaults to current user)
+        port: SSH port (defaults to 22)
 
     Returns:
-        Initialized executor
+        The created Remote object.
 
     Raises:
-        ValueError: If executor config is invalid or executor not found
+        ValueError: If remote name already exists.
     """
-    executor_config = config.get_executor_config(executor_name)
+    remotes = load_remotes()
+    if name in remotes:
+        raise ValueError(f"Remote '{name}' already exists. Use 'remote remove' first.")
 
-    if executor_config.type == "local":
-        from .executors import LocalExecutor
-
-        return LocalExecutor(bwrap_path=executor_config.bwrap_path)
-    elif executor_config.type == "ssh":
-        try:
-            from .executors import SSHExecutor
-        except ImportError as exc:
-            message = (
-                "SSH executor requires the 'asyncssh' dependency. "
-                "Install with: pip install shannot[remote]"
-            )
-            raise RuntimeError(message) from exc
-
-        return SSHExecutor(
-            host=executor_config.host,
-            username=executor_config.username,
-            key_file=executor_config.key_file,
-            port=executor_config.port,
-            connection_pool_size=executor_config.connection_pool_size,
-            known_hosts=executor_config.known_hosts,
-            strict_host_key=executor_config.strict_host_key,
-        )
-    else:
-        raise ValidationError(f"Unknown executor type: {executor_config.type}", "type")
+    remote = Remote(
+        name=name,
+        host=host,
+        user=user or getpass.getuser(),
+        port=port,
+    )
+    remotes[name] = remote
+    save_remotes(remotes)
+    return remote
 
 
-def get_executor(
-    executor_name: str | None = None, config_path: Path | None = None
-) -> SandboxExecutor:
-    """Convenience function to load config and create executor.
-
-    Args:
-        executor_name: Name of executor to create, or None for default
-        config_path: Optional path to config file
+def remove_remote(name: str) -> bool:
+    """
+    Remove a remote from the configuration.
 
     Returns:
-        Initialized executor
+        True if remote was removed, False if it didn't exist.
     """
-    config = load_config(config_path)
-    return create_executor(config, executor_name)
+    remotes = load_remotes()
+    if name not in remotes:
+        return False
+    del remotes[name]
+    save_remotes(remotes)
+    return True
+
+
+def resolve_target(target: str) -> tuple[str, str, int]:
+    """
+    Resolve a target string to (user, host, port) tuple.
+
+    Supports:
+    - Named remotes from config (e.g., "prod")
+    - user@host format (e.g., "admin@prod.example.com")
+    - host-only format (e.g., "prod.example.com") - uses current user
+    - user@host:port format (e.g., "admin@prod.example.com:2222")
+
+    Returns:
+        Tuple of (user, host, port)
+    """
+    # Check if it's a saved remote name
+    remotes = load_remotes()
+    if target in remotes:
+        r = remotes[target]
+        return (r.user, r.host, r.port)
+
+    # Parse user@host:port format
+    user = getpass.getuser()
+    port = 22
+    host = target
+
+    if "@" in target:
+        user, host = target.split("@", 1)
+
+    if ":" in host:
+        host, port_str = host.rsplit(":", 1)
+        try:
+            port = int(port_str)
+        except ValueError:
+            pass  # Keep default port if parsing fails
+
+    return (user, host, port)

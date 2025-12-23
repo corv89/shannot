@@ -5,27 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] - 2025-11-08
+## [Unreleased]
 
-### Breaking Changes
+## [0.5.1] - 2025-12-23
 
-- Remove D-Bus and add filesystem-based service discovery
-- Invert dependency defaults to include MCP and remote by default
+### Bug Fixes
+
+- Fix ruff lint errors and apply formatting
 
 ### Dependencies
 
-- Bump version to 0.3.1
+- Bump version to 0.5.1
 
 ### Enhancements
 
-- Update lockfile for MCP/asyncssh as core dependencies
+- Update MCP documentation for v0.5.0
 
 ### Features
 
-- Add systemd profile for systemctl/journalctl access
-- Add kernel log access via MCP prompts
-- Add systemd support ([#45](https://github.com/corv89/shannot/pull/45))
-- Add TYPE_CHECKING imports to resolve basedpyright errors
+- Add MCP integration to SKILL.md and update README
+- Add .ruff_cache to .gitignore
+- Add MCP support for remote SSH targets
+
+## [0.5.0] - 2025-12-23
+
+### Dependencies
+
+- Bump version to 0.5.0
+
+### Features
+
+- Add session TTL and expiry management
+- Add MCP protocol implementation with zero dependencies
+- Add MCP server infrastructure and request routing
+- Add Shannot MCP server with script-based execution
+- Add MCP entry point and CLI integration
+- Add comprehensive MCP test suite
+
+## [0.4.0] - 2025-12-22
+
+### Bug Fixes
+
+- Fix until pypy-c-sandbox and pypy3-c-sandbox load again
+- Fix ruff linter errors
+- Fix additional ruff linter errors
+- Fix code quality issues across codebase
+
+### Enhancements
+
+- Improve code quality and test coverage
+- Update documentation for v0.4.0 PyPy architecture
+- Update CI/CD and project metadata for v0.4.0
+
+### Features
+
+- Add support for select and socket modules
+- Add --raw-stdout
+- Add MIT license
+- Add virtual /proc and /sys filesystems to VFS
+- Add tiered subprocess security mixin
+- Add command queue persistence and interactive approval CLI
+- Add session-based approval workflow
+- Add PyPy lib_pypy stubs and OverlayDir for VFS
+- Add shannot CLI with runtime setup and auto-detection
+- Add SSH remote support for sandboxed script execution
+- Add README and SKILL documentation
+- Add remote-first execution architecture
+- Add CLI subcommands for SSH remote management
+- Add status subcommand for system health checks
+- Add Nuitka standalone binary build support
 
 ## [0.3.0] - 2025-11-07
 

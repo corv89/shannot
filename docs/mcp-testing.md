@@ -1,275 +1,395 @@
-# MCP Server Testing with mcp-probe
+# MCP Server Testing
 
-This document describes how to test the Shannot MCP server using [mcp-probe](https://github.com/conikeec/mcp-probe), a comprehensive testing tool for Model Context Protocol (MCP) servers.
+This document describes how to test the Shannot MCP server for v0.5.0, which uses PyPy sandbox architecture with session-based approval.
 
 ## Overview
 
-Shannot includes multiple layers of MCP testing:
+Shannot v0.5.0 includes comprehensive MCP testing:
 
-1. **Unit Tests**: Python unit tests for MCP server components (`tests/test_mcp_server.py`)
-2. **Integration Tests**: pytest-based integration tests using mcp-probe (`tests/test_mcp_integration.py`)
-3. **CI Script**: Python script for comprehensive testing in CI/CD (`scripts/test_mcp_server.py`)
-4. **GitHub Actions**: Automated testing on all pushes and PRs (`.github/workflows/test-mcp.yml`)
+1. **Protocol Tests**: JSON-RPC 2.0 message handling (`test/test_mcp_protocol.py`)
+2. **Server Tests**: Tool registration, validation, resources (`test/test_mcp_server.py`)
+3. **Integration Tests**: End-to-end workflows (`test/test_mcp_script_execution.py`)
+
+**Total Coverage**: 60 tests covering protocol, server infrastructure, and execution workflows.
 
 ## Prerequisites
 
-### Install mcp-probe
-
-mcp-probe is a Rust-based CLI tool that can be installed from GitHub releases:
+### Install Development Dependencies
 
 ```bash
-# Linux x86_64
-curl -L https://github.com/conikeec/mcp-probe/releases/latest/download/mcp-probe-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv mcp-probe /usr/local/bin/
+# Install with dev dependencies
+pip install -e ".[dev]"
 
-# Linux aarch64
-curl -L https://github.com/conikeec/mcp-probe/releases/latest/download/mcp-probe-aarch64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv mcp-probe /usr/local/bin/
-
-# macOS (if you're on macOS, you likely already have it installed)
-# Check the releases page for the appropriate binary:
-# https://github.com/conikeec/mcp-probe/releases
-
-# Verify installation
-mcp-probe --version
+# Or using uv
+uv pip install -e ".[dev]"
 ```
 
-### Install Shannot with MCP support
+### Install PyPy Sandbox Runtime
 
 ```bash
-# Install with MCP dependencies
-pip install -e ".[mcp,dev]"
+# Download PyPy sandbox
+shannot setup
 
-# Verify shannot-mcp is available
-which shannot-mcp
-shannot-mcp --help
+# Verify runtime
+shannot status
 ```
 
-## Local Testing
+## Running Tests
 
-### Quick Test
-
-Run mcp-probe directly against the server:
+### Quick Test (All MCP Tests)
 
 ```bash
-# Basic test
-mcp-probe test --stdio shannot-mcp
+# Run all MCP tests
+uv run pytest test/test_mcp*.py -v
 
-# With timeout and JSON output
-mcp-probe test --stdio shannot-mcp --timeout 60 --output json
+# Expected output: 60 passed
 ```
 
-### Using the Python Test Script
-
-The `scripts/test_mcp_server.py` script provides a comprehensive testing workflow:
+### Individual Test Files
 
 ```bash
-# Run all tests
-python scripts/test_mcp_server.py
+# Protocol tests (11 tests)
+uv run pytest test/test_mcp_protocol.py -v
 
-# Run with custom options
-python scripts/test_mcp_server.py \
-  --report-dir ./my-reports \
-  --timeout 120 \
-  --fail-fast \
-  --verbose
+# Server tests (28 tests)
+uv run pytest test/test_mcp_server.py -v
 
-# View help
-python scripts/test_mcp_server.py --help
+# Integration tests (21 tests)
+uv run pytest test/test_mcp_script_execution.py -v
 ```
 
-The script will:
-1. Run the mcp-probe test suite
-2. Validate MCP protocol compliance
-3. Export server capabilities (JSON and HTML)
-4. Generate a test summary report
-
-### Using pytest Integration Tests
-
-Run the pytest integration tests:
+### Test with Coverage
 
 ```bash
-# Run all MCP integration tests
-pytest tests/test_mcp_integration.py -v
+# Run with coverage report
+uv run pytest test/test_mcp*.py --cov=shannot.mcp --cov-report=term
 
-# Run specific test
-pytest tests/test_mcp_integration.py::TestMCPProbeIntegration::test_server_initialization -v
-
-# Skip if mcp-probe not installed (tests will auto-skip)
-pytest tests/test_mcp_integration.py -v
+# Generate HTML coverage report
+uv run pytest test/test_mcp*.py --cov=shannot.mcp --cov-report=html
+# Open htmlcov/index.html
 ```
 
 ## Test Coverage
 
-### What's Tested
+### Protocol Tests (`test_mcp_protocol.py`)
 
-The test suite covers:
+Tests JSON-RPC 2.0 protocol implementation:
 
-- **Server Initialization**: Verifies the server starts and responds to requests
-- **Capabilities**: Checks that tools, resources, and prompts are exposed
-- **Protocol Compliance**: Validates against MCP protocol specification
-- **Tool Availability**: Verifies sandbox tools are registered correctly
-- **Prompt Availability**: Checks all 6 diagnostic prompts are available
-- **Executor Targets**: Tests with different executor configurations (local, SSH)
+- ✅ Read valid JSON messages
+- ✅ Handle EOF gracefully
+- ✅ Handle invalid JSON
+- ✅ Handle keyboard interrupt
+- ✅ Write messages with proper formatting
+- ✅ Handle broken pipe errors
+- ✅ Handle I/O errors
+- ✅ Serve loop processes requests
+- ✅ Handle notifications
+- ✅ Handle handler exceptions
 
-### Test Organization
+**Coverage**: Pure stdlib implementation (json, sys, io)
+
+### Server Tests (`test_mcp_server.py`)
+
+Tests base MCP server infrastructure:
+
+**Base Server:**
+- ✅ Server initialization with metadata
+- ✅ Tool registration
+- ✅ Resource registration
+- ✅ Handle initialize request
+- ✅ Handle ping request
+- ✅ Handle tools/list
+- ✅ Handle tools/call
+- ✅ Handle unknown methods
+
+**Shannot Server:**
+- ✅ Default profile loading
+- ✅ Profile structure validation
+- ✅ Tool registration (sandbox_run, session_result)
+- ✅ Resource registration (profiles, status)
+- ✅ AST-based script analysis
+- ✅ Command extraction from AST
+- ✅ Invalid script handling
+- ✅ Invalid profile handling
+- ✅ Denied operation handling
+- ✅ Session result polling
+
+**Coverage**: Server infrastructure, validation, AST analysis
+
+### Integration Tests (`test_mcp_script_execution.py`)
+
+Tests complete execution workflows:
+
+**Execution Paths:**
+- ✅ Fast path with allowed operations
+- ✅ Review path with unapproved operations
+- ✅ Blocked path with denied operations
+
+**Session Management:**
+- ✅ Session creation from review path
+- ✅ Session result polling (pending)
+- ✅ Session expiry handling
+- ✅ Session cleanup
+
+**AST Analysis:**
+- ✅ Detect multiple subprocess calls
+- ✅ Handle dynamic commands (limitation)
+- ✅ Syntax error handling
+
+**Profile Validation:**
+- ✅ Different profiles have different allowlists
+- ✅ Custom profile loading
+- ✅ Session naming
+
+**Resource Endpoints:**
+- ✅ List profiles
+- ✅ Get profile configuration
+- ✅ Get runtime status
+
+**Tool Schemas:**
+- ✅ Python 3.6 syntax warnings
+- ✅ Dynamic profile validation
+- ✅ Session result schema
+
+**Coverage**: End-to-end workflows, session lifecycle, profile management
+
+## Test Organization
 
 ```
-tests/
-├── test_mcp_server.py         # Unit tests for MCP server components
-└── test_mcp_integration.py    # Integration tests using mcp-probe
-
-scripts/
-└── test_mcp_server.py         # CI/CD test script
-
-.github/workflows/
-└── test-mcp.yml               # GitHub Actions workflow
+test/
+├── test_mcp_protocol.py          # 11 tests - JSON-RPC protocol
+├── test_mcp_server.py             # 28 tests - Server infrastructure
+└── test_mcp_script_execution.py   # 21 tests - Integration workflows
 ```
+
+## Manual Testing
+
+### Interactive Server Testing
+
+Start the MCP server manually to test JSON-RPC messages:
+
+```bash
+# Start server with verbose logging
+shannot-mcp --verbose
+
+# In another terminal, send JSON-RPC messages:
+echo '{"jsonrpc": "2.0", "method": "initialize", "params": {}, "id": 1}' | shannot-mcp
+
+# List tools
+echo '{"jsonrpc": "2.0", "method": "tools/list", "id": 2}' | shannot-mcp
+
+# Call sandbox_run
+echo '{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "sandbox_run", "arguments": {"script": "print(\"hello\")", "profile": "minimal"}}, "id": 3}' | shannot-mcp
+```
+
+### Test with Claude Code
+
+Install in Claude Code and test interactively:
+
+```bash
+# Install for Claude Code
+shannot mcp install --client claude-code
+
+# Restart Claude Code, then:
+# > /mcp
+# Should show shannot with 2 tools, 3 resources
+```
+
+Ask Claude:
+- "Use the sandbox_run tool to check disk space with df -h"
+- "List the available approval profiles"
+- "What's the status of the PyPy sandbox runtime?"
 
 ## CI/CD Integration
 
-### GitHub Actions Workflow
+### GitHub Actions
 
-The `.github/workflows/test-mcp.yml` workflow runs automatically on:
-- Pushes to `main` or `develop` branches
-- Pull requests to `main` or `develop` branches
+Tests run automatically on:
+- Pushes to main
+- Pull requests
 - Manual workflow dispatch
 
-The workflow:
-1. Tests across Python 3.10, 3.11, 3.12, and 3.13
-2. Installs mcp-probe in the CI environment
-3. Runs both pytest integration tests and the Python test script
-4. Uploads test reports as artifacts
-5. Comments test results on pull requests
+See `.github/workflows/test.yml` for configuration.
 
-### Test Artifacts
+### Pre-commit Hooks
 
-After each CI run, test reports are available as artifacts:
-- `mcp-test-reports-py<version>`: Reports for each Python version
-- `mcp-test-reports-with-config`: Reports with executor configuration tests
-
-Artifacts include:
-- `test-results.json`: Structured test results from mcp-probe
-- `capabilities.json`: Server capabilities in JSON format
-- `capabilities.html`: Server capabilities in HTML format (if supported)
-- `test-summary.md`: Human-readable test summary
-
-## Interactive Debugging
-
-For interactive debugging with mcp-probe:
+Install pre-commit hooks for local testing:
 
 ```bash
-# Start interactive debug session
-mcp-probe debug --stdio shannot-mcp
+# Install pre-commit
+uv pip install pre-commit
 
-# Available commands in debug mode:
-# - list tools      # List all available tools
-# - list resources  # List all available resources
-# - list prompts    # List all available prompts
-# - call <tool>     # Call a specific tool
-# - get <resource>  # Get a specific resource
-# - prompt <name>   # Get a specific prompt
-# - help            # Show available commands
-# - exit            # Exit debug session
+# Install hooks
+pre-commit install
+
+# Run manually
+pre-commit run --all-files
 ```
 
-## Testing with Executor Targets
+## Debugging Test Failures
 
-### Create Config File
-
-To test with executor targets, create a config file:
+### Enable Verbose Output
 
 ```bash
+# Verbose pytest output
+uv run pytest test/test_mcp*.py -vv
+
+# Show print statements
+uv run pytest test/test_mcp*.py -s
+
+# Stop on first failure
+uv run pytest test/test_mcp*.py -x
+```
+
+### Debug Specific Test
+
+```bash
+# Run specific test
+uv run pytest test/test_mcp_server.py::TestShannotMCPServer::test_sandbox_run_tool_registered -vv
+
+# Run with pdb debugger
+uv run pytest test/test_mcp_server.py::TestShannotMCPServer::test_sandbox_run_tool_registered --pdb
+```
+
+### Check Logs
+
+```bash
+# Enable logging in tests
+uv run pytest test/test_mcp*.py -v --log-cli-level=DEBUG
+```
+
+## Testing with Custom Profiles
+
+Create a custom profile for testing:
+
+```bash
+# Create test profile
 mkdir -p ~/.config/shannot
-cat > ~/.config/shannot/config.toml << 'EOF'
-default_executor = "local"
-
-[executor.local]
-type = "local"
-
-[executor.remote]
-type = "ssh"
-host = "example.com"
-username = "user"
-strict_host_key = false
+cat > ~/.config/shannot/test.json <<'EOF'
+{
+  "auto_approve": ["echo", "printf"],
+  "always_deny": ["eval"]
+}
 EOF
+
+# Test with custom profile
+uv run pytest test/test_mcp_script_execution.py::TestScriptExecutionWorkflow::test_custom_profile -v
 ```
 
-### Test with Target
+## Performance Testing
+
+### Measure Test Duration
 
 ```bash
-# Test with local executor
-mcp-probe test --stdio shannot-mcp --args "--target local"
+# Show slowest tests
+uv run pytest test/test_mcp*.py --durations=10
 
-# Note: Due to mcp-probe limitations with passing flags,
-# you may need to create a wrapper script or use the Python test suite
+# Run with timing
+uv run pytest test/test_mcp*.py -v --tb=short --durations=0
 ```
 
-## Known Issues
-
-### mcp-probe Argument Passing
-
-mcp-probe has difficulty passing command-line flags as arguments to servers:
+### Parallel Testing
 
 ```bash
-# This doesn't work as expected:
-mcp-probe test --stdio shannot-mcp --args "--target local"
+# Install pytest-xdist
+uv pip install pytest-xdist
 
-# The --target flag is passed as a positional argument instead
+# Run tests in parallel
+uv run pytest test/test_mcp*.py -n auto
 ```
 
-**Workaround**: Use the pytest integration tests or Python test script, which don't require passing flags through mcp-probe.
+## Known Limitations
 
-### Export Command Support
+### PyPy Sandbox Runtime
 
-The `mcp-probe export` command may not be fully supported yet. The test script handles this gracefully by treating export failures as warnings rather than errors.
-
-## Troubleshooting
-
-### Server Won't Start
+Tests that require actual script execution need PyPy sandbox runtime:
 
 ```bash
-# Verify shannot-mcp is installed
-which shannot-mcp
-
-# Check for errors
-shannot-mcp --help
-
-# Test manually
-echo '{"jsonrpc": "2.0", "method": "initialize", "params": {}, "id": 1}' | shannot-mcp
+# If runtime not available, tests will gracefully handle errors
+# Install runtime for full integration testing
+shannot setup
 ```
 
-### mcp-probe Timeout
+### Session Cleanup
 
-Increase the timeout if tests are timing out:
-
-```bash
-# Increase to 120 seconds
-python scripts/test_mcp_server.py --timeout 120
-```
-
-### Permission Denied
-
-Ensure bubblewrap is installed and the script has execute permissions:
+Integration tests create sessions. Cleanup is automatic, but you can manually check:
 
 ```bash
-# Install bubblewrap (Ubuntu/Debian)
-sudo apt-get install bubblewrap
+# List pending sessions
+shannot approve list
 
-# Make script executable
-chmod +x scripts/test_mcp_server.py
+# Clean up test sessions
+shannot approve list | grep "test-session" | cut -d' ' -f1 | xargs -I{} shannot approve cancel {}
 ```
 
 ## Best Practices
 
-1. **Run Tests Locally First**: Before pushing, run the test suite locally
-2. **Check Reports**: Review test reports for warnings or issues
-3. **Update Tests**: When adding new MCP features, add corresponding tests
-4. **Monitor CI**: Watch GitHub Actions runs for failures
-5. **Use Verbose Mode**: Enable `--verbose` when debugging test failures
+1. **Run tests before committing**:
+   ```bash
+   uv run pytest test/test_mcp*.py -v
+   ```
+
+2. **Check coverage**:
+   ```bash
+   uv run pytest test/test_mcp*.py --cov=shannot.mcp --cov-report=term
+   ```
+
+3. **Update tests when adding features**: New MCP tools/resources should have corresponding tests
+
+4. **Use meaningful test names**: Follow pattern `test_<feature>_<scenario>`
+
+5. **Mock external dependencies**: Tests should not require network access or SSH
+
+## Troubleshooting
+
+### "PyPy sandbox runtime not found"
+
+Tests will show warnings but continue. For full integration testing:
+
+```bash
+shannot setup
+shannot status
+```
+
+### "Session directory already exists"
+
+Clean up stale sessions:
+
+```bash
+rm -rf ~/.local/share/shannot/sessions/test-*
+```
+
+### "Import errors"
+
+Reinstall in development mode:
+
+```bash
+uv pip install -e ".[dev]"
+```
+
+### "Tests hang"
+
+Check for deadlocks in subprocess execution. Use timeout:
+
+```bash
+uv run pytest test/test_mcp*.py -v --timeout=30
+```
+
+## Test Checklist
+
+When adding new MCP features, ensure:
+
+- [ ] Protocol tests for new JSON-RPC methods
+- [ ] Server tests for tool/resource registration
+- [ ] Integration tests for end-to-end workflows
+- [ ] Tests pass locally
+- [ ] Coverage remains >80%
+- [ ] No new warnings or errors
+- [ ] Documentation updated
 
 ## References
 
-- [mcp-probe GitHub Repository](https://github.com/conikeec/mcp-probe)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io)
-- [Shannot MCP Server Documentation](../README.md#mcp-server)
+- [Shannot MCP Documentation](mcp.md)
+- [pytest Documentation](https://docs.pytest.org)
+- [Python unittest Documentation](https://docs.python.org/3/library/unittest.html)

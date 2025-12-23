@@ -8,15 +8,14 @@ The easiest way to start contributing is using GitHub Codespaces:
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/corv89/shannot?quickstart=1)
 
-Click the badge above to get a fully configured development environment with bubblewrap and all dependencies pre-installed.
+Click the badge above to get a fully configured development environment with all dependencies pre-installed.
 
 ## Development Setup
 
 ### Prerequisites
 
-- **Linux** - Shannot requires Linux for development and testing (bubblewrap is Linux-only)
-- **Python 3.10+ with [uv](https://docs.astral.sh/uv/)** - Manages the project virtual environment
-- **bubblewrap** - The underlying sandboxing tool
+- **Python 3.11+ with [uv](https://docs.astral.sh/uv/)** - Manages the project virtual environment
+- **PyPy sandbox** - The underlying sandboxing tool (auto-downloaded on first run via `shannot setup`)
 
 ### Local Setup
 
@@ -28,27 +27,20 @@ cd shannot
 # Install uv if it's not already available
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install bubblewrap
-# Debian/Ubuntu
-sudo apt install bubblewrap
-
-# Fedora/RHEL
-sudo dnf install bubblewrap
-
-# Arch Linux
-sudo pacman -S bubblewrap
-
 # Create a local virtual environment, install dev + optional extras, and set up git hooks
 make install-dev
+
+# Install PyPy sandbox runtime
+shannot setup
 ```
 
 ### Verify Installation
 
 ```bash
-# Verify bubblewrap is available
-bwrap --version
+# Verify runtime is installed
+shannot status --runtime
 
-# Run the test suite (integration tests require Linux + bubblewrap)
+# Run the test suite
 make test
 
 # Run only unit or integration suites as needed (hooks already installed by make install-dev)
@@ -65,6 +57,271 @@ make type-check
 # Optional: run tests with coverage or reinstall hooks
 make test-coverage
 make pre-commit-install  # re-install hooks after changing environments
+```
+
+## Architecture
+
+### PyPy Sandbox Architecture
+
+Shannot uses PyPy's sandbox mode for security through **syscall interception** rather than Linux containers:
+
+1. **System Call Interception**: PyPy sandbox intercepts all system calls from sandboxed code
+2. **Virtual Filesystem (VFS)**: Filesystem operations are virtualized, providing controlled read-only access
+3. **Subprocess Virtualization**: Command execution requires approval via session-based workflow
+4. **Network Isolation**: Socket operations are virtualized (no actual network access)
+5. **Session-Based Approval**: Operations queue in sessions for interactive review before execution
+
+**NOT Used:**
+- No bubblewrap (removed in v0.4.0)
+- No Linux namespaces/cgroups
+- No containers or VMs
+
+### Module Organization
+
+```
+shannot/
+├── __init__.py              # Exports: VirtualizedProc, signature, sigerror (low-level API)
+├── __main__.py              # Package entry point for -m execution
+├── cli.py                   # Main CLI (setup, run, approve, execute, remote, status)
+├── config.py                # XDG paths, VERSION, profile/remote management
+├── virtualizedproc.py       # Core PyPy sandbox process controller
+├── session.py               # Session data structures and management
+├── run_session.py           # Main session execution logic
+├── runtime.py               # PyPy stdlib download and setup
+├── approve.py               # Interactive TUI for session approval
+├── deploy.py                # Deploy sessions to remote hosts
+├── interact.py              # Interactive sandbox shell
+├── sandboxio.py             # Low-level I/O protocol handling
+├── structs.py               # Data structures (Capture, Pending, etc.)
+├── queue.py                 # Session queue management
+├── pending_write.py         # Deferred write operations
+├── remote.py                # Remote target configuration
+├── ssh.py                   # Zero-dependency SSH client (stdlib only)
+├── mix_pypy.py              # PyPy sandbox initialization mixin
+├── mix_vfs.py               # Virtual filesystem mixin
+├── mix_subprocess.py        # Subprocess execution mixin (profiles)
+├── mix_remote.py            # Remote execution mixin
+├── mix_socket.py            # Socket virtualization mixin
+├── mix_accept_input.py      # Input capture mixin
+├── mix_dump_output.py       # Output streaming mixin
+├── mix_grab_output.py       # Output capture mixin
+├── vfs_procfs.py            # Virtual /proc filesystem
+├── stubs/
+│   ├── __init__.py
+│   ├── _signal.py           # Virtualized signal module
+│   └── subprocess.py        # Virtualized subprocess module
+```
+
+### Configuration & Data Paths
+
+Shannot follows XDG Base Directory specification:
+
+**Configuration:**
+- Global profile: `~/.config/shannot/profile.json`
+- Project profile: `.shannot/profile.json`
+- Remote targets: `~/.config/shannot/remotes.toml`
+
+**Data:**
+- Runtime (PyPy stdlib): `~/.local/share/shannot/runtime/`
+- Sessions: `~/.local/share/shannot/sessions/`
+- PyPy sandbox binary: `~/.local/share/shannot/runtime/pypy-sandbox` (or from PATH)
+
+**Profile Structure (Command Approval):**
+```json
+{
+  "auto_approve": [
+    "cat", "ls", "find", "grep", "head", "tail", "wc", "du", "df"
+  ],
+  "always_deny": [
+    "rm -rf /",
+    "dd if=/dev/zero",
+    ":(){ :|:& };:"
+  ]
+}
+```
+
+### Zero Dependencies Philosophy
+
+Shannot maintains **zero runtime dependencies** to maximize portability and minimize attack surface:
+
+**What This Means:**
+- Only Python 3.11+ stdlib is used (no pip packages at runtime)
+- PyPy sandbox binary is the only external requirement
+- SSH implemented using stdlib `subprocess` + `shlex` (no paramiko/fabric)
+- No networking libraries (requests, httpx, etc.)
+- No serialization libraries beyond stdlib (json, pickle)
+
+**Development Dependencies Are OK:**
+- Pytest, Ruff, Basedpyright for testing/linting
+- MkDocs for documentation
+- Nuitka for binary building
+- Pre-commit for git hooks
+
+### Session-Based Approval Workflow
+
+Understanding the session workflow is critical for working with Shannot:
+
+**Workflow Phases:**
+1. **Dry-run**: Sandboxed code executes, operations are captured but not performed
+2. **Review**: User reviews captured operations via `shannot approve`
+3. **Execute**: Approved operations run on host system
+
+**Session Lifecycle:**
+```python
+# 1. User runs script in dry-run mode (default)
+shannot run script.py
+
+# Creates session: ~/.local/share/shannot/sessions/20250122_143022/
+# - session.json: Metadata (script, profile, timestamp)
+# - pending_writes.json: Captured write operations
+# - subprocess_calls.json: Captured subprocess executions
+
+# 2. User reviews session
+shannot approve 20250122_143022
+
+# Interactive TUI shows:
+# - Subprocess commands to execute (with approval profile matching)
+# - File writes to perform
+# - User can approve/deny individual operations
+
+# 3. Operations execute on host
+# - Auto-approved commands run immediately
+# - Denied operations are skipped
+# - Results captured in session/output/
+```
+
+**Key Modules:**
+- `run_session.py`: Orchestrates session execution
+- `session.py`: Session data structures (`SessionData`, `SessionMetadata`)
+- `approve.py`: Interactive TUI for review
+- `queue.py`: Session queue management
+- `pending_write.py`: Deferred write operations
+- `mix_subprocess.py`: Command approval profile matching
+
+### Virtual Filesystem (VFS)
+
+The VFS system provides controlled, read-only access to the host filesystem:
+
+**How It Works:**
+1. **Syscall Interception**: File operations (open, stat, listdir) are intercepted
+2. **Path Mapping**: Virtual paths map to real filesystem locations
+3. **Read-Only**: Write operations are captured, not performed (session workflow)
+4. **Selective Access**: Only explicitly mapped paths are accessible
+
+**Key Implementation** (`mix_vfs.py`):
+```python
+# VFS configuration (typically set during initialization)
+vfs_config = {
+    "/": "/",                    # Root mapped to host root (read-only)
+    "/tmp": session_tmp_dir,     # /tmp mapped to session temp directory
+}
+```
+
+**Special Paths:**
+- `/proc`: Virtual `/proc` filesystem (`vfs_procfs.py`)
+- `/tmp`: Session-isolated temp directory (writable during approval)
+- Other paths: Read-only access to host filesystem
+
+### Remote Execution
+
+Shannot can execute sessions on remote Linux hosts via SSH (zero-dependency implementation):
+
+**Architecture:**
+```
+Local Host                          Remote Host
+----------                          -----------
+shannot run --target prod script.py
+    ↓
+Create session locally
+    ↓
+shannot deploy prod SESSION_ID
+    ↓
+SSH (stdlib subprocess) --------→  scp session files
+                                   ↓
+                                   shannot execute SESSION_ID
+                                   ↓
+                                   Run in PyPy sandbox
+                                   ↓
+                       ←---------- scp results back
+    ↓
+Display results locally
+```
+
+**Configuration** (`~/.config/shannot/remotes.toml`):
+```toml
+[targets.prod]
+host = "prod.example.com"
+user = "admin"
+profile = "diagnostics"  # Optional: use specific profile on remote
+
+[targets.staging]
+host = "staging.example.com"
+user = "deploy"
+```
+
+**Key Modules:**
+- `remote.py`: Remote target configuration
+- `deploy.py`: Deploy sessions to remote hosts
+- `ssh.py`: Zero-dependency SSH using stdlib `subprocess`
+- `mix_remote.py`: Remote execution mixin
+
+### Common Patterns & Gotchas
+
+**Path Handling:**
+```python
+from pathlib import Path
+
+# ✅ Good: Use Path for filesystem operations
+config_dir = Path("~/.config/shannot").expanduser()
+session_file = config_dir / "session.json"
+
+# ❌ Bad: String concatenation
+config_dir = os.path.expanduser("~/.config/shannot")
+session_file = config_dir + "/session.json"
+```
+
+**Error Handling:**
+```python
+# ✅ Good: Specific exceptions with context
+try:
+    session = load_session(session_id)
+except FileNotFoundError:
+    raise RuntimeError(f"Session {session_id} not found in {SESSION_DIR}")
+
+# ❌ Bad: Bare except or generic exceptions
+try:
+    session = load_session(session_id)
+except Exception:
+    raise Exception("Failed to load session")
+```
+
+**Version Detection:**
+```python
+# ✅ Good: Use importlib.metadata with fallback
+from importlib.metadata import version
+
+try:
+    VERSION = version("shannot")
+except Exception:
+    VERSION = "0.4.0-dev"  # Fallback for development
+```
+
+**PyPy Sandbox Binary Detection:**
+```python
+# ✅ Good: Check multiple locations
+def find_pypy_sandbox() -> Path | None:
+    """Find PyPy sandbox binary from PATH or runtime dir."""
+    # Check PATH first
+    result = subprocess.run(["which", "pypy-sandbox"], capture_output=True)
+    if result.returncode == 0:
+        return Path(result.stdout.decode().strip())
+
+    # Check runtime directory
+    runtime_bin = get_runtime_dir() / "pypy-sandbox"
+    if runtime_bin.exists():
+        return runtime_bin
+
+    return None
 ```
 
 ## Development Workflow
@@ -169,11 +426,10 @@ Then create a pull request on GitHub with:
 
 ### Test Categories
 
-We have three types of tests:
+We have two main types of tests:
 
-1. **Unit Tests** - Fast, no external dependencies, run on all platforms
-2. **Integration Tests** - Require Linux + bubblewrap, marked with `@pytest.mark.integration`
-3. **Platform-Specific Tests** - Marked with `@pytest.mark.linux_only`
+1. **Unit Tests** - Fast, test individual components and functions
+2. **Integration Tests** - Test PyPy sandbox integration and end-to-end functionality
 
 ### Running Tests
 
@@ -194,26 +450,24 @@ uv run --frozen --extra dev --extra all pytest --cov=shannot --cov-report=html
 # Open htmlcov/index.html to view coverage
 ```
 
-**Note on Network Isolation:** Integration tests use `network_isolation=False` in test profiles to ensure compatibility with CI environments (GitHub Actions) that don't provide the `CAP_NET_ADMIN` capability. Network isolation features work correctly in production when run with appropriate privileges.
-
 ### Writing Tests
 
 When adding new features:
 
-1. Add unit tests in the appropriate `tests/test_*.py` file
-2. Add integration tests in `tests/test_integration.py` if the feature requires actual sandbox execution
-3. Use the fixtures from `tests/conftest.py` for common test setup
-4. Mark platform-specific tests appropriately:
+1. Add unit tests in the appropriate `test/test_*.py` file
+2. Add integration tests for features requiring PyPy sandbox execution
+3. Use the fixtures from `test/support.py` for common test setup
+4. Example test structure:
 
 ```python
 import pytest
+from test.support import run_sandboxed
 
-@pytest.mark.linux_only
-@pytest.mark.requires_bwrap
-@pytest.mark.integration
-def test_my_feature(minimal_profile, bwrap_path):
+def test_my_feature():
     """Test description."""
     # Your test code
+    result = run_sandboxed("test_script.py")
+    assert result.succeeded()
 ```
 
 ## Code Style
@@ -231,9 +485,10 @@ All code must be fully typed:
 
 ```python
 from __future__ import annotations
+from typing import Sequence
 
-def process_command(args: Sequence[str], *, timeout: float | None = None) -> ProcessResult:
-    """Process a command with optional timeout."""
+def execute_sandboxed(script: str, args: Sequence[str] | None = None) -> dict[str, str]:
+    """Execute a script in the sandbox with optional arguments."""
     ...
 ```
 
@@ -247,24 +502,27 @@ def process_command(args: Sequence[str], *, timeout: float | None = None) -> Pro
 Example:
 
 ```python
-def load_profile_from_path(path: Union[Path, str]) -> SandboxProfile:
+from pathlib import Path
+
+def load_runtime_config(runtime_dir: Path | str | None = None) -> dict[str, Path]:
     """
-    Load a SandboxProfile from a JSON configuration file.
+    Load PyPy sandbox runtime configuration.
 
     Parameters
     ----------
-    path:
-        Path to the JSON profile file. Supports tilde expansion.
+    runtime_dir:
+        Path to the runtime directory. If None, uses default location
+        (~/.local/share/shannot/runtime/).
 
     Returns
     -------
-    SandboxProfile
-        The loaded and validated profile.
+    dict[str, Path]
+        Dictionary containing paths to lib-python and lib_pypy directories.
 
     Raises
     ------
-    SandboxError
-        If the file cannot be read or contains invalid configuration.
+    RuntimeError
+        If the runtime is not installed or configuration is invalid.
     """
 ```
 
@@ -364,21 +622,46 @@ Releases are automated via GitHub Actions:
 
 ```
 shannot/
-├── .devcontainer/          # GitHub Codespaces configuration
 ├── .github/
 │   └── workflows/          # GitHub Actions CI/CD
 ├── docs/                   # Documentation
-├── profiles/               # Example sandbox profiles
 ├── shannot/                # Main package
-│   ├── __init__.py        # Package exports
-│   ├── cli.py             # Command-line interface
-│   ├── process.py         # Process execution utilities
-│   └── sandbox.py         # Core sandbox implementation
-├── tests/                  # Test suite
-│   ├── conftest.py        # Pytest fixtures and configuration
-│   ├── test_cli.py        # CLI tests
-│   ├── test_integration.py # Integration tests
-│   └── test_sandbox.py    # Unit tests
+│   ├── __init__.py        # Package exports: VirtualizedProc, signature, sigerror
+│   ├── __main__.py        # CLI entry point
+│   ├── cli.py             # Command-line interface (setup, run, approve, execute, remote, status)
+│   ├── config.py          # Configuration and VERSION
+│   ├── virtualizedproc.py # Core PyPy sandbox process controller
+│   ├── approve.py         # Interactive TUI for session approval
+│   ├── deploy.py          # Deployment functionality
+│   ├── interact.py        # Sandbox process controller
+│   ├── remote.py          # Remote execution via SSH
+│   ├── runtime.py         # Runtime setup and installation
+│   ├── session.py         # Session persistence and execution
+│   ├── pending_write.py   # Pending file write tracking
+│   ├── queue.py           # Command queue management
+│   ├── mix_accept_input.py  # Input handling mixin
+│   ├── mix_dump_output.py   # Output dumping mixin
+│   ├── mix_grab_output.py   # Output grabbing mixin
+│   ├── mix_pypy.py          # PyPy-specific mixin
+│   ├── mix_remote.py        # Remote execution mixin
+│   ├── mix_socket.py        # Socket handling mixin
+│   ├── mix_subprocess.py    # Subprocess execution mixin (profiles)
+│   ├── mix_vfs.py           # Virtual filesystem mixin
+│   ├── sandboxio.py       # Sandbox I/O protocol
+│   ├── ssh.py             # SSH connection handling
+│   ├── structs.py         # Data structure definitions
+│   ├── vfs_procfs.py      # Virtual /proc filesystem
+│   ├── run_session.py     # Session execution runner
+│   └── stubs/             # Python stubs for sandbox
+│       ├── __init__.py
+│       ├── _signal.py
+│       └── subprocess.py
+├── test/                   # Test suite (note: test/ not tests/)
+│   ├── support.py         # Test support utilities
+│   ├── test_pypy.py       # PyPy sandbox tests
+│   ├── test_remote_config.py # Remote configuration tests
+│   ├── test_structs.py    # Data structure tests
+│   └── test_vfs.py        # Virtual filesystem tests
 └── pyproject.toml         # Project configuration
 ```
 

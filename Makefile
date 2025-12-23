@@ -1,4 +1,4 @@
-.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check changelog
+.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check clean build build-binary changelog
 
 UV ?= uv
 VENV ?= .venv
@@ -9,18 +9,41 @@ UV_RUN := $(UV) run --frozen $(UV_RUN_EXTRAS)
 export UV_PROJECT_ENVIRONMENT ?= $(VENV)
 
 help:
-	@echo "Available commands:"
-	@echo "  make docs          - Build documentation with MkDocs"
-	@echo "  make docs-serve    - Start local documentation server"
-	@echo "  make docs-clean    - Clean generated documentation"
-	@echo "  make install       - Install package"
-	@echo "  make install-dev   - Install package with dev dependencies"
-	@echo "  make pre-commit-install - Install git hooks via pre-commit"
-	@echo "  make test          - Run tests"
-	@echo "  make lint          - Run ruff linter"
-	@echo "  make format        - Format code with ruff"
-	@echo "  make type-check    - Run type checker"
-	@echo "  make changelog     - Update CHANGELOG.md from git history"
+	@echo "Shannot Development Commands"
+	@echo ""
+	@echo "Environment Setup:"
+	@echo "  make install           - Install package with frozen dependencies"
+	@echo "  make install-dev       - Install with dev dependencies + pre-commit hooks"
+	@echo "  make pre-commit-install - Install pre-commit git hooks only"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test              - Run all tests (unit + integration)"
+	@echo "  make test-unit         - Run unit tests only (skip integration)"
+	@echo "  make test-integration  - Run integration tests only (require PyPy sandbox)"
+	@echo "  make test-coverage     - Run tests with coverage reporting"
+	@echo ""
+	@echo "Code Quality:"
+	@echo "  make lint              - Run ruff linter"
+	@echo "  make format            - Format code with ruff"
+	@echo "  make type-check        - Run basedpyright type checker"
+	@echo ""
+	@echo "Documentation:"
+	@echo "  make docs              - Build MkDocs documentation (output to site/)"
+	@echo "  make docs-serve        - Serve documentation at http://127.0.0.1:8000"
+	@echo "  make docs-clean        - Clean generated documentation"
+	@echo ""
+	@echo "Building & Distribution:"
+	@echo "  make clean             - Remove build artifacts, __pycache__, *.pyc"
+	@echo "  make build             - Build distribution packages (wheel + sdist)"
+	@echo "  make build-binary      - Build standalone Nuitka binary (Linux recommended)"
+	@echo ""
+	@echo "Release Management:"
+	@echo "  make changelog         - Update CHANGELOG.md from git history (requires git-cliff)"
+	@echo ""
+	@echo "Low-level targets:"
+	@echo "  make ensure-venv       - Create .venv if it doesn't exist"
+	@echo "  make sync              - Sync dependencies (runtime only)"
+	@echo "  make sync-dev          - Sync dependencies (with dev extras)"
 
 ensure-venv:
 	@$(UV) venv --allow-existing $(VENV)
@@ -73,6 +96,23 @@ format: sync-dev
 
 type-check: sync-dev
 	@$(UV_RUN) basedpyright
+
+clean:
+	@echo "Cleaning build artifacts..."
+	@rm -rf dist/ build/ *.egg-info
+	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete
+	@echo "Cleaned"
+
+build: sync-dev
+	@echo "Building distribution packages..."
+	@$(UV_RUN) python -m build
+	@echo "Built packages in dist/"
+
+build-binary:
+	@echo "Building standalone binary with Nuitka..."
+	@python build_binary.py
+	@echo "Binary in dist/"
 
 changelog:
 	@echo "Updating CHANGELOG.md from git history..."

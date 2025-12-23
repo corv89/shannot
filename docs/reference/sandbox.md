@@ -1,101 +1,54 @@
 # Sandbox Module
 
-Core sandbox implementation for read-only command execution using Linux namespaces and Bubblewrap.
+Core PyPy sandbox implementation for secure script execution.
 
 ## Overview
 
-The sandbox module provides the foundational building blocks for creating secure, read-only execution environments. It offers declarative configuration through profiles and handles the low-level details of constructing Bubblewrap commands.
+The sandbox module provides the foundation for Shannot's security model through PyPy's syscall interception.
 
 **Key Components:**
 
-- **`SandboxProfile`** - Immutable sandbox configuration describing allowed commands, bind mounts, and environment
-- **`SandboxManager`** - High-level interface for executing commands within a sandbox
-- **`BubblewrapCommandBuilder`** - Translates profiles into Bubblewrap argument vectors
-- **`SandboxBind`** - Declarative bind mount specification
-- **`SandboxError`** - Exception raised for configuration or execution failures
+- **`VirtualizedProc`** - Core PyPy sandbox process controller
+- **Mixin Classes** - Modular functionality for VFS, subprocess, sockets, etc.
 
-## Quick Start
+## Architecture
 
-```python
-from shannot import SandboxManager, load_profile_from_path
-from pathlib import Path
+Shannot v0.4.0+ uses PyPy sandbox mode instead of Linux namespaces:
 
-# Load a profile
-profile = load_profile_from_path("~/.config/shannot/minimal.json")
+| Component | Purpose |
+|-----------|---------|
+| `virtualizedproc.py` | PyPy sandbox process controller |
+| `mix_vfs.py` | Virtual filesystem |
+| `mix_subprocess.py` | Subprocess virtualization with approval |
+| `mix_socket.py` | Socket virtualization (disabled) |
+| `mix_pypy.py` | PyPy initialization |
 
-# Create a sandbox manager
-manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
+## Usage
 
-# Execute a command
-result = manager.run(["ls", "/"])
-print(result.stdout)
+The sandbox is accessed through the CLI or MCP interface:
+
+```bash
+# Run script in sandbox
+shannot run script.py
+
+# Review pending operations
+shannot approve
 ```
 
-## Common Usage Patterns
+For MCP usage, see [MCP Integration](../mcp.md).
 
-### Creating Profiles Programmatically
+## Internal API
 
-```python
-from shannot import SandboxProfile, SandboxBind
-from pathlib import Path
-
-profile = SandboxProfile(
-    name="custom",
-    allowed_commands=["ls", "cat", "grep"],
-    binds=[
-        SandboxBind(
-            source=Path("/usr"),
-            target=Path("/usr"),
-            read_only=True
-        )
-    ],
-    tmpfs_paths=[Path("/tmp")],
-    environment={"PATH": "/usr/bin"},
-    network_isolation=True
-)
-```
-
-### Loading from Files
+The internal Python API exports these symbols for contributors:
 
 ```python
-from shannot import load_profile_from_path, load_profile_from_mapping
-
-# From JSON file
-profile = load_profile_from_path("/etc/shannot/diagnostics.json")
-
-# From dictionary
-data = {
-    "name": "minimal",
-    "allowed_commands": ["ls"],
-    "binds": [{"source": "/usr", "target": "/usr", "read_only": True}],
-    "tmpfs_paths": ["/tmp"],
-    "environment": {"PATH": "/usr/bin"}
-}
-profile = load_profile_from_mapping(data)
+from shannot import VirtualizedProc, signature, sigerror
 ```
 
-### Executing Commands
+These are implementation details. Use the CLI for production workloads.
 
-```python
-# Basic execution
-result = manager.run(["cat", "/etc/os-release"])
+## See Also
 
-# With custom environment
-result = manager.run(["env"], env={"CUSTOM_VAR": "value"})
-
-# Without automatic error checking
-result = manager.run(["test", "-f", "/missing"], check=False)
-if result.succeeded():
-    print("File exists")
-```
-
-## Related Documentation
-
-- [Python API Guide](../api.md) - Comprehensive API usage examples
-- [Profile Configuration](../profiles.md) - Profile format and options
-- [CLI Usage](../usage.md) - Command-line interface
-- [Process Module](process.md) - Process execution utilities
-
-## API Reference
-
-::: shannot.sandbox
+- [Usage Guide](../usage.md) - CLI commands
+- [Configuration](../configuration.md) - Profiles and settings
+- [MCP Server](mcp_server.md) - MCP implementation
