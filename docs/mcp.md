@@ -1,560 +1,627 @@
 # MCP Server Integration
 
-> **⚠️ NOTICE: MCP support has been removed in v0.4.0**
->
-> This documentation describes the MCP integration that was available in Shannot v0.3.0 (bubblewrap-based architecture). MCP support was temporarily removed during the transition to the PyPy sandbox architecture in v0.4.0.
->
-> **MCP support will be reintroduced in a future version** with the new PyPy sandbox backend. This documentation is kept for reference and will be updated when MCP functionality is restored.
->
-> For current v0.4.0 functionality, see [README.md](../README.md).
-
----
-
-# MCP Server Integration (v0.3.0 - Historical)
-
-This guide explains how to use Shannot's MCP (Model Context Protocol) server to give Claude Desktop,
-Claude Code, or Codex CLI secure, read-only access to your Linux system.
+Shannot v0.5.0 provides MCP (Model Context Protocol) integration for secure, sandboxed Python script execution. This guide explains how to use Shannot's MCP server to give Claude Desktop or Claude Code controlled access to system operations through PyPy's sandbox architecture.
 
 ## What is MCP?
 
-MCP (Model Context Protocol) is Anthropic's standard protocol for connecting AI assistants to external tools. With Shannot's MCP server, Claude Desktop can:
+MCP (Model Context Protocol) is Anthropic's standard protocol for connecting AI assistants to external tools. With Shannot's MCP server, Claude can:
 
-- 📂 Read files and list directories
-- 💾 Check disk usage
-- 🧠 View memory info
-- 🔍 Search for files and text
-- 📊 Run diagnostic commands
+- 📝 Execute Python 3.6 scripts in a secure PyPy sandbox
+- 🔒 Require interactive approval for sensitive operations
+- ⚡ Auto-execute allowed operations (fast path)
+- 📊 Run diagnostic commands (ls, df, ps, cat, grep)
+- 🛡️ Block denied operations immediately
 
-**All operations are read-only and sandboxed** - Claude cannot modify your system.
+**Security Model**: Operations execute in PyPy sandbox with syscall-level virtualization. Session-based approval workflow ensures you review non-trivial operations before execution.
 
 ## Quick Start
 
-### For macOS/Windows Users (Remote Setup - 10 minutes)
-
-Since Shannot requires Linux, you'll need a remote Linux server:
+### Linux Setup (5 minutes)
 
 ```bash
-# 1. Install Shannot with remote support
-pip install shannot[mcp,remote]
+# 1. Install Shannot v0.5.0
+pip install shannot>=0.5.0
 
-# 2. Configure a remote Linux target
-shannot remote add myserver --host your-server.com --user yourname
-
-# 3. Test the connection
-shannot remote test myserver
-
-# 4. Install MCP server for Claude Code
-shannot mcp install --client claude-code --target myserver
-
-# 5. Restart Claude Code
-# Now you can ask: "Check disk space on myserver"
-```
-
-### For Linux Users (Local Setup - 5 minutes)
-
-```bash
-# 1. Install Shannot with MCP support
-pip install shannot[mcp]
-
-# 2. Install bubblewrap (if not already installed)
-# Ubuntu/Debian:
-sudo apt install bubblewrap
-# Fedora/RHEL:
-sudo dnf install bubblewrap
-# Arch:
-sudo pacman -S bubblewrap
+# 2. Download PyPy sandbox runtime
+shannot setup
 
 # 3. Install MCP server for Claude Code
 shannot mcp install --client claude-code
 
 # 4. Restart Claude Code
-# Now you can ask: "Show me /etc/os-release"
+# Now you can ask: "Run a Python script to check disk space"
 ```
 
-## Detailed Installation
+### macOS/Windows Setup (Remote)
 
-### Option A: Using Shannot's installer (Recommended)
+Since PyPy sandbox requires Linux, use a remote target:
+
+```bash
+# 1. Install Shannot locally
+pip install shannot>=0.5.0
+
+# 2. Configure remote Linux server
+shannot remote add myserver --host your-server.com --user yourname
+
+# 3. Test connection
+shannot remote test myserver
+
+# 4. Install MCP server with remote target
+shannot mcp install --client claude-code --target myserver
+
+# 5. Restart Claude Code
+```
+
+## How It Works
+
+### Architecture
+
+```
+Claude → MCP Protocol → Shannot Server → PyPy Sandbox → Linux System
+                              ↓
+                     Session-Based Approval
+```
+
+1. **Claude sends Python script** via `sandbox_run` tool
+2. **AST analysis** detects operations (UX optimization, not security)
+3. **Three execution paths**:
+   - **Fast path**: Auto-approved ops execute immediately
+   - **Review path**: Unapproved ops create session for user review
+   - **Blocked path**: Denied ops rejected immediately
+4. **Session approval** (review path only):
+   - User runs `shannot approve show <session_id>`
+   - Reviews operations to be performed
+   - Approves with `shannot approve --execute <session_id>`
+5. **Results returned** to Claude
+
+### Execution Workflow
+
+#### Fast Path (Auto-Approved)
+
+```python
+# Claude sends:
+{
+  "script": "import subprocess\nsubprocess.call(['ls', '/tmp'])",
+  "profile": "minimal"
+}
+
+# Shannot detects: "ls /tmp" is in auto_approve list
+# → Executes immediately in PyPy sandbox
+# → Returns: {"status": "success", "stdout": "...", "exit_code": 0}
+```
+
+#### Review Path (Needs Approval)
+
+```python
+# Claude sends:
+{
+  "script": "import subprocess\nsubprocess.call(['curl', 'https://example.com'])",
+  "profile": "minimal"
+}
+
+# Shannot detects: "curl" not in auto_approve list
+# → Creates session 20251222-mcp-request-a3f2
+# → Returns: {
+#     "status": "pending_approval",
+#     "session_id": "20251222-mcp-request-a3f2",
+#     "instructions": [
+#       "Review with: shannot approve show 20251222-mcp-request-a3f2",
+#       "Approve and execute: shannot approve --execute 20251222-mcp-request-a3f2"
+#     ]
+#   }
+
+# User reviews and approves:
+$ shannot approve show 20251222-mcp-request-a3f2
+$ shannot approve --execute 20251222-mcp-request-a3f2
+
+# Claude polls for results:
+{
+  "session_id": "20251222-mcp-request-a3f2"
+}
+# → Returns: {"status": "executed", "stdout": "...", "exit_code": 0}
+```
+
+#### Blocked Path (Denied)
+
+```python
+# Claude sends:
+{
+  "script": "import subprocess\nsubprocess.call(['rm', '-rf', '/'])",
+  "profile": "minimal"
+}
+
+# Shannot detects: "rm -rf /" in always_deny list
+# → Rejects immediately
+# → Returns: {
+#     "status": "denied",
+#     "reason": "Script contains denied operation: 'rm -rf /'"
+#   }
+```
+
+## Available Tools
+
+### sandbox_run
+
+Execute Python 3.6 script in PyPy sandbox with profile-based approval.
+
+**Parameters:**
+- `script` (required): Python 3.6 code to execute
+- `profile` (optional): Approval profile (`minimal`, `readonly`, `diagnostics`, default: `minimal`)
+- `name` (optional): Human-readable session name for tracking
+
+**Python 3.6 Syntax Limitations:**
+- ❌ No f-strings (use `.format()`)
+- ❌ No async/await
+- ❌ No walrus operator (`:=`)
+- ❌ No dataclasses
+- ✅ Use Python 3.6 compatible syntax
+
+**Example:**
+```python
+# Claude's tool call:
+sandbox_run({
+  "script": """
+import subprocess
+result = subprocess.call(['df', '-h'])
+""",
+  "profile": "diagnostics",
+  "name": "disk-check"
+})
+```
+
+### session_result
+
+Poll status of a pending session created by `sandbox_run`.
+
+**Parameters:**
+- `session_id` (required): Session ID returned by `sandbox_run`
+
+**Returns:**
+- `pending`: Awaiting user approval
+- `executed`: Complete with results (stdout/stderr/exit_code)
+- `expired`: Session expired (1 hour TTL)
+- `cancelled`: User cancelled session
+- `rejected`: User rejected session
+- `failed`: Execution error
+
+**Example:**
+```python
+# Poll session status:
+session_result({"session_id": "20251222-mcp-request-a3f2"})
+
+# Returns (when executed):
+{
+  "session_id": "20251222-mcp-request-a3f2",
+  "status": "executed",
+  "exit_code": 0,
+  "stdout": "Filesystem      Size  Used Avail Use% Mounted on\n...",
+  "stderr": "",
+  "executed_at": "2025-12-22T14:30:45"
+}
+```
+
+## Approval Profiles
+
+Profiles control which operations execute immediately (fast path) vs requiring approval (review path).
+
+### Minimal Profile (Default)
+
+**Auto-approved commands:**
+- `ls`, `cat`, `grep`, `find`
+
+**Always denied:**
+- `rm -rf /`
+- `dd if=/dev/zero`
+- `:(){ :|:& };:` (fork bomb)
+
+**Best for**: Basic file inspection
+
+### Readonly Profile
+
+**Auto-approved commands:**
+- All minimal commands plus:
+- `head`, `tail`, `file`, `stat`, `wc`, `du`
+
+**Best for**: Extended file analysis
+
+### Diagnostics Profile
+
+**Auto-approved commands:**
+- All readonly commands plus:
+- `df`, `free`, `ps`, `uptime`, `hostname`, `uname`, `env`, `id`
+
+**Best for**: System monitoring and health checks
+
+### Custom Profiles
+
+Create custom profiles in `~/.config/shannot/`:
+
+```bash
+# Create custom.json
+cat > ~/.config/shannot/custom.json <<'EOF'
+{
+  "auto_approve": [
+    "echo",
+    "printf",
+    "date"
+  ],
+  "always_deny": [
+    "eval",
+    "exec"
+  ]
+}
+EOF
+
+# Use in MCP:
+sandbox_run({
+  "script": "import subprocess\nsubprocess.call(['echo', 'hello'])",
+  "profile": "custom"
+})
+```
+
+## Installation
+
+### Option A: Using Shannot's Installer (Recommended)
 
 ```bash
 # Install for Claude Desktop (default)
 shannot mcp install
 
-# Install for Claude Code (user scope - available across all projects)
+# Install for Claude Code
 shannot mcp install --client claude-code
 
-# Install for Codex CLI
-shannot mcp install --client codex
-
-# Use a configured remote target
-shannot mcp install --target prod
+# Use a remote target
 shannot mcp install --client claude-code --target prod
 ```
 
-The Claude Code installer uses **user scope** by default, making Shannot available across all your
-projects. It updates both the IDE config and your CLI configuration (e.g., `~/.claude.json`) so
-`/mcp` lists it immediately.
+### Option B: Manual Configuration
 
-**Option B: Using Claude Code's CLI directly**
-
-If you prefer Claude Code's native MCP management, you have full control over scoping:
-
-```bash
-# User scope (recommended - available across all your projects)
-claude mcp add --transport stdio shannot --scope user -- shannot-mcp
-
-# With a remote target
-claude mcp add --transport stdio shannot-prod --scope user \
-  --env SSH_AUTH_SOCK="${SSH_AUTH_SOCK}" -- shannot-mcp --target prod
-
-# Local scope (only in current project, private to you)
-claude mcp add --transport stdio shannot --scope local -- shannot-mcp
-
-# Project scope (shared with team via .mcp.json in version control)
-claude mcp add --transport stdio shannot --scope project -- shannot-mcp
-```
-
-**Understanding MCP scopes:**
-- `local` (default): Only you can use it in this project
-- `user`: Available to you across all projects
-- `project`: Shared with your team via `.mcp.json` file (requires approval on first use)
-
-**Note for macOS and Windows users:**
-
-Shannot requires Linux to run locally (bubblewrap is Linux-only). You have two options:
-
-**macOS:**
-1. **Use a remote Linux target** (recommended):
-   ```bash
-   shannot remote add linux-server --host server.example.com --user yourname
-   shannot mcp install --client claude-code --target linux-server
-   ```
-2. **Use a Linux VM** (Parallels, VMware, etc.) and run via SSH
-
-**Windows:**
-1. **Use a remote Linux target** (recommended):
-   ```bash
-   shannot remote add linux-server --host server.example.com --user yourname
-   shannot mcp install --client claude-code --target linux-server
-   ```
-2. **Use WSL2** (Windows Subsystem for Linux) and install directly in WSL:
-   ```bash
-   # From WSL terminal
-   pip install shannot[mcp]
-   shannot mcp install --client claude-code
-   ```
-
-**Why remote is required for macOS/Windows:**
-Shannot uses Linux kernel features (namespaces, seccomp) via bubblewrap for sandboxing.
-These features are not available on macOS or native Windows.
-
-### Verify installation (Claude Code users)
-
-In Claude Code, check that Shannot is available:
-
-```
-> /mcp
-```
-
-You should see `shannot` listed among your MCP servers. You can also use `/mcp` to:
-- View server status and available tools
-- Manage server configurations
-- Remove servers with `claude mcp remove shannot`
-
-## Try it out
-
-Open your client and ask:
-
-> "Can you check how much disk space I have left?"
-
-> "Show me the contents of /etc/os-release"
-
-> "What are the largest directories in /var?"
-
-Claude will use Shannot's sandboxed tools to answer!
-
-## How It Works
-
-```
-You → Claude Desktop → MCP Protocol → Shannot Server → bubblewrap → Linux System
-                                           ↓
-                                    (read-only sandbox)
-```
-
-1. **You ask Claude a question** about your system
-2. **Claude decides** which Shannot tool to use
-3. **MCP server** receives the tool call
-4. **Shannot runs** the command in a secure sandbox
-5. **Claude responds** with the results
-
-## Available Tools
-
-Shannot exposes different tool sets based on **profiles**:
-
-### Minimal Profile (Default)
-- Local install: `sandbox_minimal` – run any command allowed by the profile (pass `{"command": ["ls", "/"]}`)
-- Remote install (`--target prod`): tool name becomes `sandbox_prod_minimal` so Claude can distinguish hosts.
-
-**Allowed commands**: ls, cat, grep, find
-
-### Readonly Profile
-Same base tool with a broader allowlist:
-- head, tail, file, stat, wc, du
-
-### Diagnostics Profile
-Same tool with an extended allowlist:
-- df, free, ps, uptime, hostname, uname, env, id
-
-**Best for**: System monitoring and health checks
-
-## Configuration
-
-### Custom Profiles
-
-You can create custom profiles in `~/.config/shannot/`:
-
-```bash
-# Create custom profile
-cat > ~/.config/shannot/custom.json <<EOF
-{
-  "name": "custom",
-  "allowed_commands": ["ls", "cat", "df"],
-  "binds": [
-    {"source": "/usr", "target": "/usr", "read_only": true},
-    {"source": "/etc", "target": "/etc", "read_only": true}
-  ],
-  "tmpfs_paths": ["/tmp"],
-  "environment": {
-    "PATH": "/usr/bin:/bin",
-    "HOME": "/home/sandbox"
-  },
-  "network_isolation": true
-}
-EOF
-
-# Restart MCP server (or restart Claude Desktop)
-```
-
-The MCP server automatically discovers profiles in `~/.config/shannot/`.
-
-### Remote Targets
-
-To run Claude's commands on a remote Linux host:
-
-1. **Add the remote target (once):**
-   ```bash
-   shannot remote add prod --host prod.example.com --user admin --profile diagnostics
-   shannot remote test prod
-   ```
-2. **Install the MCP server for that target:**
-   ```bash
-   shannot mcp install --target prod
-   ```
-3. **Run the server manually (optional):**
-   ```bash
-   shannot-mcp --target prod --verbose
-   ```
-
-When you specify `--target`, the MCP server loads the matching executor from
-`~/.config/shannot/config.toml` and reuses the associated profile (if set).
-Claude's requests now execute on the remote host through the SSH executor.
-
-> Tip: Run `ssh user@host` once outside of Claude to record the host key in your
-> `known_hosts` file before installing the MCP server. This keeps connections secure.
-
-### Manual Configuration
-
-If `shannot mcp install` doesn't work on your platform, manually edit the client config. Defaults:
-
-- **Claude Desktop (macOS)**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Claude Desktop (Windows)**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Claude Code (macOS)**: `~/Library/Application Support/Claude/claude_code_config.json`
-  - Alternates: `~/Library/Application Support/Claude/claude_config.json`, `~/.claude/config.json`
-- **Claude Code (Linux)**: `~/.config/Claude/claude_code_config.json`
-  - Alternates: `~/.claude/config.json`, `~/.config/claude/config.json`
-- **Claude Code (Windows)**: `%APPDATA%\Claude\claude_code_config.json`
-  - Alternate: `%APPDATA%\Claude\claude_config.json`
-- **Codex CLI (macOS)**: `~/Library/Application Support/OpenAI/Codex/codex_cli_config.json`
-  - Alternate: `~/.config/openai/codex_cli_config.json`
-- **Codex CLI (Linux)**: `~/.config/openai/codex_cli_config.json`
-  - Alternate: `~/.config/codex/config.json`
-- **Codex CLI (Windows)**: `%APPDATA%\OpenAI\Codex\codex_cli_config.json`
-
-Add:
+#### Claude Desktop (macOS)
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "shannot": {
       "command": "shannot-mcp",
+      "args": [],
       "env": {}
     }
   }
 }
 ```
 
-## Testing
+#### Claude Desktop (Windows)
+Edit `%APPDATA%\Claude\claude_desktop_config.json` with the same JSON.
 
-### Test MCP server functionality
-
-```bash
-# Test that tools work
-shannot mcp test
-```
-
-### Manual testing
-
-Run the MCP server directly to see logs:
+#### Claude Code
+Use the `.mcp.json` snippet from `shannot mcp install --client claude-code`, or:
 
 ```bash
-# Start server in verbose mode
-shannot-mcp --verbose
+# User scope (recommended)
+claude mcp add --transport stdio shannot --scope user -- shannot-mcp
+
+# Project scope (shared with team)
+claude mcp add --transport stdio shannot --scope project -- shannot-mcp
 ```
 
-The server will wait for MCP protocol messages on stdin.
+### Verify Installation
 
-## Troubleshooting
+In Claude Code:
+```
+> /mcp
+```
 
-### "shannot-mcp command not found"
+You should see `shannot` listed with 2 tools (`sandbox_run`, `session_result`) and 3 resources.
 
-Make sure you installed with MCP support:
+## Session Management
+
+### List Pending Sessions
 
 ```bash
-pip install shannot[mcp]
+shannot approve list
 ```
 
-And that the install location is in your PATH.
-
-### "Profile not found"
-
-Check that profiles exist:
+### Review Session Details
 
 ```bash
-ls ~/.config/shannot/
-ls $(python -c "import shannot; print(shannot.__file__.rsplit('/',1)[0])")/../profiles/
+shannot approve show <session_id>
 ```
 
-### Claude Desktop doesn't show Shannot tools
+Shows:
+- Script content
+- Detected operations
+- Profile used
+- Creation/expiry time
 
-1. Restart Claude Desktop completely (quit, don't just close window)
-2. Check config was written correctly:
-   ```bash
-   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
-   ```
-3. Look for errors in Claude Desktop logs (Help → View Logs)
+### Approve and Execute
 
-### Claude Code doesn't show Shannot tools
+```bash
+shannot approve --execute <session_id>
+```
 
-1. Reload or restart Claude Code
-2. Use `/mcp` command to check server status
-3. Check that the server is properly configured:
-   ```bash
-   claude mcp list
-   claude mcp get shannot
-   ```
-4. If you used `--scope project`, make sure you approved the `.mcp.json` file when prompted
-5. Try removing and re-adding:
-   ```bash
-   claude mcp remove shannot
-   shannot mcp install --client claude-code
-   ```
+### Cancel Session
 
-### Commands fail with "not allowed"
+```bash
+shannot approve cancel <session_id>
+```
 
-The command you tried isn't in the profile's allowlist. Either:
+### Session TTL
 
-1. Use a different profile with more commands (e.g., `diagnostics`)
-2. Create a custom profile with the commands you need
+Sessions expire after **1 hour** if not approved. Expired sessions return:
 
-### Permission denied errors
+```json
+{
+  "status": "expired",
+  "message": "Session expired (1 hour TTL)"
+}
+```
 
-This is normal! The sandbox is read-only. You'll see errors when trying to:
-- Write files
-- Modify system state
-- Access restricted paths
+## Resources
 
-This is by design - Shannot prevents Claude from making changes.
+Shannot exposes MCP resources for inspection:
 
-## Security Notes
+### sandbox://profiles
+
+List available approval profiles:
+
+```json
+["minimal", "readonly", "diagnostics", "custom"]
+```
+
+### sandbox://profiles/{name}
+
+Get profile configuration:
+
+```json
+{
+  "auto_approve": ["ls", "cat", "grep", "find"],
+  "always_deny": ["rm -rf /", "dd if=/dev/zero", ":(){ :|:& };:"]
+}
+```
+
+### sandbox://status
+
+Runtime status and configuration:
+
+```json
+{
+  "version": "0.5.0",
+  "runtime_available": true,
+  "profiles": ["minimal", "readonly", "diagnostics"],
+  "runtime": {
+    "pypy_sandbox": "/Users/user/.local/share/shannot/runtime/pypy-sandbox",
+    "lib_python": "/Users/user/.local/share/shannot/runtime/lib-python/3",
+    "lib_pypy": "/Users/user/.local/share/shannot/runtime/lib_pypy"
+  }
+}
+```
+
+## Examples
+
+### Disk Space Check
+
+**User**: "Check how much disk space I have"
+
+**Claude**: *Calls sandbox_run with diagnostics profile*
+
+```python
+sandbox_run({
+  "script": """
+import subprocess
+subprocess.call(['df', '-h'])
+""",
+  "profile": "diagnostics"
+})
+```
+
+**Result**: Executes immediately (fast path) and returns disk usage.
+
+### File Search (Requires Approval)
+
+**User**: "Find all Python files in /home that are larger than 1MB"
+
+**Claude**: *Calls sandbox_run*
+
+```python
+sandbox_run({
+  "script": """
+import subprocess
+subprocess.call(['find', '/home', '-name', '*.py', '-size', '+1M'])
+""",
+  "profile": "minimal"
+})
+```
+
+**Result**: Creates session (review path) because searching /home may be sensitive.
+
+**User approves**:
+```bash
+shannot approve --execute 20251222-mcp-request-b4d9
+```
+
+**Claude polls**:
+```python
+session_result({"session_id": "20251222-mcp-request-b4d9"})
+```
+
+**Result**: Returns found files.
+
+### Blocked Operation
+
+**User**: "Delete all temporary files"
+
+**Claude**: *Calls sandbox_run*
+
+```python
+sandbox_run({
+  "script": """
+import subprocess
+subprocess.call(['rm', '-rf', '/tmp/*'])
+""",
+  "profile": "minimal"
+})
+```
+
+**Result**: Rejected immediately (blocked path) due to `rm -rf` pattern.
+
+## Security Model
 
 ### What Shannot Protects Against
 
-✅ **Accidental modifications** - Claude can't accidentally `rm -rf /`
-✅ **Data persistence** - All changes to /tmp are lost after each command
-✅ **Network access** - Commands can't phone home (network isolated)
-✅ **Privilege escalation** - Runs in unprivileged namespace
+✅ **Unauthorized modifications** - PyPy sandbox prevents actual file writes
+✅ **Network access** - Socket operations are virtualized
+✅ **Privilege escalation** - No actual system calls reach the kernel
+✅ **Subprocess injection** - All subprocess calls intercepted and approved
 
-### What Shannot Does NOT Protect Against
+### Security Boundaries
 
-⚠️ **Information disclosure** - Claude can read any file the sandbox can see
-⚠️ **Kernel exploits** - Not a security boundary against kernel bugs
-⚠️ **Resource exhaustion** - No built-in CPU/memory limits
+**AST Analysis (UX Optimization)**:
+- Best-effort operation detection
+- Helps provide fast feedback
+- **NOT a security boundary**
+- Can miss dynamic operations (eval, getattr, etc.)
+
+**Runtime Enforcement (Security Boundary)**:
+- PyPy sandbox intercepts ALL system calls
+- Subprocess virtualization enforces approval profiles
+- Security enforced at runtime, not static analysis
 
 ### Best Practices
 
 1. **Review allowed commands** in profiles before using
-2. **Use minimal profiles** when possible (principle of least privilege)
+2. **Use minimal profiles** when possible
 3. **Don't run as root** - use a regular user account
-4. **Monitor usage** - check `~/.shannot/audit.log` (if enabled)
-5. **Keep profiles simple** - only allow commands you actually need
+4. **Review sessions** before approving in interactive mode
+5. **Monitor pending sessions** with `shannot approve list`
+
+## Troubleshooting
+
+### "PyPy sandbox runtime not found"
+
+```bash
+# Download PyPy sandbox
+shannot setup
+
+# Verify installation
+shannot status
+```
+
+### "shannot-mcp command not found"
+
+Ensure you installed v0.5.0+:
+
+```bash
+pip install --upgrade "shannot>=0.5.0"
+```
+
+### Claude doesn't show Shannot tools
+
+1. Restart Claude completely
+2. Check configuration:
+   ```bash
+   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
+   ```
+3. For Claude Code, use `/mcp` to check server status
+
+### Session expired
+
+Sessions have a 1-hour TTL. Approve within this window:
+
+```bash
+# Check pending sessions
+shannot approve list
+
+# Approve before expiry
+shannot approve --execute <session_id>
+```
+
+### "Operation not in profile allowlist"
+
+Either:
+1. Use a broader profile (`readonly` or `diagnostics`)
+2. Create a custom profile with needed commands
+3. Approve the session interactively
+
+## Remote Execution
+
+Execute sessions on remote Linux hosts via SSH:
+
+```bash
+# Configure remote target
+shannot remote add prod --host prod.example.com --user admin
+
+# Test connection
+shannot remote test prod
+
+# Install MCP server for remote
+shannot mcp install --target prod
+
+# Claude's requests now execute on prod server
+```
 
 ## Advanced Usage
 
 ### Multiple Profiles
 
-Claude can use multiple profiles simultaneously:
+Install with multiple profiles for different use cases:
 
-```bash
-# Install with all bundled profiles
-shannot mcp install
-```
-
-Claude will see tools like:
-- `sandbox_minimal_read_file`
-- `sandbox_readonly_read_file`
-- `sandbox_diagnostics_check_disk`
-
-Ask Claude: "Use the diagnostics profile to check disk space"
-
-### Remote Systems
-
-You can connect Shannot MCP to remote systems via SSH:
-
-```json
-{
-  "mcpServers": {
-    "shannot-remote": {
-      "command": "ssh",
-      "args": ["myserver.com", "shannot-mcp"],
-      "env": {}
-    }
-  }
-}
-```
-
-Now Claude can inspect remote systems!
-
-### Team Collaboration (Claude Code)
-
-Share Shannot MCP server with your team using project scope:
-
-1. **Add server at project scope:**
-   ```bash
-   claude mcp add --transport stdio shannot --scope project -- shannot-mcp
-   ```
-
-2. **This creates `.mcp.json` in your project root:**
-   ```json
-   {
-     "mcpServers": {
-       "shannot": {
-         "command": "shannot-mcp",
-         "args": [],
-         "env": {}
-       }
-     }
-   }
-   ```
-
-3. **Commit to version control:**
-   ```bash
-   git add .mcp.json
-   git commit -m "Add Shannot MCP server for team"
-   ```
-
-4. **Team members will be prompted to approve** the server on first use. They can:
-   - Review with `/mcp` command
-   - Approve to enable the server
-   - Reset choices with `claude mcp reset-project-choices` if needed
-
-**For remote targets shared across the team:**
-
-```bash
-# Each team member configures the remote once
-shannot remote add staging --host staging.example.com --user deploy
-
-# Then add to project scope
-claude mcp add --transport stdio shannot-staging --scope project \
-  --env SSH_AUTH_SOCK="${SSH_AUTH_SOCK}" -- shannot-mcp --target staging
-```
-
-### Custom Tool Names
-
-Edit the MCP server code in `shannot/mcp_server.py` to customize tool names and descriptions.
-
-## Examples
-
-### Disk Space Investigation
-
-> **You**: My disk is filling up, can you help me figure out what's taking up space?
-
-> **Claude**: I'll check your disk usage.
->
-> *[Uses sandbox_diagnostics_check_disk]*
->
-> Your /home partition is 87% full. Let me find the largest directories...
->
-> *[Uses sandbox_diagnostics tool to run `du`]*
->
-> The largest directories are:
-> - /home/user/Downloads: 45GB
-> - /home/user/.cache: 12GB
-> - /home/user/VirtualBox: 8GB
-
-### Log Analysis
-
-> **You**: Are there any errors in my system logs from today?
-
-> **Claude**: I'll search the logs.
->
-> *[Uses sandbox_readonly tool to grep logs]*
->
-> Found 3 errors in /var/log/syslog:
-> - 10:23: "disk write error on /dev/sda"
-> - 14:45: "network timeout to 192.168.1.1"
-> - 16:20: "temperature warning: CPU over 80°C"
-
-### Configuration Review
-
-> **You**: Show me my SSH server configuration
-
-> **Claude**: *[Uses sandbox_readonly_read_file on /etc/ssh/sshd_config]*
->
-> Here's your SSH config. I notice:
-> - Port: 22 (default)
-> - PasswordAuthentication: yes (consider disabling)
-> - PermitRootLogin: no (good!)
-
-## Quick Reference - Claude Code CLI Commands
-
-```bash
-# Installation
-claude mcp add --transport stdio shannot -- shannot-mcp
-claude mcp add --transport stdio shannot --scope user -- shannot-mcp
-claude mcp add --transport stdio shannot --scope project -- shannot-mcp
-
-# With remote target
-claude mcp add --transport stdio shannot-prod -- shannot-mcp --target prod
-
-# Management
-claude mcp list                    # List all servers
-claude mcp get shannot             # Get server details
-claude mcp remove shannot          # Remove server
-claude mcp reset-project-choices   # Reset approval choices
-
-# In Claude Code
-/mcp                               # View server status
-```
-
-**Alternative: Use Shannot's installer**
 ```bash
 shannot mcp install --client claude-code
-shannot mcp install --client claude-code --target prod
+```
+
+Claude can use any profile via the `profile` parameter:
+
+```python
+# Minimal for basic file ops
+sandbox_run({"script": "...", "profile": "minimal"})
+
+# Diagnostics for system health
+sandbox_run({"script": "...", "profile": "diagnostics"})
+```
+
+### Session Naming
+
+Use meaningful names for session tracking:
+
+```python
+sandbox_run({
+  "script": "...",
+  "profile": "minimal",
+  "name": "analyze-logs-for-errors"
+})
+```
+
+Names appear in `shannot approve list` for easier identification.
+
+### Verbose Logging
+
+Run MCP server with verbose output for debugging:
+
+```bash
+shannot-mcp --verbose
+```
+
+## Testing
+
+See [MCP Testing Guide](mcp-testing.md) for comprehensive testing instructions.
+
+Quick test:
+
+```bash
+# Run test suite
+uv run pytest test/test_mcp*.py -v
+
+# Manual server test
+shannot-mcp --verbose
+# (Send test JSON-RPC messages to stdin)
 ```
 
 ## Next Steps
 
-- **[See profiles.md](profiles.md)** to learn about creating custom profiles
-- **[See api.md](api.md)** to use Shannot programmatically
+- **[Session Management](../README.md#session-approval-workflow)** - Learn about session approval workflow
+- **[Profiles](../README.md#profiles)** - Create custom approval profiles
+- **[Remote Execution](../README.md#remote-execution)** - Execute on remote Linux hosts
 
 ## Getting Help
 

@@ -1,209 +1,360 @@
 # MCP Main Module
 
-Entry point and CLI for the MCP server application.
+Entry point and CLI for the Shannot MCP server (v0.5.0).
 
 ## Overview
 
-The MCP main module provides the command-line interface and entry point for running the Shannot MCP server. It handles argument parsing, executor initialization, and server lifecycle management.
+The MCP main module provides the command-line interface for running the Shannot MCP server with PyPy sandbox integration. It handles argument parsing, profile loading, and server lifecycle management.
 
 **Key Components:**
 
-- **`entrypoint()`** - Main entry point for `shannot-mcp` command
-- **`parse_args()`** - Command-line argument parser
-- **Server initialization** - Sets up executor and server based on arguments
-- **Logging configuration** - Configures logging for debugging
+- **`main()`** - Main entry point for `shannot-mcp` command
+- **Argument parsing** - Handle --profile and --verbose flags
+- **Server initialization** - Create ShannotMCPServer with profiles
+- **Protocol serving** - Start JSON-RPC 2.0 stdio transport
 
 ## Command-Line Interface
 
 ### Basic Usage
 
 ```bash
-# Start MCP server with default settings
+# Start MCP server with default profiles
 shannot-mcp
-
-# Use specific profile
-shannot-mcp --profile diagnostics
-
-# Use multiple profiles
-shannot-mcp --profile minimal --profile diagnostics
 
 # Enable verbose logging
 shannot-mcp --verbose
 
-# Use remote executor target
-shannot-mcp --target production
+# Load custom profile
+shannot-mcp --profile ~/.config/shannot/custom.json
+
+# Load multiple custom profiles
+shannot-mcp --profile ~/profile1.json --profile ~/profile2.json
 ```
 
 ### Command-Line Options
 
 ```
+Usage: shannot-mcp [OPTIONS]
+
 Options:
-  --profile PATH, -p     Profile to use (can be specified multiple times)
-  --target NAME, -t      Remote executor target from config
-  --verbose, -v          Enable verbose logging
-  --help, -h            Show help message
+  --profile PATH      Custom profile path (can be specified multiple times)
+  --verbose           Enable verbose logging (DEBUG level)
+  --help             Show help message and exit
+```
+
+## Entry Point
+
+### Console Script
+
+Defined in `pyproject.toml`:
+
+```toml
+[project.scripts]
+shannot-mcp = "shannot.mcp_main:main"
+```
+
+### main() Function
+
+```python
+def main() -> int:
+    """Main entry point for shannot-mcp command."""
+    parser = argparse.ArgumentParser(
+        prog="shannot-mcp",
+        description="Shannot MCP server for LLM integration"
+    )
+    parser.add_argument(
+        "--profile",
+        action="append",
+        type=Path,
+        help="Custom profile path (can be specified multiple times)"
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging"
+    )
+
+    args = parser.parse_args()
+
+    # Create server
+    server = ShannotMCPServer(
+        profile_paths=args.profile,
+        verbose=args.verbose
+    )
+
+    # Serve via stdio
+    serve(server.handle_request)
+
+    return 0
 ```
 
 ## Usage Patterns
 
-### Local Execution
+### Default Profiles
+
+Without --profile, server uses built-in profiles:
 
 ```bash
-# Run on local Linux system with diagnostics profile
-shannot-mcp --profile diagnostics
+shannot-mcp
 ```
 
-The server will:
-1. Create a LocalExecutor
-2. Load the diagnostics profile
-3. Start listening on stdio for MCP requests
+Loads:
+- `minimal` (ls, cat, grep, find)
+- `readonly` (minimal + head, tail, file, stat, wc, du)
+- `diagnostics` (readonly + df, free, ps, uptime, hostname, uname, env, id)
 
-### Remote Execution
+### Custom Profiles
+
+Load custom profiles from filesystem:
 
 ```bash
-# Execute on remote system configured as "production"
-shannot-mcp --target production --profile diagnostics
+# Single custom profile
+shannot-mcp --profile ~/.config/shannot/custom.json
+
+# Multiple profiles (stacked)
+shannot-mcp --profile ~/minimal.json \
+            --profile ~/diagnostics.json
 ```
 
-The server will:
-1. Load configuration from `~/.config/shannot/config.toml`
-2. Create SSHExecutor for "production" target
-3. Connect to remote system
-4. Execute commands remotely in sandbox
+**Profile Format** (`~/.config/shannot/custom.json`):
+```json
+{
+  "auto_approve": [
+    "echo",
+    "printf",
+    "date"
+  ],
+  "always_deny": [
+    "eval",
+    "exec"
+  ]
+}
+```
 
-### Multiple Profiles
+### Verbose Logging
+
+Enable DEBUG-level logging for troubleshooting:
 
 ```bash
-# Serve multiple profiles
-shannot-mcp --profile minimal --profile diagnostics --profile readonly
+shannot-mcp --verbose
 ```
 
-Each profile is available as a separate MCP resource and can be used by the LLM client.
-
-### Debugging
-
-```bash
-# Enable verbose logging for troubleshooting
-shannot-mcp --verbose --profile diagnostics 2> /tmp/shannot-mcp.log
-```
-
-Logs will show:
-- Profile loading
-- Executor initialization
-- Tool invocations
-- Command executions
-- Errors and warnings
+Output includes:
+- Profile loading details
+- PyPy runtime detection
+- Tool registration
+- Request/response JSON-RPC messages
 
 ## Integration with LLM Clients
 
-### Claude Desktop Integration
-
-Add to `claude_desktop_config.json`:
+### Claude Desktop
 
 ```json
 {
   "mcpServers": {
     "shannot": {
       "command": "shannot-mcp",
-      "args": ["--profile", "diagnostics"]
+      "args": [],
+      "env": {}
     }
   }
 }
 ```
 
-Or use the installer:
-```bash
-shannot mcp install claude-desktop --profile diagnostics
-```
-
-### Claude Code Integration
-
-Add to Claude Code config:
-
+With verbose logging:
 ```json
 {
   "mcpServers": {
     "shannot": {
       "command": "shannot-mcp",
-      "args": ["--profile", "diagnostics", "--verbose"]
+      "args": ["--verbose"],
+      "env": {}
     }
   }
 }
 ```
 
-Or use the installer:
-```bash
-shannot mcp install claude-code --profile diagnostics
-```
-
-### Remote System Monitoring
-
-Monitor production systems from Claude:
-
+With custom profile:
 ```json
 {
   "mcpServers": {
-    "shannot-prod": {
+    "shannot": {
       "command": "shannot-mcp",
-      "args": ["--target", "production", "--profile", "diagnostics"]
-    },
-    "shannot-staging": {
-      "command": "shannot-mcp",
-      "args": ["--target", "staging", "--profile", "diagnostics"]
+      "args": ["--profile", "/path/to/custom.json"],
+      "env": {}
     }
   }
 }
 ```
 
-Now Claude can run diagnostics on both production and staging.
+### Claude Code
+
+Via `shannot mcp install`:
+```bash
+shannot mcp install --client claude-code
+```
+
+Generates configuration for Claude Code's user or project scope.
 
 ## Server Lifecycle
 
-The MCP server runs until:
-- The LLM client disconnects
-- SIGINT (Ctrl+C) is received
-- An unrecoverable error occurs
+### Startup Sequence
 
-On shutdown:
-- Executor connections are closed
-- Resources are cleaned up
-- Exit code 0 indicates clean shutdown
+1. **Parse arguments** - Handle --profile and --verbose flags
+2. **Load profiles** - From specified paths or use defaults
+3. **Find runtime** - Locate PyPy sandbox binary
+4. **Create server** - Initialize ShannotMCPServer
+5. **Register tools** - sandbox_run, session_result
+6. **Register resources** - profiles, status
+7. **Start serving** - JSON-RPC 2.0 over stdio (blocks)
+
+### Shutdown
+
+- Server runs until EOF on stdin (client disconnect)
+- Graceful shutdown on keyboard interrupt (Ctrl+C)
+- Returns exit code 0 on success
+
+## Logging
+
+### Log Levels
+
+**Default (INFO)**:
+- Server initialization
+- Profile loading summary
+- Runtime detection status
+
+**Verbose (DEBUG)**:
+- Detailed profile loading
+- Runtime path discovery
+- Tool/resource registration
+- JSON-RPC request/response
+
+### Log Configuration
+
+```python
+if verbose:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
+```
+
+Logs to stderr (stdout reserved for JSON-RPC protocol).
 
 ## Error Handling
 
-Common errors and solutions:
+### Runtime Not Found
 
-**Profile not found:**
-```
-Error: Profile 'custom' not found
-```
-→ Ensure profile exists at `~/.config/shannot/custom.json` or specify full path
+```python
+# Warning logged, server continues
+logger.warning("PyPy runtime not found")
+self.runtime = None
 
-**Target not found:**
+# Tools return error when called
+{
+  "status": "error",
+  "error": "PyPy sandbox runtime not found. Run 'shannot setup' to install."
+}
 ```
-Error: Target 'production' not configured
-```
-→ Add target to `~/.config/shannot/config.toml`
 
-**Bubblewrap not found:**
-```
-Error: Bubblewrap not found at /usr/bin/bwrap
-```
-→ Install bubblewrap: `apt install bubblewrap` (Linux only)
+### Profile Loading Failure
 
-**SSH connection failed:**
+```python
+# Warning logged, profile skipped
+logger.warning(f"Failed to load profile {path}: {e}")
+
+# Server continues with remaining profiles
 ```
-Error: Failed to connect to host.example.com
+
+### Invalid Arguments
+
+```bash
+$ shannot-mcp --invalid-flag
+usage: shannot-mcp [-h] [--profile PROFILE] [--verbose]
+shannot-mcp: error: unrecognized arguments: --invalid-flag
 ```
-→ Check SSH configuration, keys, and network connectivity
+
+## Testing
+
+### Manual Test
+
+```bash
+# Start server
+shannot-mcp --verbose
+
+# In another terminal, send JSON-RPC
+echo '{"jsonrpc": "2.0", "method": "initialize", "params": {}, "id": 1}' | shannot-mcp
+```
+
+### Integration Test
+
+```python
+from shannot.mcp_main import main
+import sys
+
+# Mock argv
+sys.argv = ["shannot-mcp", "--verbose"]
+
+# Run main
+exit_code = main()
+assert exit_code == 0
+```
+
+## Environment
+
+### No Environment Variables
+
+Server does not use environment variables (intentional simplicity).
+
+### Working Directory
+
+Server runs from current directory. Profile paths are resolved relative to CWD if not absolute.
+
+## Security
+
+### Stdio-Only Transport
+
+- Server only accepts input from stdin
+- Output only to stdout (protocol) and stderr (logs)
+- No network sockets or file access
+
+### Profile Isolation
+
+- Profiles loaded at startup
+- No dynamic profile loading during runtime
+- Profiles are immutable once loaded
+
+### Logging Safety
+
+- Verbose mode logs to stderr (not protocol stdout)
+- Sensitive data not logged (scripts may contain secrets)
 
 ## Related Documentation
 
 - [MCP Server Module](mcp_server.md) - Server implementation details
-- [MCP Integration Guide](../mcp.md) - Complete MCP setup guide
-- [Configuration](../configuration.md) - Configuring remote targets
-- [Troubleshooting](../troubleshooting.md) - Common issues and solutions
+- [MCP Integration Guide](../mcp.md) - Complete setup and usage
+- [MCP Testing](../mcp-testing.md) - Testing procedures
 
 ## API Reference
 
-::: shannot.mcp_main
+### shannot.mcp_main
+
+```python
+def main() -> int:
+    """Main entry point for shannot-mcp command.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success).
+    """
+```
+
+### Usage Example
+
+```python
+from shannot.mcp_main import main
+import sys
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
