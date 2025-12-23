@@ -1,4 +1,4 @@
-.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check clean build build-binary changelog
+.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check clean build build-binary changelog changelog-full
 
 UV ?= uv
 VENV ?= .venv
@@ -121,6 +121,15 @@ changelog:
 		echo "Install it with: brew install git-cliff (macOS) or visit https://github.com/orhun/git-cliff"; \
 		exit 1; \
 	fi
-	@git-cliff --config cliff.toml -o CHANGELOG.md
+	@git-cliff --config cliff.toml --latest --prepend CHANGELOG.md
 	@echo "✅ CHANGELOG.md updated successfully"
 	@echo "Remember to commit the updated CHANGELOG.md"
+
+changelog-full:
+	@echo "Regenerating full CHANGELOG.md from git history..."
+	@if ! command -v git-cliff &> /dev/null; then \
+		echo "Error: git-cliff is not installed"; \
+		exit 1; \
+	fi
+	@git-cliff --config cliff.toml -o CHANGELOG.md
+	@echo "✅ CHANGELOG.md regenerated"
