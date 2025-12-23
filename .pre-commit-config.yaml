@@ -23,11 +23,11 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.3
     hooks:
-      # Run linter
+      # Run linter (matches CI: ruff check .)
       - id: ruff
-        args: [--fix]
-      # Run formatter
+      # Run formatter check (matches CI: ruff format --check .)
       - id: ruff-format
+        args: [--check]
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.389
