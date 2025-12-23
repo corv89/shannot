@@ -112,6 +112,7 @@ def main(argv):
             json_output = True
         elif option == "--approved-commands":
             import json as json_module
+
             approved_commands = json_module.loads(value)
         elif option in ["-h", "--help"]:
             return help()
@@ -120,6 +121,7 @@ def main(argv):
 
     # Validate executable argument (basic checks)
     import os
+
     if not os.path.exists(executable):
         sys.stderr.write(f"Error: PyPy sandbox executable not found: {executable}\n\n")
         sys.stderr.write("Specify a valid path with --pypy-sandbox or ensure it's in PATH.\n")
@@ -147,9 +149,7 @@ def main(argv):
                 {
                     "pypy": File(b"", mode=0o111),
                     "lib-python": RealDir(str(runtime_path / "lib-python")),
-                    "lib_pypy": OverlayDir(
-                        str(runtime_path / "lib_pypy"), overrides=stubs
-                    ),
+                    "lib_pypy": OverlayDir(str(runtime_path / "lib_pypy"), overrides=stubs),
                 }
             )
             arguments[0] = "/lib/pypy"
@@ -164,7 +164,8 @@ def main(argv):
             sys.stderr.write("Run the following to install it:\n\n")
             sys.stderr.write("  shannot setup\n\n")
             sys.stderr.write("Or specify a custom path:\n")
-            sys.stderr.write("  shannot run --lib-path /path/to/pypy-stdlib /path/to/pypy-sandbox script.py\n")
+            msg = "  shannot run --lib-path /path/to/pypy-stdlib /path/to/pypy-sandbox script.py\n"
+            sys.stderr.write(msg)
             return 1
 
     if color:
@@ -221,12 +222,10 @@ def main(argv):
         if sandbox_args.get("tmp"):
             import os
 
-            real_script_path = os.path.join(
-                sandbox_args["tmp"], os.path.basename(script_args[0])
-            )
+            real_script_path = os.path.join(sandbox_args["tmp"], os.path.basename(script_args[0]))
             if os.path.exists(real_script_path):
                 try:
-                    with open(real_script_path, "r") as f:
+                    with open(real_script_path) as f:
                         virtualizedproc.subprocess_script_content = f.read()
                 except (OSError, UnicodeDecodeError):
                     pass  # Script content is optional, continue without it
@@ -258,6 +257,7 @@ def main(argv):
         if json_output:
             # JSON output for remote protocol
             import json as json_module
+
             from .config import VERSION
 
             output = {
@@ -268,7 +268,9 @@ def main(argv):
                     "commands": session.commands,
                     "pending_writes": session.pending_writes,
                     "script_path": session.script_path,
-                } if session else None,
+                }
+                if session
+                else None,
             }
             print(json_module.dumps(output))
         elif session:
@@ -284,8 +286,5 @@ def main(argv):
     if popen.returncode == 0:
         return 0
     else:
-        print(
-            "*** sandboxed subprocess finished with exit code %r ***"
-            % (popen.returncode,)
-        )
+        print(f"*** sandboxed subprocess finished with exit code {popen.returncode!r} ***")
         return 1

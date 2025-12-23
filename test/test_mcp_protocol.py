@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import io
 import json
-import sys
 from unittest import mock
 
 import pytest
@@ -91,7 +90,7 @@ class TestWriteMessage:
         """Test that IOError exits gracefully."""
 
         def write_io_error(data):
-            raise IOError("Connection reset")
+            raise OSError("Connection reset")
 
         mock_stdout = mock.MagicMock()
         mock_stdout.write = write_io_error

@@ -34,7 +34,7 @@ class Action:
     """Action returned from views to be handled by main loop."""
 
     name: str  # "execute", "reject", "view", "back", "quit"
-    sessions: list["Session"] = None
+    sessions: list[Session] = None
 
     def __post_init__(self):
         if self.sessions is None:
@@ -100,7 +100,7 @@ class View:
         """Render the view to the terminal."""
         raise NotImplementedError
 
-    def handle_key(self, key: str) -> "View | None":
+    def handle_key(self, key: str) -> View | None:
         """
         Handle keypress.
 
@@ -118,7 +118,7 @@ class View:
 class SessionListView(View):
     """Main view showing list of pending sessions with multi-select."""
 
-    def __init__(self, sessions: list["Session"] = None):
+    def __init__(self, sessions: list[Session] = None):
         if sessions is None:
             from .session import Session
 
@@ -216,7 +216,7 @@ class SessionListView(View):
 class SessionDetailView(View):
     """Detailed view of a single session."""
 
-    def __init__(self, session: "Session"):
+    def __init__(self, session: Session):
         self.session = session
         self.scroll = 0
 
@@ -265,7 +265,7 @@ class SessionDetailView(View):
             for i, write_data in enumerate(s.pending_writes[:3]):
                 path = write_data.get("path", "?")
                 remote = " \033[33m[remote]\033[0m" if write_data.get("remote") else ""
-                print(f"   {i+1:>3}. {path}{remote}")
+                print(f"   {i + 1:>3}. {path}{remote}")
             if len(s.pending_writes) > 3:
                 print(f"       ... ({len(s.pending_writes) - 3} more)")
 
@@ -313,7 +313,7 @@ class SessionDetailView(View):
 class ScriptView(View):
     """Scrollable view of script content."""
 
-    def __init__(self, session: "Session"):
+    def __init__(self, session: Session):
         self.session = session
         self.scroll = 0
         self.content = session.load_script() or "(Script content not available)"
@@ -370,7 +370,7 @@ class ScriptView(View):
 class PendingWritesListView(View):
     """List of pending file writes for a session."""
 
-    def __init__(self, session: "Session"):
+    def __init__(self, session: Session):
         self.session = session
         self.cursor = 0
 
@@ -403,9 +403,10 @@ class PendingWritesListView(View):
             # Calculate size
             content_b64 = write_data.get("content_b64", "")
             import base64
+
             try:
                 size = len(base64.b64decode(content_b64))
-                size_str = f"{size:,} B" if size < 1024 else f"{size/1024:.1f} KB"
+                size_str = f"{size:,} B" if size < 1024 else f"{size / 1024:.1f} KB"
             except (ValueError, TypeError):
                 size_str = "?"  # Invalid base64 data
 
@@ -447,7 +448,7 @@ class PendingWritesListView(View):
 class PendingWriteDiffView(View):
     """View diff for a single pending write."""
 
-    def __init__(self, session: "Session", write_index: int):
+    def __init__(self, session: Session, write_index: int):
         self.session = session
         self.write_index = write_index
         self.write_data = session.pending_writes[write_index]
@@ -516,7 +517,7 @@ class PendingWriteDiffView(View):
 class ConfirmView(View):
     """Simple yes/no confirmation."""
 
-    def __init__(self, message: str, sessions: list["Session"]):
+    def __init__(self, message: str, sessions: list[Session]):
         self.message = message
         self.sessions = sessions
 
@@ -550,7 +551,7 @@ class ConfirmView(View):
 class ResultView(View):
     """Post-execution results display."""
 
-    def __init__(self, results: list[tuple["Session", int]]):
+    def __init__(self, results: list[tuple[Session, int]]):
         self.results = results
         self.cursor = 0
 
@@ -601,7 +602,7 @@ class ResultView(View):
 class OutputView(View):
     """View captured stdout/stderr for a session."""
 
-    def __init__(self, session: "Session"):
+    def __init__(self, session: Session):
         self.session = session
         self.scroll = 0
         self.lines = self._build_lines()
@@ -662,7 +663,7 @@ class OutputView(View):
 # ==============================================================================
 
 
-def execute_sessions(sessions: list["Session"]) -> list[tuple["Session", int]]:
+def execute_sessions(sessions: list[Session]) -> list[tuple[Session, int]]:
     """Execute sessions and return results."""
     from .session import Session, execute_session
 
@@ -677,7 +678,7 @@ def execute_sessions(sessions: list["Session"]) -> list[tuple["Session", int]]:
     return results
 
 
-def reject_sessions(sessions: list["Session"]) -> None:
+def reject_sessions(sessions: list[Session]) -> None:
     """Mark sessions as rejected."""
     for session in sessions:
         session.status = "rejected"

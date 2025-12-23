@@ -8,6 +8,7 @@ PIPE = -1
 STDOUT = -2
 DEVNULL = -3
 
+
 class CompletedProcess:
     def __init__(self, args, returncode, stdout=None, stderr=None):
         self.args = args
@@ -15,10 +16,21 @@ class CompletedProcess:
         self.stdout = stdout
         self.stderr = stderr
 
-def run(args, capture_output=False, text=False, shell=False,
-        cwd=None, env=None, timeout=None, check=False,
-        stdin=None, stdout=None, stderr=None, **kwargs):
 
+def run(
+    args,
+    capture_output=False,
+    text=False,
+    shell=False,
+    cwd=None,
+    env=None,
+    timeout=None,
+    check=False,
+    stdin=None,
+    stdout=None,
+    stderr=None,
+    **kwargs,
+):
     if isinstance(args, str):
         cmd = args
     else:
@@ -57,14 +69,17 @@ def run(args, capture_output=False, text=False, shell=False,
 
     return result
 
+
 class CalledProcessError(Exception):
     def __init__(self, returncode, cmd, stdout=None, stderr=None):
         self.returncode = returncode
         self.cmd = cmd
         self.stdout = stdout
         self.stderr = stderr
+
     def __str__(self):
         return f"Command '{self.cmd}' returned non-zero exit status {self.returncode}"
+
 
 # Popen - minimal implementation
 class Popen:

@@ -1,14 +1,12 @@
-import sys
-import os
 import errno
+import os
 import stat
+import sys
 from io import BytesIO
-from .virtualizedproc import signature, sigerror
+
 from .sandboxio import NULL
-from .structs import (
-    new_stat, new_dirent, struct_to_bytes,
-    SIZEOF_DIRENT, DT_REG, DT_DIR
-)
+from .structs import DT_DIR, DT_REG, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
+from .virtualizedproc import sigerror, signature
 
 MAX_PATH = 256
 MAX_WRITE_CHUNK = 256 * 1024  # 256KB maximum single write/read size
@@ -17,13 +15,14 @@ GID = 1000
 INO_COUNTER = 0
 
 
-class FSObject(object):
+class FSObject:
     """Base class for virtual filesystem objects.
 
     Subclasses implement specific node types (files, directories).
     The read_only flag controls virtual ownership: read-only files
     appear owned by root, read-write files by the virtual user.
     """
+
     read_only = True
 
     def stat(self):
@@ -38,10 +37,10 @@ class FSObject(object):
         if self.is_dir():
             st_mode |= stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
         if self.read_only:
-            st_uid = 0       # read-only files are virtually owned by root
+            st_uid = 0  # read-only files are virtually owned by root
             st_gid = 0
         else:
-            st_uid = UID     # read-write files are owned by this virtual user
+            st_uid = UID  # read-write files are owned by this virtual user
             st_gid = GID
         return new_stat(
             st_ino=st_ino,
@@ -50,7 +49,8 @@ class FSObject(object):
             st_size=self.getsize(),
             st_mode=st_mode,
             st_uid=st_uid,
-            st_gid=st_gid)
+            st_gid=st_gid,
+        )
 
     def access(self, mode):
         s = self.stat()
@@ -82,22 +82,28 @@ class Dir(FSObject):
 
     Entries is a dict mapping names to FSObject instances.
     """
+
     kind = stat.S_IFDIR
+
     def __init__(self, entries=None):
         self.entries = entries if entries is not None else {}
+
     def keys(self):
         return sorted(self.entries.keys())
+
     def join(self, name):
         try:
             return self.entries[name]
         except KeyError:
-            raise OSError(errno.ENOENT, name)
+            raise OSError(errno.ENOENT, name) from None
+
 
 class RealDir(Dir):
     """Directory backed by a real filesystem path.
 
     Provides controlled access to real directories with filtering options.
     """
+
     # If show_dotfiles=False, we pretend that all files whose name starts
     # with '.' simply don't exist.  If follow_links=True, then symlinks are
     # transparently followed (they look like a regular file or directory to
@@ -105,23 +111,25 @@ class RealDir(Dir):
     # not allowed to access them at all.  Finally, exclude is a list of
     # file endings that we filter out (note that we also filter out files
     # with the same ending but a different case, to be safe).
-    def __init__(self, path, show_dotfiles=False, follow_links=False,
-                 exclude=None):
+    def __init__(self, path, show_dotfiles=False, follow_links=False, exclude=None):
         self.path = path
         self.show_dotfiles = show_dotfiles
-        self.follow_links  = follow_links
-        self.exclude       = [excl.lower() for excl in (exclude or [])]
+        self.follow_links = follow_links
+        self.exclude = [excl.lower() for excl in (exclude or [])]
+
     def __repr__(self):
-        return '<RealDir %s>' % (self.path,)
+        return f"<RealDir {self.path}>"
+
     def keys(self):
         names = os.listdir(self.path)
         if not self.show_dotfiles:
-            names = [name for name in names if not name.startswith('.')]
+            names = [name for name in names if not name.startswith(".")]
         for excl in self.exclude:
             names = [name for name in names if not name.lower().endswith(excl)]
         return sorted(names)
+
     def join(self, name):
-        if name.startswith('.') and not self.show_dotfiles:
+        if name.startswith(".") and not self.show_dotfiles:
             raise OSError(errno.ENOENT, name)
         for excl in self.exclude:
             if name.lower().endswith(excl):
@@ -132,9 +140,12 @@ class RealDir(Dir):
         else:
             st = os.lstat(path)
         if stat.S_ISDIR(st.st_mode):
-            return RealDir(path, show_dotfiles = self.show_dotfiles,
-                                 follow_links  = self.follow_links,
-                                 exclude       = self.exclude)
+            return RealDir(
+                path,
+                show_dotfiles=self.show_dotfiles,
+                follow_links=self.follow_links,
+                exclude=self.exclude,
+            )
         elif stat.S_ISREG(st.st_mode):
             return RealFile(path)
         else:
@@ -148,12 +159,13 @@ class OverlayDir(RealDir):
     Files in the overrides dict take precedence over real files.
     Useful for injecting stubs into real directories.
     """
+
     def __init__(self, path, overrides=None, **kwargs):
         super().__init__(path, **kwargs)
         self.overrides = overrides or {}
 
     def __repr__(self):
-        return '<OverlayDir %s (+%d overrides)>' % (self.path, len(self.overrides))
+        return f"<OverlayDir {self.path} (+{len(self.overrides)} overrides)>"
 
     def keys(self):
         real_keys = set(super().keys())
@@ -164,38 +176,50 @@ class OverlayDir(RealDir):
             return self.overrides[name]
         return super().join(name)
 
+
 class File(FSObject):
     """Virtual file with in-memory content."""
+
     kind = stat.S_IFREG
+
     def __init__(self, data, mode=0):
         self.data = data
         self.kind |= mode
+
     def getsize(self):
         return len(self.data)
+
     def open(self):
         return BytesIO(self.data)
 
+
 class RealFile(File):
     """File backed by a real filesystem path (read-only access)."""
+
     def __init__(self, path, mode=0):
         self.path = path
         self.kind |= mode
+
     def __repr__(self):
-        return '<RealFile %s>' % (self.path,)
+        return f"<RealFile {self.path}>"
+
     def getsize(self):
         return os.stat(self.path).st_size
+
     def open(self):
         try:
             return open(self.path, "rb")
-        except IOError as e:
-            raise OSError(e.errno, "open failed")
+        except OSError as e:
+            raise OSError(e.errno, "open failed") from e
 
 
-class OpenDir(object):
+class OpenDir:
     """Iterator state for an open directory (used by opendir/readdir)."""
+
     def __init__(self, node):
         self.node = node
         self.iter_names = iter(node.keys())
+
     def readdir(self):
         return next(self.iter_names)
 
@@ -211,24 +235,22 @@ def vfs_signature(sig, filearg=None):
                     filename = ""
                     if filearg is not None:
                         filename = repr(self.vfs_fetch_path(args[filearg]))
-                    msg = "subprocess: vfs: %s(%s) => %s\n" % (
-                        sig.split('(')[0],
-                        filename,
-                        errno.errorcode.get(e.errno, 'Errno %s' % e.errno))
+                    err_name = errno.errorcode.get(e.errno, f"Errno {e.errno}")
+                    msg = f"subprocess: vfs: {sig.split('(')[0]}({filename}) => {err_name}\n"
                     sys.stderr.write(msg)
                 self.sandio.set_errno(e.errno)
-                if sig.endswith('i'):
+                if sig.endswith("i"):
                     return -1
-                if sig.endswith('p'):
+                if sig.endswith("p"):
                     return NULL
-                raise AssertionError(
-                    "vfs_signature(%r): should end in 'i' or 'p'" %
-                    (sig,))
+                raise AssertionError(f"vfs_signature({sig!r}): should end in 'i' or 'p'") from e
+
         return wrapper
+
     return decorate
 
 
-class MixVFS(object):
+class MixVFS:
     """A virtual file system with optional write tracking.
 
     Call with 'vfs_root = root directory' in the constructor or by
@@ -254,26 +276,26 @@ class MixVFS(object):
     vfs_track_writes = False  # When True, queue writes for approval
     file_writes_pending = []  # List of PendingWrite objects
 
-
     def __init__(self, *args, **kwds):
         try:
-            self.vfs_root = kwds.pop('vfs_root')
+            self.vfs_root = kwds.pop("vfs_root")
         except KeyError:
-            if not hasattr(self, 'vfs_root'):
+            if not hasattr(self, "vfs_root"):
                 raise ValueError(
                     "must pass a vfs_root argument to the constructor, or assign "
-                    "a vfs_root class attribute directory in the subclass")
+                    "a vfs_root class attribute directory in the subclass"
+                ) from None
         self.vfs_open_fds = {}
         self.vfs_open_dirs = {}
         self.vfs_write_buffers = {}  # fd -> (path, BytesIO, node) for write mode files
-        super(MixVFS, self).__init__(*args, **kwds)
+        super().__init__(*args, **kwds)
 
-    s_mkdir          = sigerror("mkdir(pi)i", errno.EPERM, -1)
-    s_fcntl          = sigerror("fcntl(iii)i", errno.ENOSYS, -1)
-    s_unlink         = sigerror("unlink(p)i", errno.EPERM, -1)
+    s_mkdir = sigerror("mkdir(pi)i", errno.EPERM, -1)
+    s_fcntl = sigerror("fcntl(iii)i", errno.ENOSYS, -1)
+    s_unlink = sigerror("unlink(p)i", errno.EPERM, -1)
 
     @staticmethod
-    def vfs_pypy_lib_directory(library_path, exclude=["*.pyc", "*.pyo"]):
+    def vfs_pypy_lib_directory(library_path, exclude=None):
         """Returns a Dir() instance that emulates the settings of a binary
         executable '.../pypy' and the standard library '.../lib-python' and
         '.../lib_pypy'.  This Dir() should be put inside the vfs_root
@@ -288,37 +310,41 @@ class MixVFS(object):
         Stubs from shannot.stubs are automatically injected into lib_pypy,
         overriding any real files with the same names.
         """
+        if exclude is None:
+            exclude = ["*.pyc", "*.pyo"]
         from shannot.stubs import get_stubs
 
         lib_python = os.path.join(library_path, "lib-python")
         lib_pypy = os.path.join(library_path, "lib_pypy")
         if not os.path.isdir(lib_python):
-            raise IOError("directory not found: %r" % (lib_python,))
+            raise OSError(f"directory not found: {lib_python!r}")
         if not os.path.isdir(lib_pypy):
-            raise IOError("directory not found: %r" % (lib_pypy,))
+            raise OSError(f"directory not found: {lib_pypy!r}")
 
         # Build stub overrides for lib_pypy
         stubs = {name: File(content) for name, content in get_stubs().items()}
 
-        return Dir({
-                 'pypy': File('', mode=0o111),
-                 'lib-python': RealDir(lib_python, exclude=exclude),
-                 'lib_pypy': OverlayDir(lib_pypy, overrides=stubs, exclude=exclude),
-                 })
+        return Dir(
+            {
+                "pypy": File("", mode=0o111),
+                "lib-python": RealDir(lib_python, exclude=exclude),
+                "lib_pypy": OverlayDir(lib_pypy, overrides=stubs, exclude=exclude),
+            }
+        )
 
     def vfs_fetch_path(self, p_pathname):
         if isinstance(p_pathname, str):
             return p_pathname
-        return self.sandio.read_charp(p_pathname, MAX_PATH).decode('utf-8')
+        return self.sandio.read_charp(p_pathname, MAX_PATH).decode("utf-8")
 
     def vfs_getnode(self, p_pathname):
         path = self.vfs_fetch_path(p_pathname)
         all_components = [self.vfs_root]
-        for name in path.split('/'):
-            if name == '..':
+        for name in path.split("/"):
+            if name == "..":
                 if len(all_components) > 1:
                     del all_components[-1]
-            elif name and name != '.':
+            elif name and name != ".":
                 all_components.append(all_components[-1].join(name))
         return all_components[-1]
 
@@ -342,7 +368,7 @@ class MixVFS(object):
         try:
             return self.vfs_open_fds[fd][0]
         except KeyError:
-            raise OSError(errno.EBADF, "bad file descriptor")
+            raise OSError(errno.EBADF, "bad file descriptor") from None
 
     def vfs_stat_for_pipe(self, p_statbuf):
         stat_struct = new_stat(
@@ -351,7 +377,8 @@ class MixVFS(object):
             st_nlink=1,
             st_mode=stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR,
             st_uid=UID,
-            st_gid=GID)
+            st_gid=GID,
+        )
         bytes_data = struct_to_bytes(stat_struct)
         self.sandio.write_buffer(p_statbuf, bytes_data)
 
@@ -373,7 +400,7 @@ class MixVFS(object):
             if fd in (0, 1, 2):
                 self.vfs_stat_for_pipe(p_statbuf)
                 return
-            return super(MixVFS, self).s_fstat64(fd, p_statbuf)
+            return super().s_fstat64(fd, p_statbuf)
         self.vfs_write_stat(p_statbuf, node)
 
     @vfs_signature("access(pi)i", filearg=0)
@@ -385,7 +412,7 @@ class MixVFS(object):
     @vfs_signature("open(pii)i", filearg=0)
     def s_open(self, p_pathname, flags, mode):
         path = self.vfs_fetch_path(p_pathname)
-        write_mode = flags & (os.O_RDONLY|os.O_WRONLY|os.O_RDWR) != os.O_RDONLY
+        write_mode = flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) != os.O_RDONLY
         create_mode = flags & os.O_CREAT
 
         # Handle write mode with tracking
@@ -442,7 +469,7 @@ class MixVFS(object):
                 from .pending_write import PendingWrite
 
                 # Check if it's a remote file
-                is_remote = hasattr(node, 'remote_path') if node else False
+                is_remote = hasattr(node, "remote_path") if node else False
 
                 pending = PendingWrite(
                     path=path,
@@ -471,7 +498,7 @@ class MixVFS(object):
             return len(data)
 
         # Delegate stdout/stderr to parent
-        return super(MixVFS, self).s_write(fd, p_buf, count)
+        return super().s_write(fd, p_buf, count)
 
     @vfs_signature("read(ipi)i")
     def s_read(self, fd, p_buf, count):
@@ -487,7 +514,7 @@ class MixVFS(object):
         try:
             f = self.vfs_get_file(fd)
         except OSError:
-            return super(MixVFS, self).s_read(fd, p_buf, count)
+            return super().s_read(fd, p_buf, count)
         if count < 0:
             count = 0
         # don't try to read more than MAX_WRITE_CHUNK at once here
@@ -522,7 +549,7 @@ class MixVFS(object):
             raise OSError(errno.EMFILE, "trying to open too many directories")
         node = self.vfs_getnode(p_name)
         fdir = OpenDir(node)
-        p = self.sandio.malloc(b'\x00' * SIZEOF_DIRENT)
+        p = self.sandio.malloc(b"\x00" * SIZEOF_DIRENT)
         self.vfs_open_dirs[p.addr] = fdir
         return p
 
@@ -544,7 +571,7 @@ class MixVFS(object):
         dirent.d_ino = st.st_ino
         dirent.d_reclen = SIZEOF_DIRENT
         dirent.d_type = DT_DIR if subnode.is_dir() else DT_REG
-        name = name.encode('utf-8')
+        name = name.encode("utf-8")
         if len(name) > 255:  # d_name is 256 bytes including null terminator
             raise OSError(errno.EOVERFLOW, subnode)
         dirent.d_name = name

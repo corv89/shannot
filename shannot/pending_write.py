@@ -1,4 +1,5 @@
 """Pending write tracking for approval system."""
+
 from __future__ import annotations
 
 import difflib
@@ -6,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Optional
+    pass
 
 
 @dataclass
@@ -20,7 +21,7 @@ class PendingWrite:
 
     path: str  # Virtual/remote path being written
     content: bytes  # New content to write
-    original: Optional[bytes] = None  # Original content (if file existed)
+    original: bytes | None = None  # Original content (if file existed)
     remote: bool = False  # Whether this is a remote (SSH) write
 
     def get_diff(self) -> str:

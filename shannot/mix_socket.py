@@ -1,7 +1,7 @@
 from .virtualizedproc import sigerror
 
 
-class MixSocket(object):
+class MixSocket:
     """Add (unimplemented) support for the socket and select modules.
     Should not really be used."""
 
@@ -29,7 +29,9 @@ class MixSocket(object):
     s_inet_ntop = sigerror("inet_ntop(ippi)p")
     s_inet_pton = sigerror("inet_pton(ipp)i")
     s_listen = sigerror("listen(ii)i")
-    s_memcpy_from_CCHARP_at_offset_and_size = sigerror("memcpy_from_CCHARP_at_offset_and_size(ppii)i")
+    s_memcpy_from_CCHARP_at_offset_and_size = sigerror(
+        "memcpy_from_CCHARP_at_offset_and_size(ppii)i"
+    )
     s_poll = sigerror("poll(pii)i")
     s_recv = sigerror("recv(ipii)i")
     s_recvfrom = sigerror("recvfrom(ipiipp)i")

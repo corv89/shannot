@@ -5,6 +5,7 @@ This module is deprecated. Use session.py for new code.
 
 Only write_pending() is kept for MixSubprocess.save_pending() compatibility.
 """
+
 from __future__ import annotations
 
 import json

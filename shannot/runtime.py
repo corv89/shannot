@@ -1,4 +1,5 @@
 """PyPy runtime download and management."""
+
 from __future__ import annotations
 
 import hashlib
@@ -7,8 +8,8 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from .config import (
     PYPY_DOWNLOAD_URL,
@@ -200,9 +201,7 @@ def setup_runtime(
                 pct = downloaded * 100 // total
                 mb_down = downloaded / (1024 * 1024)
                 mb_total = total / (1024 * 1024)
-                sys.stdout.write(
-                    f"\r  Downloading: {mb_down:.1f}/{mb_total:.1f} MB ({pct}%)"
-                )
+                sys.stdout.write(f"\r  Downloading: {mb_down:.1f}/{mb_total:.1f} MB ({pct}%)")
                 sys.stdout.flush()
 
         try:
@@ -214,7 +213,7 @@ def setup_runtime(
             if verbose:
                 print()  # Newline after progress
         except Exception as e:
-            raise SetupError(f"Download failed: {e}")
+            raise SetupError(f"Download failed: {e}") from e
 
         # Verify checksum
         if verbose:
@@ -251,7 +250,7 @@ def setup_runtime(
             if verbose:
                 print(f"\r  Extracted {file_count} files.    ")
         except Exception as e:
-            raise SetupError(f"Extraction failed: {e}")
+            raise SetupError(f"Extraction failed: {e}") from e
 
     if verbose:
         print(f"  {RUNTIME_LIB_PYTHON}/")

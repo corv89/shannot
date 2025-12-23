@@ -1,4 +1,5 @@
 """SSH connection manager with ControlMaster support."""
+
 from __future__ import annotations
 
 import atexit
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Optional
+    pass
 
 
 @dataclass
@@ -31,7 +32,8 @@ class SSHConfig:
             # Use temp directory for control socket
             # Include target hash to avoid collisions
             target_hash = hashlib.md5(self.target.encode()).hexdigest()[:8]
-            self.control_path = Path(tempfile.gettempdir()) / f"shannot-ssh-{os.getpid()}-{target_hash}"
+            control_name = f"shannot-ssh-{os.getpid()}-{target_hash}"
+            self.control_path = Path(tempfile.gettempdir()) / control_name
 
 
 class SSHConnection:
@@ -67,12 +69,18 @@ class SSHConnection:
         """Base SSH arguments with ControlMaster options."""
         args = [
             "ssh",
-            "-o", "ControlMaster=auto",
-            "-o", f"ControlPath={self.config.control_path}",
-            "-o", "ControlPersist=60",
-            "-o", f"ConnectTimeout={self.config.connect_timeout}",
-            "-o", "BatchMode=yes",  # Never prompt for password
-            "-o", "StrictHostKeyChecking=accept-new",
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            f"ControlPath={self.config.control_path}",
+            "-o",
+            "ControlPersist=60",
+            "-o",
+            f"ConnectTimeout={self.config.connect_timeout}",
+            "-o",
+            "BatchMode=yes",  # Never prompt for password
+            "-o",
+            "StrictHostKeyChecking=accept-new",
         ]
         # Add port if non-default
         if self.config.port != 22:
@@ -119,8 +127,8 @@ class SSHConnection:
     def run(
         self,
         command: str,
-        input_data: Optional[bytes] = None,
-        timeout: Optional[int] = None,
+        input_data: bytes | None = None,
+        timeout: int | None = None,
     ) -> subprocess.CompletedProcess:
         """
         Execute command via existing ControlMaster.
@@ -257,7 +265,7 @@ class SSHConnection:
                 st_ctime=st_mtime,  # Use mtime for ctime
             )
         except (ValueError, IndexError) as e:
-            raise OSError(errno.EIO, f"Failed to parse stat output: {e}")
+            raise OSError(errno.EIO, f"Failed to parse stat output: {e}") from e
 
     def list_dir(self, path: str) -> list[str]:
         """
@@ -306,8 +314,10 @@ class SSHConnection:
         # Send exit command to ControlMaster
         args = [
             "ssh",
-            "-o", f"ControlPath={self.config.control_path}",
-            "-O", "exit",
+            "-o",
+            f"ControlPath={self.config.control_path}",
+            "-O",
+            "exit",
             self.config.target,
         ]
 

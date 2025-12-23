@@ -1,8 +1,7 @@
 from .virtualizedproc import signature
 
 
-class MixPyPy(object):
-
+class MixPyPy:
     @signature("_pypy_init_home()p")
     def s__pypy_init_home(self):
         return self.sandio.malloc(b"/pypy\x00")

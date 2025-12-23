@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest import mock
-
-import pytest
 
 from shannot.mcp.server import MCPServer
 from shannot.mcp.server_impl import ShannotMCPServer
-from shannot.mcp.types import TextContent, Tool, Resource
+from shannot.mcp.types import TextContent
 
 
 class TestMCPServer:
@@ -237,6 +234,7 @@ subprocess.call(['cat', 'file.txt'])
         server = ShannotMCPServer(profile_paths=None, verbose=False)
 
         import ast
+
         node = ast.parse("['ls', '/tmp']").body[0].value
         cmd = server._extract_command_from_ast(node)
         assert cmd == "ls /tmp"
@@ -246,6 +244,7 @@ subprocess.call(['cat', 'file.txt'])
         server = ShannotMCPServer(profile_paths=None, verbose=False)
 
         import ast
+
         node = ast.parse("'ls /tmp'").body[0].value
         cmd = server._extract_command_from_ast(node)
         assert cmd == "ls /tmp"

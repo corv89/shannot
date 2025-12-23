@@ -1,10 +1,20 @@
 """Tests for ctypes struct definitions."""
 
 from shannot.structs import (
-    new_stat, new_dirent, new_timeval,
-    struct_to_bytes, SIZEOF_STAT, SIZEOF_DIRENT, SIZEOF_TIMEVAL,
-    pack_time_t, pack_uid_t, pack_gid_t,
-    DT_REG, DT_DIR, ARCH, IS_LINUX
+    ARCH,
+    DT_DIR,
+    DT_REG,
+    IS_LINUX,
+    SIZEOF_DIRENT,
+    SIZEOF_STAT,
+    SIZEOF_TIMEVAL,
+    new_dirent,
+    new_stat,
+    new_timeval,
+    pack_gid_t,
+    pack_time_t,
+    pack_uid_t,
+    struct_to_bytes,
 )
 
 

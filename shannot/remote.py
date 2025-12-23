@@ -1,4 +1,5 @@
 """Remote execution protocol for shannot."""
+
 from __future__ import annotations
 
 import json
@@ -13,7 +14,7 @@ from .session import Session, create_session
 from .ssh import SSHConfig, SSHConnection
 
 if TYPE_CHECKING:
-    from typing import Optional
+    pass
 
 
 class RemoteExecutionError(Exception):
@@ -47,10 +48,10 @@ def _upload_script(ssh: SSHConnection, workdir: str, script_content: str) -> str
 def run_remote_dry_run(
     target: str,
     script_path: str,
-    script_content: Optional[str] = None,
-    name: Optional[str] = None,
+    script_content: str | None = None,
+    name: str | None = None,
     analysis: str = "",
-) -> Optional[Session]:
+) -> Session | None:
     """
     Run script on remote in dry-run mode.
 
@@ -68,7 +69,7 @@ def run_remote_dry_run(
         Session object with remote session data, or None if no commands queued
     """
     if script_content is None:
-        with open(script_path, "r") as f:
+        with open(script_path) as f:
             script_content = f.read()
 
     # Resolve target to (user, host, port)
@@ -106,7 +107,7 @@ def run_remote_dry_run(
             try:
                 response = json.loads(stdout)
             except json.JSONDecodeError as e:
-                raise RemoteExecutionError(f"Invalid JSON response: {e}\n{stdout}")
+                raise RemoteExecutionError(f"Invalid JSON response: {e}\n{stdout}") from e
 
             # Check version compatibility
             remote_version = response.get("version", "unknown")
@@ -179,9 +180,8 @@ def execute_remote_session(session: Session) -> int:
             result = ssh.run(f"test -d ~/.local/share/shannot/sessions/{remote_session_id}")
             if result.returncode != 0:
                 # Remote session was cleaned up - use recovery path
-                sys.stderr.write(
-                    f"[WARN] Remote session {remote_session_id} not found, re-executing with approvals\n"
-                )
+                msg = f"[WARN] Remote session {remote_session_id} not found, re-executing\n"
+                sys.stderr.write(msg)
                 return run_remote_with_approvals(session, ssh)
 
         # Execute on remote

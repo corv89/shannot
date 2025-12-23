@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
 def read_message() -> dict[str, Any] | None:
@@ -54,7 +55,7 @@ def write_message(msg: dict[str, Any]) -> None:
         json.dump(msg, sys.stdout)
         sys.stdout.write("\n")
         sys.stdout.flush()
-    except (BrokenPipeError, IOError):
+    except (OSError, BrokenPipeError):
         # Client disconnected - exit gracefully
         sys.exit(0)
 

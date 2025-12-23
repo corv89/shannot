@@ -114,7 +114,8 @@ def build_binary(output_dir: Path, debug: bool = False) -> Path:
         "--include-package-data=shannot",
         # Include stub .py files as data (not code) - needed for runtime reading
         f"--include-data-files={source_dir / 'stubs' / '_signal.py'}=shannot/stubs/_signal.py",
-        f"--include-data-files={source_dir / 'stubs' / 'subprocess.py'}=shannot/stubs/subprocess.py",
+        f"--include-data-files="
+        f"{source_dir / 'stubs' / 'subprocess.py'}=shannot/stubs/subprocess.py",
         # Note: importlib.metadata.version() is resolved at compile time by Nuitka's
         # pkg-resources plugin, so we don't need to bundle importlib.metadata
         # Python flags

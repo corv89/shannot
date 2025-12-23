@@ -6,15 +6,13 @@ import ast
 import io
 import json
 import logging
-import shlex
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from ..config import VERSION
-from ..runtime import get_runtime_path, find_pypy_sandbox
-from ..session import create_session, Session
+from ..runtime import find_pypy_sandbox, get_runtime_path
+from ..session import Session, create_session
 from ..virtualizedproc import VirtualizedProc
 from .server import MCPServer
 from .types import TextContent
@@ -94,9 +92,7 @@ class ShannotMCPServer(MCPServer):
         try:
             self.runtime = find_runtime()
             if self.runtime:
-                logger.info(
-                    f"Found PyPy runtime at: {self.runtime.get('pypy_sandbox')}"
-                )
+                logger.info(f"Found PyPy runtime at: {self.runtime.get('pypy_sandbox')}")
             else:
                 logger.warning("PyPy runtime not found")
         except RuntimeError as e:
@@ -106,9 +102,7 @@ class ShannotMCPServer(MCPServer):
         # Initialize base server
         super().__init__(name="shannot", version=VERSION)
 
-    def _load_profiles(
-        self, profile_paths: list[Path] | None
-    ) -> dict[str, dict[str, Any]]:
+    def _load_profiles(self, profile_paths: list[Path] | None) -> dict[str, dict[str, Any]]:
         """Load approval profiles from paths or defaults.
 
         Parameters
@@ -332,9 +326,7 @@ class ShannotMCPServer(MCPServer):
         profile_name = arguments.get("profile", "minimal")
         if profile_name not in self.profiles:
             return TextContent(
-                text=json.dumps(
-                    {"status": "error", "error": f"Unknown profile '{profile_name}'"}
-                )
+                text=json.dumps({"status": "error", "error": f"Unknown profile '{profile_name}'"})
             )
 
         profile = self.profiles[profile_name]
@@ -366,9 +358,11 @@ class ShannotMCPServer(MCPServer):
 
         # Check if all operations are in allowlist (fast path)
         auto_approve = profile.get("auto_approve", [])
-        all_allowed = all(
-            any(pattern in op for pattern in auto_approve) for op in detected_ops
-        ) if detected_ops else True
+        all_allowed = (
+            all(any(pattern in op for pattern in auto_approve) for op in detected_ops)
+            if detected_ops
+            else True
+        )
 
         if all_allowed and detected_ops:
             # Fast path: execute immediately
@@ -461,9 +455,7 @@ class ShannotMCPServer(MCPServer):
         # Can't extract (variable, function call, etc.)
         return None
 
-    def _execute_script_fast_path(
-        self, script: str, profile_name: str
-    ) -> TextContent:
+    def _execute_script_fast_path(self, script: str, profile_name: str) -> TextContent:
         """Execute script immediately (all operations pre-approved).
 
         Parameters
@@ -579,7 +571,7 @@ class ShannotMCPServer(MCPServer):
                             f"Session created: {session.id}",
                             f"Review with: shannot approve show {session.id}",
                             f"Approve and execute: shannot approve --execute {session.id}",
-                            f"Or use session_result tool to poll status",
+                            "Or use session_result tool to poll status",
                         ],
                     }
                 )
@@ -588,9 +580,7 @@ class ShannotMCPServer(MCPServer):
         except Exception as e:
             logger.error(f"Session creation failed: {e}", exc_info=True)
             return TextContent(
-                text=json.dumps(
-                    {"status": "error", "error": f"Failed to create session: {e}"}
-                )
+                text=json.dumps({"status": "error", "error": f"Failed to create session: {e}"})
             )
 
     def _handle_session_result(self, arguments: dict[str, Any]) -> TextContent:
@@ -608,23 +598,17 @@ class ShannotMCPServer(MCPServer):
         """
         session_id = arguments.get("session_id")
         if not session_id:
-            return TextContent(
-                text=json.dumps({"status": "error", "error": "Missing session_id"})
-            )
+            return TextContent(text=json.dumps({"status": "error", "error": "Missing session_id"}))
 
         try:
             session = Session.load(session_id)
         except FileNotFoundError:
             return TextContent(
-                text=json.dumps(
-                    {"status": "error", "error": f"Session not found: {session_id}"}
-                )
+                text=json.dumps({"status": "error", "error": f"Session not found: {session_id}"})
             )
         except Exception as e:
             return TextContent(
-                text=json.dumps(
-                    {"status": "error", "error": f"Failed to load session: {e}"}
-                )
+                text=json.dumps({"status": "error", "error": f"Failed to load session: {e}"})
             )
 
         # Check if session is expired

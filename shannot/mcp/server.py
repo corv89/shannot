@@ -7,15 +7,16 @@ request routing, method dispatch, and error handling.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .types import (
     InitializationOptions,
+    Resource,
     ServerCapabilities,
     ServerInfo,
     TextContent,
     Tool,
-    Resource,
 )
 
 logger = logging.getLogger(__name__)
@@ -211,9 +212,7 @@ class MCPServer:
         if self.resources:
             from .types import ResourcesCapability
 
-            self.capabilities.resources = ResourcesCapability(
-                subscribe=False, listChanged=False
-            )
+            self.capabilities.resources = ResourcesCapability(subscribe=False, listChanged=False)
 
         init_options = InitializationOptions(
             server_info=self.server_info,

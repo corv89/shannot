@@ -1,12 +1,13 @@
 """Mixin for subprocess execution with tiered security."""
+
 from __future__ import annotations
 
 import subprocess as real_subprocess
 import sys
 from typing import TYPE_CHECKING
 
-from .virtualizedproc import signature
 from .queue import write_pending
+from .virtualizedproc import signature
 
 if TYPE_CHECKING:
     from .ssh import SSHConnection

@@ -65,6 +65,7 @@ shannot = ["py.typed", "stubs/*.py"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = ["lima/"]  # Experimental scripts with dead imports
 
 [tool.ruff.format]
 quote-style = "double"
@@ -81,7 +82,9 @@ select = [
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
 ]
-ignore = []
+ignore = [
+    "N815",  # mixedCase variable names (required for MCP protocol fields)
+]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
@@ -100,6 +103,7 @@ markers = [
 [tool.basedpyright]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
+exclude = ["lima/"]  # Experimental scripts with dead imports
 reportDeprecated = false
 reportUnnecessaryIsInstance = false
 reportUnusedCallResult = "warning"

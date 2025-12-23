@@ -1,4 +1,5 @@
 """Centralized configuration paths for shannot."""
+
 from __future__ import annotations
 
 import getpass
@@ -7,11 +8,11 @@ import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
 
 # Version - read from package metadata (pyproject.toml is source of truth)
 try:
     from importlib.metadata import version
+
     VERSION = version("shannot")
 except Exception:
     # Fallback for development/edge cases
@@ -79,17 +80,38 @@ class Remote:
         """Convert to dictionary for TOML serialization."""
         return {"host": self.host, "user": self.user, "port": self.port}
 
+
 DEFAULT_PROFILE = {
     "auto_approve": [
-        "cat", "head", "tail", "less",
-        "ls", "find", "stat", "file",
-        "df", "du", "free", "uptime",
-        "ps", "top", "htop", "pgrep",
-        "systemctl status", "journalctl",
-        "uname", "hostname", "whoami", "id",
-        "env", "printenv",
-        "ip", "ss", "netstat",
-        "date", "cal",
+        "cat",
+        "head",
+        "tail",
+        "less",
+        "ls",
+        "find",
+        "stat",
+        "file",
+        "df",
+        "du",
+        "free",
+        "uptime",
+        "ps",
+        "top",
+        "htop",
+        "pgrep",
+        "systemctl status",
+        "journalctl",
+        "uname",
+        "hostname",
+        "whoami",
+        "id",
+        "env",
+        "printenv",
+        "ip",
+        "ss",
+        "netstat",
+        "date",
+        "cal",
     ],
     "always_deny": [
         "rm -rf /",
@@ -155,7 +177,7 @@ def load_profile() -> dict:
             "auto_approve": data.get("auto_approve", []),
             "always_deny": data.get("always_deny", []),
         }
-    except (json.JSONDecodeError, IOError):
+    except (OSError, json.JSONDecodeError):
         return DEFAULT_PROFILE.copy()
 
 
@@ -164,7 +186,7 @@ def get_remotes_path() -> Path:
     return CONFIG_DIR / REMOTES_FILENAME
 
 
-def load_remotes() -> Dict[str, Remote]:
+def load_remotes() -> dict[str, Remote]:
     """
     Load remotes from TOML config file.
 
@@ -179,9 +201,9 @@ def load_remotes() -> Dict[str, Remote]:
         with open(remotes_path, "rb") as f:
             data = tomllib.load(f)
     except Exception as e:
-        raise RuntimeError(f"Failed to load remotes.toml: {e}")
+        raise RuntimeError(f"Failed to load remotes.toml: {e}") from e
 
-    remotes: Dict[str, Remote] = {}
+    remotes: dict[str, Remote] = {}
     for name, config in data.get("remotes", {}).items():
         remotes[name] = Remote(
             name=name,
@@ -192,7 +214,7 @@ def load_remotes() -> Dict[str, Remote]:
     return remotes
 
 
-def save_remotes(remotes: Dict[str, Remote]) -> None:
+def save_remotes(remotes: dict[str, Remote]) -> None:
     """
     Save remotes to TOML config file.
 
@@ -218,9 +240,7 @@ def save_remotes(remotes: Dict[str, Remote]) -> None:
     remotes_path.write_text("\n".join(lines))
 
 
-def add_remote(
-    name: str, host: str, user: Optional[str] = None, port: int = 22
-) -> Remote:
+def add_remote(name: str, host: str, user: str | None = None, port: int = 22) -> Remote:
     """
     Add a new remote to the configuration.
 

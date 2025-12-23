@@ -7,6 +7,7 @@ Usage:
     shannot run [options]   Run a script in the sandbox
     shannot approve         Interactive session approval (TUI)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,9 +50,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         return cmd_run_remote(args)
 
     # Local execution
-    from .interact import main as interact_main
-    from .runtime import find_pypy_sandbox, get_runtime_path, setup_runtime, SetupError
     from .config import RUNTIME_DIR
+    from .interact import main as interact_main
+    from .runtime import SetupError, find_pypy_sandbox, get_runtime_path, setup_runtime
 
     argv = []
 
@@ -86,7 +87,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             if not runtime_path:
                 print("", file=sys.stderr)
                 print("Error: Setup completed but runtime path not found.", file=sys.stderr)
-                print("This is unexpected. Try: shannot setup --remove && shannot setup", file=sys.stderr)
+                msg = "This is unexpected. Try: shannot setup --remove && shannot setup"
+                print(msg, file=sys.stderr)
                 return 1
 
             argv.append(f"--lib-path={runtime_path}")
@@ -152,7 +154,7 @@ def cmd_run_remote(args: argparse.Namespace) -> int:
 
     # Read script content
     try:
-        with open(script_path, "r") as f:
+        with open(script_path) as f:
             script_content = f.read()
     except FileNotFoundError:
         print(f"Error: Script not found: {script_path}", file=sys.stderr)
@@ -398,11 +400,7 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
 
     elif client == "claude-code":
         # Output .mcp.json snippet for project
-        snippet = {
-            "mcpServers": {
-                "shannot": {"command": "shannot-mcp", "args": [], "env": {}}
-            }
-        }
+        snippet = {"mcpServers": {"shannot": {"command": "shannot-mcp", "args": [], "env": {}}}}
 
         print("Add this to your project's .mcp.json file:")
         print()
@@ -477,9 +475,7 @@ def cmd_status(args: argparse.Namespace) -> int:
                     target_str += f":{remote.port}"
 
                 # Test connection with short timeout
-                config = SSHConfig(
-                    target=f"{user}@{host}", port=port, connect_timeout=5
-                )
+                config = SSHConfig(target=f"{user}@{host}", port=port, connect_timeout=5)
                 try:
                     with SSHConnection(config) as ssh:
                         if ssh.connect():
@@ -655,9 +651,7 @@ def main() -> int:
         help="Manage SSH remote targets",
         description="Add, list, test, and remove named SSH targets",
     )
-    remote_subparsers = remote_parser.add_subparsers(
-        dest="remote_command", help="Remote commands"
-    )
+    remote_subparsers = remote_parser.add_subparsers(dest="remote_command", help="Remote commands")
 
     # remote add
     remote_add_parser = remote_subparsers.add_parser(
@@ -755,11 +749,9 @@ def main() -> int:
     mcp_parser = subparsers.add_parser(
         "mcp",
         help="MCP server installation and management",
-        description="Install and manage Model Context Protocol (MCP) server for Claude Desktop/Code",
+        description="Install/manage MCP server for Claude Desktop/Code",
     )
-    mcp_subparsers = mcp_parser.add_subparsers(
-        dest="mcp_command", help="MCP commands"
-    )
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
 
     # mcp install
     mcp_install_parser = mcp_subparsers.add_parser(

@@ -15,6 +15,6 @@ from __future__ import annotations
 
 __all__ = ["MCPServer", "ShannotMCPServer", "serve"]
 
+from .protocol import serve
 from .server import MCPServer
 from .server_impl import ShannotMCPServer
-from .protocol import serve

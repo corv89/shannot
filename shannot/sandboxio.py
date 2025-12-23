@@ -7,19 +7,20 @@ class SandboxError(Exception):
     """The sandboxed process misbehaved"""
 
 
-class Ptr(object):
+class Ptr:
     """Represents a pointer address in the sandboxed process's memory space."""
+
     def __init__(self, addr):
         self.addr = addr
 
     def __repr__(self):
-        return 'Ptr(%s)' % (hex(self.addr),)
+        return f"Ptr({hex(self.addr)})"
 
 
 ptr_size = struct.calcsize("P")
 NULL = Ptr(0)
 
-_ptr_code = 'q' if ptr_size == 8 else 'i'
+_ptr_code = "q" if ptr_size == 8 else "i"
 _pack_one_ptr = struct.Struct("=" + _ptr_code).pack
 _pack_one_longlong = struct.Struct("=q").pack
 _pack_one_double = struct.Struct("=d").pack
@@ -28,7 +29,7 @@ _pack_two_ptrs = struct.Struct("=" + _ptr_code + _ptr_code).pack
 _unpack_one_ptr = struct.Struct("=" + _ptr_code).unpack
 
 
-class SandboxedIO(object):
+class SandboxedIO:
     """Low-level binary IPC protocol for communicating with a sandboxed PyPy process.
 
     Handles reading syscall requests from the subprocess and writing results back.
@@ -40,6 +41,7 @@ class SandboxedIO(object):
         'F' = free in subprocess
         'E' = set errno
     """
+
     _message_decoders = {}
 
     def __init__(self, child_stdin, child_stdout):
@@ -49,36 +51,33 @@ class SandboxedIO(object):
     def _read(self, count):
         result = self.child_stdout.read(count)
         if len(result) != count:
-            raise SandboxError(
-                "connection interrupted with the sandboxed process")
+            raise SandboxError("connection interrupted with the sandboxed process")
         return result
 
     @staticmethod
     def _make_message_decoder(data):
-        i1 = data.find(b'(')
-        i2 = data.find(b')')
+        i1 = data.find(b"(")
+        i2 = data.find(b")")
         if not (i1 > 0 and i1 < i2 and i2 == len(data) - 2):
-            raise SandboxError(
-                "badly formatted data received from the sandboxed process")
-        pack_args = ['=']
+            raise SandboxError("badly formatted data received from the sandboxed process")
+        pack_args = ["="]
         codes = []
-        for c in data[i1+1:i2]:
+        for c in data[i1 + 1 : i2]:
             if isinstance(c, int):
-                c = chr(c)   # Python 3
-            if c == 'p':
+                c = chr(c)  # Python 3
+            if c == "p":
                 pack_args.append(_ptr_code)
-            elif c == 'i':
-                pack_args.append('q')
-            elif c == 'f':
-                pack_args.append('d')
-            elif c == 'v':
+            elif c == "i":
+                pack_args.append("q")
+            elif c == "f":
+                pack_args.append("d")
+            elif c == "v":
                 pass
             else:
-                raise SandboxError(
-                    "unsupported format string in parentheses: %r" % (data,))
+                raise SandboxError(f"unsupported format string in parentheses: {data!r}")
             codes.append(c)
-        unpacker = struct.Struct(''.join(pack_args))
-        decoder = unpacker, ''.join(codes)
+        unpacker = struct.Struct("".join(pack_args))
+        decoder = unpacker, "".join(codes)
 
         SandboxedIO._message_decoders[data] = decoder
         return decoder
@@ -101,9 +100,9 @@ class SandboxedIO(object):
         raw_args = iter(unpacker.unpack(self._read(unpacker.size)))
         args = []
         for c in codes:
-            if c == 'p':
+            if c == "p":
                 args.append(Ptr(next(raw_args)))
-            elif c == 'v':
+            elif c == "v":
                 args.append(None)
             else:
                 args.append(next(raw_args))
@@ -139,13 +138,13 @@ class SandboxedIO(object):
         """Write a syscall return value back to the subprocess."""
         g = self.child_stdin
         if result is None:
-            g.write(b'v')
+            g.write(b"v")
         elif isinstance(result, Ptr):
-            g.write(b'p' + _pack_one_ptr(result.addr))
+            g.write(b"p" + _pack_one_ptr(result.addr))
         elif isinstance(result, float):
-            g.write(b'f' + _pack_one_double(result))
+            g.write(b"f" + _pack_one_double(result))
         else:
-            g.write(b'i' + _pack_one_longlong(result))
+            g.write(b"i" + _pack_one_longlong(result))
         g.flush()
 
     def set_errno(self, err):

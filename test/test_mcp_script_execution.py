@@ -7,11 +7,7 @@ including fast path, review path, and blocked path execution.
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
-from unittest import mock
-
-import pytest
 
 from shannot.mcp.server_impl import ShannotMCPServer
 from shannot.mcp.types import TextContent
@@ -226,9 +222,7 @@ subprocess.call(['df', '-h'])
 """
 
         # minimal profile doesn't include ps/df
-        result_minimal = server._handle_sandbox_run(
-            {"script": script, "profile": "minimal"}
-        )
+        result_minimal = server._handle_sandbox_run({"script": script, "profile": "minimal"})
         data_minimal = json.loads(result_minimal.text)
         assert data_minimal["status"] == "pending_approval"
 

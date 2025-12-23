@@ -1,4 +1,5 @@
 """Mixin for remote file system access via SSH."""
+
 from __future__ import annotations
 
 import errno
@@ -6,7 +7,7 @@ import stat
 from io import BytesIO
 from typing import TYPE_CHECKING
 
-from .mix_vfs import FSObject, Dir, INO_COUNTER, UID, GID
+from .mix_vfs import GID, INO_COUNTER, UID, Dir, FSObject
 from .structs import new_stat
 
 if TYPE_CHECKING:
@@ -89,7 +90,7 @@ class RemoteFile(FSObject):
             try:
                 self._cached_content = self.ssh.read_file(self.remote_path)
             except OSError as e:
-                raise OSError(e.errno, f"Failed to read {self.remote_path}")
+                raise OSError(e.errno, f"Failed to read {self.remote_path}") from e
         return BytesIO(self._cached_content)
 
     def invalidate_cache(self):
@@ -127,7 +128,9 @@ class RemoteDir(FSObject):
         except OSError:
             INO_COUNTER += 1
             st_ino = INO_COUNTER
-            st_mode = self.kind | stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+            st_mode = (
+                self.kind | stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+            )
 
         if self.read_only:
             st_uid = 0
@@ -166,7 +169,7 @@ class RemoteDir(FSObject):
         try:
             remote_stat = self.ssh.stat_file(child_path)
         except OSError:
-            raise OSError(errno.ENOENT, name)
+            raise OSError(errno.ENOENT, name) from None
 
         if stat.S_ISDIR(remote_stat.st_mode):
             return RemoteDir(self.ssh, child_path, self.read_only)
@@ -226,6 +229,7 @@ class MixRemote:
 
         if not self._ssh_connection.connect():
             import sys
+
             sys.stderr.write(f"[WARN] Failed to connect to {self.remote_target}\n")
             self._ssh_connection = None
             return
@@ -252,7 +256,7 @@ class MixRemote:
         current = self.vfs_root
 
         # Create parent directories as virtual Dir objects
-        for i, part in enumerate(path_parts[:-1]):
+        for _i, part in enumerate(path_parts[:-1]):
             if hasattr(current, "entries"):
                 if part not in current.entries:
                     current.entries[part] = Dir({})

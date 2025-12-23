@@ -4,11 +4,19 @@ Platform and architecture-specific struct layouts for IPC with the
 PyPy sandbox subprocess.
 """
 
-import sys
 import platform
+import sys
 from ctypes import (
-    Structure, c_long, c_ulong, c_ushort, c_ubyte, c_char,
-    c_int, c_uint, sizeof, c_longlong
+    Structure,
+    c_char,
+    c_int,
+    c_long,
+    c_longlong,
+    c_ubyte,
+    c_uint,
+    c_ulong,
+    c_ushort,
+    sizeof,
 )
 
 ARCH = platform.machine()
@@ -16,8 +24,8 @@ IS_LINUX = sys.platform.startswith("linux")
 IS_MACOS = sys.platform == "darwin"
 
 # Constants (from dirent.h)
-DT_REG = 8   # Regular file
-DT_DIR = 4   # Directory
+DT_REG = 8  # Regular file
+DT_DIR = 4  # Directory
 
 
 # struct timespec (used in stat on Linux)
@@ -30,22 +38,24 @@ class Timespec(Structure):
 
 # Platform-specific struct dirent
 if IS_MACOS:
+
     class Dirent(Structure):
         _fields_ = [
-            ("d_ino", c_ulong),       # 8 bytes
-            ("d_reclen", c_ushort),   # 2 bytes
-            ("d_type", c_ubyte),      # 1 byte
-            ("d_namlen", c_ubyte),    # 1 byte
-            ("d_name", c_char * 256), # 256 bytes
+            ("d_ino", c_ulong),  # 8 bytes
+            ("d_reclen", c_ushort),  # 2 bytes
+            ("d_type", c_ubyte),  # 1 byte
+            ("d_namlen", c_ubyte),  # 1 byte
+            ("d_name", c_char * 256),  # 256 bytes
         ]
 else:  # Linux
+
     class Dirent(Structure):
         _fields_ = [
-            ("d_ino", c_ulong),       # 8 bytes
-            ("d_off", c_ulong),       # 8 bytes
-            ("d_reclen", c_ushort),   # 2 bytes
-            ("d_type", c_ubyte),      # 1 byte
-            ("d_name", c_char * 256), # 256 bytes (+ 5 bytes padding)
+            ("d_ino", c_ulong),  # 8 bytes
+            ("d_off", c_ulong),  # 8 bytes
+            ("d_reclen", c_ushort),  # 2 bytes
+            ("d_type", c_ubyte),  # 1 byte
+            ("d_name", c_char * 256),  # 256 bytes (+ 5 bytes padding)
         ]
 
 
@@ -77,45 +87,45 @@ elif IS_LINUX and ARCH == "aarch64":
     # Linux aarch64 - verified on Ubuntu 20.04 arm64 (128 bytes)
     class Stat(Structure):
         _fields_ = [
-            ("st_dev", c_ulong),       # 8
-            ("st_ino", c_ulong),       # 8
-            ("st_mode", c_uint),       # 4
-            ("st_nlink", c_uint),      # 4
-            ("st_uid", c_uint),        # 4
-            ("st_gid", c_uint),        # 4
-            ("st_rdev", c_ulong),      # 8
-            ("__pad1", c_ulong),       # 8
-            ("st_size", c_long),       # 8
-            ("st_blksize", c_int),     # 4
-            ("__pad2", c_int),         # 4
-            ("st_blocks", c_long),     # 8
-            ("st_atime", c_long),      # 8
-            ("st_atime_nsec", c_long), # 8
-            ("st_mtime", c_long),      # 8
-            ("st_mtime_nsec", c_long), # 8
-            ("st_ctime", c_long),      # 8
-            ("st_ctime_nsec", c_long), # 8
+            ("st_dev", c_ulong),  # 8
+            ("st_ino", c_ulong),  # 8
+            ("st_mode", c_uint),  # 4
+            ("st_nlink", c_uint),  # 4
+            ("st_uid", c_uint),  # 4
+            ("st_gid", c_uint),  # 4
+            ("st_rdev", c_ulong),  # 8
+            ("__pad1", c_ulong),  # 8
+            ("st_size", c_long),  # 8
+            ("st_blksize", c_int),  # 4
+            ("__pad2", c_int),  # 4
+            ("st_blocks", c_long),  # 8
+            ("st_atime", c_long),  # 8
+            ("st_atime_nsec", c_long),  # 8
+            ("st_mtime", c_long),  # 8
+            ("st_mtime_nsec", c_long),  # 8
+            ("st_ctime", c_long),  # 8
+            ("st_ctime_nsec", c_long),  # 8
             ("__unused", c_uint * 2),  # 8
         ]  # Total: 128 bytes
 elif IS_LINUX and ARCH == "x86_64":
     # Linux x86_64 (144 bytes)
     class Stat(Structure):
         _fields_ = [
-            ("st_dev", c_ulong),       # 8 bytes
-            ("st_ino", c_ulong),       # 8 bytes
-            ("st_nlink", c_ulong),     # 8 bytes
-            ("st_mode", c_uint),       # 4 bytes
-            ("st_uid", c_uint),        # 4 bytes
-            ("st_gid", c_uint),        # 4 bytes
-            ("_pad0", c_int),          # 4 bytes padding
-            ("st_rdev", c_ulong),      # 8 bytes
-            ("st_size", c_long),       # 8 bytes
-            ("st_blksize", c_long),    # 8 bytes
-            ("st_blocks", c_long),     # 8 bytes
-            ("st_atim", Timespec),     # 16 bytes
-            ("st_mtim", Timespec),     # 16 bytes
-            ("st_ctim", Timespec),     # 16 bytes
-            ("_reserved", c_long * 3), # 24 bytes
+            ("st_dev", c_ulong),  # 8 bytes
+            ("st_ino", c_ulong),  # 8 bytes
+            ("st_nlink", c_ulong),  # 8 bytes
+            ("st_mode", c_uint),  # 4 bytes
+            ("st_uid", c_uint),  # 4 bytes
+            ("st_gid", c_uint),  # 4 bytes
+            ("_pad0", c_int),  # 4 bytes padding
+            ("st_rdev", c_ulong),  # 8 bytes
+            ("st_size", c_long),  # 8 bytes
+            ("st_blksize", c_long),  # 8 bytes
+            ("st_blocks", c_long),  # 8 bytes
+            ("st_atim", Timespec),  # 16 bytes
+            ("st_mtim", Timespec),  # 16 bytes
+            ("st_ctim", Timespec),  # 16 bytes
+            ("_reserved", c_long * 3),  # 24 bytes
         ]  # Total: 144 bytes
 else:
     raise NotImplementedError(f"Unsupported platform: {sys.platform}/{ARCH}")
@@ -176,13 +186,14 @@ def pack_gid_t(gid: int) -> bytes:
 # Runtime validation of struct sizes
 _EXPECTED_SIZES = {
     ("linux", "aarch64"): {"stat": 128, "dirent": 280, "timeval": 16},
-    ("linux", "x86_64"):  {"stat": 144, "dirent": 280, "timeval": 16},
+    ("linux", "x86_64"): {"stat": 144, "dirent": 280, "timeval": 16},
     # macOS sizes TBD
 }
 
 
 def _validate():
     import warnings
+
     key = ("linux" if IS_LINUX else sys.platform, ARCH)
     if key not in _EXPECTED_SIZES:
         warnings.warn(
@@ -190,16 +201,18 @@ def _validate():
             "Local sandbox may behave incorrectly. "
             "Use --target for verified remote execution.",
             RuntimeWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         return
     expected = _EXPECTED_SIZES[key]
     actual_stat = sizeof(Stat)
     actual_dirent = sizeof(Dirent)
-    assert actual_stat == expected["stat"], \
+    assert actual_stat == expected["stat"], (
         f"stat: got {actual_stat}, expected {expected['stat']} on {key}"
-    assert actual_dirent == expected["dirent"], \
+    )
+    assert actual_dirent == expected["dirent"], (
         f"dirent: got {actual_dirent}, expected {expected['dirent']} on {key}"
+    )
 
 
 _validate()

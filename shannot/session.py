@@ -1,4 +1,5 @@
 """Session management for script-level command approval."""
+
 from __future__ import annotations
 
 import json
@@ -220,6 +221,7 @@ def execute_session(session: Session) -> int:
     # Handle remote sessions
     if session.is_remote():
         from .remote import execute_remote_session
+
         return execute_remote_session(session)
 
     # Local execution

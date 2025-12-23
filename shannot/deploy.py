@@ -1,4 +1,5 @@
 """Deploy shannot to remote targets."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,7 @@ from .config import RELEASE_PATH_ENV, VERSION, get_remote_deploy_dir
 from .ssh import SSHConnection
 
 if TYPE_CHECKING:
-    from typing import Optional
+    pass
 
 
 def detect_arch(ssh: SSHConnection) -> str:
@@ -42,7 +43,7 @@ def is_deployed(ssh: SSHConnection) -> bool:
     return result.returncode == 0
 
 
-def get_deployed_version(ssh: SSHConnection) -> Optional[str]:
+def get_deployed_version(ssh: SSHConnection) -> str | None:
     """Get deployed shannot version on remote, or None if not deployed."""
     deploy_dir = get_remote_deploy_dir()
     result = ssh.run(f"{deploy_dir}/shannot --version 2>/dev/null || echo ''")

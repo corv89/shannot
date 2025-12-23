@@ -1,4 +1,5 @@
 """Tests for remote configuration management."""
+
 import shutil
 import tempfile
 from pathlib import Path
@@ -38,9 +39,7 @@ class TestRemotesConfig:
     def setup_method(self):
         """Create temp config directory."""
         self.tmpdir = tempfile.mkdtemp()
-        self.config_dir_patch = mock.patch(
-            "shannot.config.CONFIG_DIR", Path(self.tmpdir)
-        )
+        self.config_dir_patch = mock.patch("shannot.config.CONFIG_DIR", Path(self.tmpdir))
         self.config_dir_patch.start()
 
     def teardown_method(self):
@@ -57,9 +56,7 @@ class TestRemotesConfig:
         """Round-trip save and load."""
         remotes = {
             "prod": Remote(name="prod", host="prod.example.com", user="admin", port=22),
-            "staging": Remote(
-                name="staging", host="staging.example.com", user="deploy", port=2222
-            ),
+            "staging": Remote(name="staging", host="staging.example.com", user="deploy", port=2222),
         }
         save_remotes(remotes)
         loaded = load_remotes()
@@ -117,9 +114,7 @@ class TestResolveTarget:
     def setup_method(self):
         """Create temp config directory."""
         self.tmpdir = tempfile.mkdtemp()
-        self.config_dir_patch = mock.patch(
-            "shannot.config.CONFIG_DIR", Path(self.tmpdir)
-        )
+        self.config_dir_patch = mock.patch("shannot.config.CONFIG_DIR", Path(self.tmpdir))
         self.config_dir_patch.start()
 
     def teardown_method(self):
