@@ -1,132 +1,428 @@
 # Troubleshooting Guide
 
-This guide covers common issues when deploying shannot and their solutions.
+Common issues when using Shannot and their solutions.
 
-## User Namespace Permission Issues
+## PyPy Sandbox Issues
 
-### Symptoms
+### "PyPy sandbox not found"
 
+**Symptoms:**
 ```
-ERROR: Sandbox error: Sandbox command failed with exit code 1
-Stderr: bwrap: setting up uid map: Permission denied
-```
-
-or
-
-```
-ERROR: Sandbox error: Sandbox command failed with exit code 1
-Stderr: bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted
+Error: PyPy sandbox binary not found
 ```
 
-### Root Cause
+**Solutions:**
 
-Unprivileged user namespace creation is blocked by the kernel or security policies. This is required by bubblewrap to create isolated sandbox environments.
+1. Run the setup command:
+   ```bash
+   shannot setup
+   ```
 
-### Solutions by Distribution
+2. Check if pypy-sandbox is in PATH:
+   ```bash
+   which pypy-sandbox
+   ```
 
-#### Ubuntu 24.04+ (AppArmor Restriction)
+3. Specify path explicitly:
+   ```bash
+   shannot run --pypy-sandbox /path/to/pypy-sandbox script.py
+   ```
 
-Ubuntu 24.04 and newer restrict unprivileged user namespaces via AppArmor for security reasons.
+### "Runtime not installed"
 
-**Temporary fix:**
+**Symptoms:**
+```
+Error: Runtime not installed. Run 'shannot setup' first.
+```
+
+**Solution:**
 ```bash
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+# Install runtime
+shannot setup
+
+# Force reinstall
+shannot setup --force
+
+# Check status
+shannot setup --status
 ```
 
-**Permanent fix:**
+### "lib-python not found"
+
+**Symptoms:**
+```
+Error: lib-python directory not found at expected location
+```
+
+**Solution:**
 ```bash
-echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+# Reinstall runtime
+shannot setup --force
+
+# Or specify path explicitly
+shannot run --lib-path /path/to/runtime script.py
 ```
 
-**Verify it works:**
+## Python 3.6 Compatibility
+
+### Syntax Errors
+
+**Symptoms:**
+```
+SyntaxError: invalid syntax
+```
+
+**Cause:** Using Python 3.7+ syntax in sandboxed scripts.
+
+**Common Issues:**
+
+1. **Match statements (Python 3.10+)**
+   ```python
+   # NOT SUPPORTED
+   match value:
+       case 1: print("one")
+
+   # Use instead
+   if value == 1:
+       print("one")
+   ```
+
+2. **Union type syntax (Python 3.10+)**
+   ```python
+   # NOT SUPPORTED
+   def process(x: int | str): pass
+
+   # Use instead
+   from typing import Union
+   def process(x: Union[int, str]): pass
+   ```
+
+3. **Walrus operator (Python 3.8+)**
+   ```python
+   # NOT SUPPORTED
+   if (n := len(items)) > 10: pass
+
+   # Use instead
+   n = len(items)
+   if n > 10: pass
+   ```
+
+4. **dataclasses (Python 3.7+)**
+   ```python
+   # NOT SUPPORTED
+   from dataclasses import dataclass
+   @dataclass
+   class Point:
+       x: int
+       y: int
+
+   # Use instead
+   from collections import namedtuple
+   Point = namedtuple('Point', ['x', 'y'])
+   ```
+
+### Module Not Found
+
+**Symptoms:**
+```
+ModuleNotFoundError: No module named 'xxx'
+```
+
+**Cause:** Third-party modules are not available in the sandbox.
+
+**Solution:** Only use Python 3.6 stdlib modules. The sandbox does not have pip access.
+
+## Session Issues
+
+### "Session not found"
+
+**Symptoms:**
+```
+Error: Session 'xxx' not found
+```
+
+**Causes:**
+1. Session ID is incorrect
+2. Session has expired (1-hour TTL)
+3. Session was already executed
+
+**Solutions:**
 ```bash
-shannot run ls /
+# List all sessions
+shannot approve list
+
+# Check session history
+shannot approve history
+
+# Create new session
+shannot run script.py
 ```
 
-#### Other Distributions
+### "Session expired"
 
-**Check current status:**
+**Symptoms:**
+```
+Error: Session 'xxx' has expired
+```
+
+**Cause:** Sessions expire after 1 hour.
+
+**Solution:** Create a new session:
 ```bash
-# Should return 1 (enabled)
-cat /proc/sys/kernel/unprivileged_userns_clone
-
-# Should return a positive number
-cat /proc/sys/user/max_user_namespaces
+shannot run script.py
 ```
 
-**Enable if needed:**
+### "Session already executed"
+
+**Symptoms:**
+```
+Error: Session 'xxx' was already executed
+```
+
+**Solution:** Create a new session for re-execution:
 ```bash
-# Temporary
-sudo sysctl -w kernel.unprivileged_userns_clone=1
-
-# Permanent
-echo 'kernel.unprivileged_userns_clone=1' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+shannot run script.py
 ```
 
-### Why Not Use Setuid Bubblewrap?
+## Remote Execution Issues
 
-You might wonder why we don't just make bubblewrap setuid root, which would bypass these restrictions.
+### SSH Connection Failed
 
-**Security Risk:**
-- Setuid root binaries run with full system privileges
-- Any vulnerability in bubblewrap = instant root access
-- Goes against the principle of least privilege
-- Modern security best practices avoid setuid where possible
-
-**Philosophy:**
-- Shannot is designed for **read-only diagnostics** - we want isolation *from* privilege
-- Defense in depth: even if the sandbox escapes, the attacker only has user permissions
-- Unprivileged user namespaces are the modern, secure approach
-
-**Recommendation:**
-Configure your system properly (one-time setup) rather than introducing setuid risk.
-
-## Container/VM Environment Issues
-
-### Symptoms
-
+**Symptoms:**
 ```
-ERROR: Sandbox error: Sandbox command failed with exit code 1
-Stderr: bwrap: pivot_root: Operation not permitted
+Error: SSH connection failed: Connection refused
+Error: SSH connection failed: Permission denied
 ```
 
-### Root Cause
+**Solutions:**
 
-Running in a restricted container environment (Docker, Kubernetes, GitHub Codespaces) that doesn't allow the required Linux capabilities.
+1. Test SSH manually:
+   ```bash
+   ssh user@host
+   ```
 
-### Solutions
+2. Check SSH key permissions:
+   ```bash
+   chmod 600 ~/.ssh/id_rsa
+   chmod 700 ~/.ssh
+   ```
 
-1. **Best:** Use a real Linux VM (AWS EC2, GCP, Azure, local VM)
-2. **Good:** Use WSL2 on Windows (supports user namespaces)
-3. **Alternative:** Run on native Linux (Ubuntu, Fedora, etc.)
-4. **Not Recommended:** Enable privileged containers (security risk)
+3. Verify host in known_hosts:
+   ```bash
+   ssh-keygen -R host
+   ssh user@host  # Accept new key
+   ```
+
+4. Check SSH agent:
+   ```bash
+   eval $(ssh-agent)
+   ssh-add ~/.ssh/key
+   ```
+
+### Remote Deployment Failed
+
+**Symptoms:**
+```
+Error: Failed to deploy to remote
+```
+
+**Solutions:**
+
+1. Check remote access:
+   ```bash
+   ssh user@host "ls -la /tmp/"
+   ```
+
+2. Check disk space on remote:
+   ```bash
+   ssh user@host "df -h /tmp"
+   ```
+
+3. Manual deployment check:
+   ```bash
+   ssh user@host "test -x /tmp/shannot-v0.5.1/shannot && echo OK"
+   ```
+
+### Remote Target Not Found
+
+**Symptoms:**
+```
+Error: Remote 'xxx' not found in configuration
+```
+
+**Solutions:**
+
+1. List configured remotes:
+   ```bash
+   shannot remote list
+   ```
+
+2. Add the remote:
+   ```bash
+   shannot remote add name user@host
+   ```
+
+## Profile Issues
+
+### Profile Not Loading
+
+**Symptoms:**
+```
+Using default profile (no custom profile found)
+```
+
+**Solutions:**
+
+1. Check profile location:
+   ```bash
+   ls -la ~/.config/shannot/profile.json
+   ls -la .shannot/profile.json
+   ```
+
+2. Verify JSON syntax:
+   ```bash
+   python3 -m json.tool ~/.config/shannot/profile.json
+   ```
+
+3. Check current profile:
+   ```bash
+   shannot status
+   ```
+
+### Command Not Auto-Approved
+
+**Symptoms:** Commands that should be auto-approved require manual approval.
+
+**Causes:**
+1. Command not in `auto_approve` list
+2. Using full path instead of base name
+
+**Solution:** Use base command names in profiles:
+```json
+{
+  "auto_approve": ["cat", "ls", "grep"]
+}
+```
+
+Not:
+```json
+{
+  "auto_approve": ["/usr/bin/cat", "/usr/bin/ls"]
+}
+```
+
+### Command Unexpectedly Blocked
+
+**Symptoms:** Command is blocked even though it's not in `always_deny`.
+
+**Cause:** Prefix matching in `always_deny`.
+
+**Example:**
+```json
+{
+  "always_deny": ["rm"]  // Blocks ALL rm commands
+}
+```
+
+**Solution:** Be specific:
+```json
+{
+  "always_deny": ["rm -rf /", "rm -rf ~"]
+}
+```
+
+## TUI Issues
+
+### TUI Not Rendering Correctly
+
+**Symptoms:**
+- Garbled display
+- Missing colors
+- Cursor positioning issues
+
+**Solutions:**
+
+1. Check terminal type:
+   ```bash
+   echo $TERM
+   ```
+
+2. Try a different terminal emulator
+
+3. Disable colors:
+   ```bash
+   shannot run script.py --nocolor
+   ```
+
+### Keyboard Input Not Working
+
+**Symptoms:** Arrow keys or vim keys don't work.
+
+**Solution:** Ensure terminal supports raw mode. Some terminals or SSH configurations may interfere.
+
+## MCP Issues
+
+### MCP Server Not Starting
+
+**Symptoms:**
+- Claude Desktop can't connect to shannot
+- "Server not responding" errors
+
+**Solutions:**
+
+1. Test MCP server manually:
+   ```bash
+   shannot-mcp --verbose
+   ```
+
+2. Check Claude Desktop config:
+   ```bash
+   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
+   ```
+
+3. Reinstall MCP configuration:
+   ```bash
+   shannot mcp install
+   ```
+
+4. Restart Claude Desktop completely
+
+### MCP Permission Errors
+
+**Symptoms:**
+- Operations fail with permission denied
+- Sandbox can't access files
+
+**Solution:** Check that the runtime is installed and accessible:
+```bash
+shannot setup
+shannot status
+```
 
 ## Getting Help
 
-If you're still stuck after trying these solutions:
+If you're still stuck:
 
-1. Check kernel version: `uname -r`
-2. Check distribution: `cat /etc/os-release`
-3. Test unshare directly: `unshare --user --map-root-user whoami`
-4. Check AppArmor: `sudo aa-status | grep unprivileged`
-5. Open an issue: https://github.com/corv89/shannot/issues
+1. Run diagnostics:
+   ```bash
+   shannot status
+   shannot setup --status
+   ```
 
-Include the output of all the above commands in your issue report.
+2. Enable debug mode:
+   ```bash
+   shannot run script.py --debug
+   ```
 
-## Security Considerations
+3. Check version:
+   ```bash
+   shannot --version
+   ```
 
-When modifying system security settings:
+4. Open an issue: https://github.com/corv89/shannot/issues
 
-- **Understand the implications** - disabling security features reduces system security
-- **Scope appropriately** - apply changes only where needed (dev VMs, not production servers)
-- **Document changes** - keep track of what you've modified and why
-- **Review periodically** - security policies evolve, revisit your configuration
-
-The solutions in this guide are appropriate for:
-- Development environments
-- Testing VMs
-- Controlled deployment scenarios
-
-For production systems, consult your security team before modifying kernel security settings.
+Include in your issue:
+- Output of `shannot status`
+- Output of `shannot --version`
+- Error message and stack trace
+- Steps to reproduce

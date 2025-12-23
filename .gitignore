@@ -32,6 +32,7 @@ env/
 # IDEs
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -43,6 +44,9 @@ env/
 htmlcov/
 .tox/
 .nox/
+
+# Linting
+.ruff_cache/
 
 # Type checking
 .mypy_cache/

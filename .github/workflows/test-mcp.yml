@@ -9,8 +9,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 jobs:
   test-mcp:
@@ -18,11 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: python:${{ matrix.python-version }}-slim
-      options: --privileged
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout code
@@ -31,8 +28,7 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y bubblewrap git curl
-          bwrap --version
+          apt-get install -y git curl
 
       - name: Install mcp-probe
         run: |
@@ -72,141 +68,53 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,mcp,remote]"
+          pip install -e ".[dev]"
 
       - name: Verify shannot-mcp is installed
         run: |
           which shannot-mcp
           shannot-mcp --help
 
-      - name: Run MCP integration tests (pytest)
+      - name: Run MCP protocol compliance tests
         run: |
-          pytest tests/test_mcp_integration.py -v --tb=short
+          pytest test/test_mcp_integration.py -v --tb=short --junitxml=mcp-results.xml
 
-      - name: Run MCP server tests (Python script)
-        run: |
-          python scripts/test_mcp_server.py \
-            --report-dir ./mcp-reports \
-            --timeout 120 \
-            --no-color
-
-      - name: Upload MCP test reports
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-test-reports-py${{ matrix.python-version }}
-          path: ./mcp-reports/
+          name: mcp-test-results-py${{ matrix.python-version }}
+          path: mcp-results.xml
           if-no-files-found: warn
 
-      - name: Comment test results on PR
-        if: matrix.python-version == '3.11' && github.event_name == 'pull_request' && always()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const fs = require('fs');
-            const path = './mcp-reports/test-summary.md';
-
-            if (!fs.existsSync(path)) {
-              console.log('No test summary found, skipping comment');
-              return;
-            }
-
-            const summary = fs.readFileSync(path, 'utf8');
-
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## MCP Server Test Results\n\n${summary}`
-            });
-
-  test-mcp-with-config:
-    name: Test MCP Server with Config
+  test-mcp-unit:
+    name: MCP Unit Tests
     runs-on: ubuntu-latest
     container:
       image: python:3.11-slim
-      options: --privileged
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Install system dependencies
+      - name: Install git
         run: |
           apt-get update
-          apt-get install -y bubblewrap git curl
-          bwrap --version
-
-      - name: Install mcp-probe
-        run: |
-          # Detect architecture
-          ARCH=$(uname -m)
-          case $ARCH in
-            x86_64)
-              PLATFORM="x86_64-unknown-linux-gnu"
-              ;;
-            aarch64)
-              PLATFORM="aarch64-unknown-linux-gnu"
-              ;;
-            *)
-              echo "Unsupported architecture: $ARCH"
-              exit 1
-              ;;
-          esac
-
-          # Get latest version from GitHub API
-          LATEST_VERSION=$(curl -s https://api.github.com/repos/conikeec/mcp-probe/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-
-          if [ -z "$LATEST_VERSION" ]; then
-            echo "Failed to get latest version, using v0.3.0"
-            LATEST_VERSION="v0.3.0"
-          fi
-
-          echo "Installing mcp-probe ${LATEST_VERSION} for ${PLATFORM}"
-
-          # Download and install
-          DOWNLOAD_URL="https://github.com/conikeec/mcp-probe/releases/download/${LATEST_VERSION}/mcp-probe-${PLATFORM}.tar.gz"
-          curl -L -o mcp-probe.tar.gz "$DOWNLOAD_URL"
-          tar -xzf mcp-probe.tar.gz
-          chmod +x mcp-probe
-          mv mcp-probe /usr/local/bin/
-          mcp-probe --version
+          apt-get install -y git
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,mcp,remote]"
+          pip install -e ".[dev]"
 
-      - name: Create test config file
+      - name: Run MCP unit tests
         run: |
-          mkdir -p ~/.config/shannot
-          cat > ~/.config/shannot/config.toml << 'EOF'
-          default_executor = "local"
+          pytest test/test_mcp*.py -v --tb=short -m "not integration" --junitxml=mcp-unit-results.xml
 
-          [executor.local]
-          type = "local"
-          EOF
-
-      - name: Test with local executor target
-        run: |
-          # Test that server starts with --target local
-          timeout 30 shannot-mcp --target local &
-          SERVER_PID=$!
-          sleep 5
-          kill $SERVER_PID || true
-          echo "Server started successfully with --target local"
-
-      - name: Run comprehensive MCP tests
-        run: |
-          python scripts/test_mcp_server.py \
-            --report-dir ./mcp-reports-config \
-            --timeout 120 \
-            --no-color
-
-      - name: Upload test reports
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mcp-test-reports-with-config
-          path: ./mcp-reports-config/
+          name: mcp-unit-test-results
+          path: mcp-unit-results.xml
           if-no-files-found: warn

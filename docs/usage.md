@@ -1,510 +1,365 @@
 # Usage Guide
 
-Complete guide to using Shannot for safe, read-only command execution.
+Complete guide to using Shannot for safe, sandboxed script execution.
 
 ## Quick Start
 
 ```bash
-# Run a command in the sandbox
-shannot ls /
+# Install PyPy runtime (one-time)
+shannot setup
 
-# Check version
-shannot --version
+# Run a script in the sandbox
+shannot run script.py
 
-# Verify sandbox is working
-shannot verify
+# Review and approve pending operations
+shannot approve
 
-# Export current profile configuration
-shannot export
-
-# Use custom profile
-shannot --profile /path/to/profile.json cat /etc/os-release
-
-# Get help
-shannot --help
+# Check system status
+shannot status
 ```
 
-## Command-Line Interface
+## CLI Commands
 
-### Basic Syntax
+### shannot setup
+
+Install PyPy stdlib for sandboxing.
 
 ```bash
-shannot [OPTIONS] COMMAND [ARGS...]
+shannot setup              # Install runtime
+shannot setup --force      # Force reinstall
+shannot setup --status     # Check if installed
+shannot setup --remove     # Remove installed runtime
+shannot setup --quiet      # Suppress progress output
 ```
 
-### Global Options
+### shannot run
+
+Execute a Python script in the PyPy sandbox.
 
 ```bash
-Options:
-  --version              Show version and exit
-  --verbose, -v          Enable verbose logging
-  --profile PATH, -p     Path to sandbox profile (default: auto-detect)
-  --target NAME, -t      Target executor for remote execution
-  --help, -h            Show help message
+shannot run script.py                    # Basic execution
+shannot run script.py --tmp=/tmp/work    # Map real directory to /tmp
+shannot run script.py --dry-run          # Queue operations without executing
+shannot run script.py --target prod      # Execute on remote target
 ```
 
-### Examples
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--pypy-sandbox PATH` | Path to pypy-sandbox executable |
+| `--lib-path PATH` | Path to lib-python and lib_pypy |
+| `--tmp DIR` | Real directory mapped to virtual /tmp |
+| `--dry-run` | Log commands without executing |
+| `--script-name NAME` | Human-readable session name |
+| `--analysis DESC` | Description of script purpose |
+| `--target NAME` | SSH target for remote execution |
+| `--nocolor` | Disable ANSI coloring |
+| `--raw-stdout` | Disable output sanitization |
+| `--debug` | Enable debug mode |
+
+### shannot approve
+
+Interactive TUI for reviewing and approving pending sessions.
 
 ```bash
-# List root directory
-shannot ls /
-
-# Check system memory
-shannot cat /proc/meminfo
-
-# Search for files
-shannot find /etc -name "*.conf"
-
-# Use custom profile
-shannot --profile ~/.config/shannot/diagnostics.json df -h
-
-# Run on remote system
-shannot --target production df -h
+shannot approve                    # Launch TUI
+shannot approve list               # List pending sessions
+shannot approve show SESSION_ID    # Show session details
+shannot approve history            # Show recent sessions
 ```
 
-## Commands
+**TUI Controls:**
 
-### Direct Command Execution
+| Key | Action |
+|-----|--------|
+| `j/k` or `↑/↓` | Navigate up/down |
+| `Enter` | View details / Execute |
+| `Space` | Toggle selection |
+| `x` | Execute selected sessions |
+| `r` | Reject selected sessions |
+| `a` | Select all |
+| `n` | Deselect all |
+| `q` / `Esc` | Quit / Go back |
 
-Execute commands directly in the sandbox (recommended):
+### shannot execute
+
+Execute a previously created session directly.
 
 ```bash
-# Simple commands
-shannot ls /
-shannot cat /etc/os-release
-shannot df -h
-
-# Commands with arguments
-shannot grep -r "error" /var/log
-shannot find /etc -name "*.conf"
-
-# Note: No shell interpolation - each invocation is isolated
+shannot execute --session-id SESSION_ID
+shannot execute --session-id SESSION_ID --json-output
 ```
 
-### verify - Verify Sandbox
+This is primarily used by the remote execution protocol.
 
-Test that the sandbox is configured correctly and working:
+### shannot remote
+
+Manage SSH remote targets.
 
 ```bash
-shannot verify
-
-# Verbose output
-shannot --verbose verify
-
-# With custom profile
-shannot --profile /etc/shannot/custom.json verify
+shannot remote add NAME [USER@]HOST    # Add remote target
+shannot remote list                     # List configured targets
+shannot remote test NAME                # Test connection
+shannot remote remove NAME              # Remove target
 ```
 
-This command checks:
-- Bubblewrap is installed and accessible
-- Profile is valid and can be loaded
-- Basic commands execute successfully
-- Write protection is enforced
-- Sandbox isolation is working
-
-### export - Export Profile
-
-Display the active profile configuration as JSON:
+**Add options:**
 
 ```bash
-# Show current profile
-shannot export
-
-# Save to file
-shannot export > my-profile.json
-
-# Export specific profile
-shannot --profile /etc/shannot/custom.json export
-
-# Pretty-print with jq
-shannot export | jq .
+shannot remote add prod \
+  --host prod.example.com \
+  --user deploy \
+  --port 22
 ```
 
-## Profile Selection
+### shannot status
 
-Shannot searches for profiles in this order:
-
-1. `--profile` command-line argument (must be full path with `.json`)
-2. `$SANDBOX_PROFILE` environment variable (must be full path with `.json`)
-3. `~/.config/shannot/minimal.json` (preferred default)
-4. `~/.config/shannot/profile.json` (legacy user config)
-5. `profiles/minimal.json` (bundled with shannot)
-6. `/etc/shannot/minimal.json` (system-wide)
-7. `/etc/shannot/profile.json` (legacy system config)
-
-**Note:** Profile names must include the `.json` extension and can be absolute or relative paths.
+Show system health and configuration status.
 
 ```bash
-# Explicit profile (full path)
-shannot --profile /etc/shannot/diagnostics.json ls /
-
-# Relative path (from current directory)
-shannot --profile ./custom-profile.json ls /
-
-# User config directory
-shannot --profile ~/.config/shannot/minimal.json ls /
-
-# Environment variable
-export SANDBOX_PROFILE=~/.config/shannot/minimal.json
-shannot ls /
-
-# Use default (auto-discovered from search order above)
-shannot ls /
+shannot status             # Full status
+shannot status --runtime   # Runtime status only
+shannot status --targets   # Remote targets only
 ```
+
+## Session Workflow
+
+Shannot uses a session-based approval workflow for subprocess execution:
+
+### 1. Dry-Run Phase
+
+When a script runs in the sandbox, subprocess calls are captured but not executed:
+
+```python
+# script.py
+import subprocess
+subprocess.call(['df', '-h'])      # Captured, not executed
+subprocess.call(['rm', '-rf', '/']) # Captured, blocked by profile
+```
+
+```bash
+shannot run script.py
+# Output: Session created: 20250115-check-disk-a3f2
+```
+
+### 2. Review Phase
+
+Use the interactive TUI to review captured operations:
+
+```bash
+shannot approve
+```
+
+The TUI shows:
+- Pending subprocess commands
+- Which commands match auto_approve (will execute immediately)
+- Which commands match always_deny (will be blocked)
+- Which commands require manual approval
+
+### 3. Execute Phase
+
+After approval, operations execute on the host system:
+
+```bash
+# From TUI: press 'x' to execute selected sessions
+# Or directly:
+shannot approve show SESSION_ID    # Review details
+# Then press 'x' in TUI
+```
+
+## Approval Profiles
+
+Profiles control which commands execute automatically vs. require approval.
+
+### Profile Structure
+
+```json
+{
+  "auto_approve": [
+    "cat", "ls", "find", "grep", "head", "tail", "df", "free"
+  ],
+  "always_deny": [
+    "rm -rf /",
+    "dd if=/dev/zero",
+    ":(){ :|:& };:"
+  ]
+}
+```
+
+### Profile Locations
+
+1. `.shannot/profile.json` (project-local, highest priority)
+2. `~/.config/shannot/profile.json` (global)
+3. Built-in default profile
+
+### Command Matching
+
+Commands are matched by their base name (path stripped):
+
+```python
+subprocess.call(['/usr/bin/cat', '/etc/passwd'])  # Matches "cat"
+subprocess.call(['cat', '/etc/passwd'])           # Matches "cat"
+```
+
+See [Profile Configuration](profiles.md) for details.
 
 ## Remote Execution
 
-Shannot can execute commands on remote Linux systems via SSH.
+Execute sandboxed scripts on remote Linux hosts via SSH.
 
 ### Setup Remote Target
 
 ```bash
-# Add a remote server
-shannot remote add myserver server.example.com
-
-# Add with authentication details
-shannot remote add prod \
-  --host prod.example.com \
-  --user readonly \
-  --key ~/.ssh/prod_key \
-  --profile minimal
-
-# List configured remotes
-shannot remote list
+# Add remote
+shannot remote add prod user@prod.example.com
 
 # Test connection
-shannot remote test myserver
+shannot remote test prod
 ```
 
-### Run Commands on Remote
+### Run on Remote
 
 ```bash
-# Basic usage
-shannot --target myserver df -h
-shannot -t myserver cat /etc/os-release
+# Execute script on remote
+shannot run script.py --target prod
 
-# Use short form
-shannot -t prod ls /var/log
-
-# Combine with custom profile
-shannot -t prod --profile diagnostics.json df -h
-
-# Multiple commands on same remote
-shannot -t myserver df -h
-shannot -t myserver free -h
-shannot -t myserver uptime
+# The workflow is the same:
+# 1. Script runs in sandbox on remote
+# 2. Operations captured in session
+# 3. Review with `shannot approve`
+# 4. Execute approved operations
 ```
 
-### Common Remote Scenarios
+### Auto-Deployment
 
-```bash
-# Check disk space on all servers
-for server in prod staging dev; do
-  echo "=== $server ==="
-  shannot -t $server df -h
-done
+When executing on a remote for the first time, Shannot automatically:
+1. Deploys itself to the remote (`/tmp/shannot-v{version}/`)
+2. Sets up the PyPy runtime
+3. Executes the sandboxed script
 
-# Compare configurations across environments
-shannot -t prod cat /etc/app/config.yaml > prod.yaml
-shannot -t staging cat /etc/app/config.yaml > staging.yaml
-diff prod.yaml staging.yaml
+No manual installation on remotes is required.
 
-# Monitor logs on remote server
-shannot -t prod tail -n 100 /var/log/app/error.log
+## Python 3.6 Compatibility
 
-# Check system health
-shannot -t prod df -h
-shannot -t prod free -h
-shannot -t prod uptime
+**Important:** Sandboxed scripts run in PyPy's Python 3.6 environment.
+
+### Supported Syntax
+
+```python
+# OK: f-strings (Python 3.6+)
+print(f"Value: {x}")
+
+# OK: Basic type annotations
+def greet(name: str) -> str:
+    return f"Hello, {name}"
 ```
 
-### Remove Remote Target
+### Not Supported
 
-```bash
-# Remove a remote
-shannot remote remove myserver
+```python
+# NOT OK: Match statements (Python 3.10+)
+match value:
+    case 1: print("one")
 
-# Or use alias
-shannot remote rm myserver
+# NOT OK: Union type syntax (Python 3.10+)
+def process(x: int | str): pass
+
+# NOT OK: Walrus operator (Python 3.8+)
+if (n := len(items)) > 10: pass
+
+# NOT OK: dataclasses (Python 3.7+)
+from dataclasses import dataclass
+```
+
+### Workarounds
+
+```python
+# Instead of dataclasses, use namedtuple
+from collections import namedtuple
+Point = namedtuple('Point', ['x', 'y'])
+
+# Instead of union types, use comments
+def process(x):  # type: (Union[int, str]) -> None
+    pass
 ```
 
 ## Common Use Cases
 
 ### System Diagnostics
 
-```bash
-# Check disk usage
-shannot df -h
+```python
+# diagnostics.py
+import subprocess
 
-# View memory info
-shannot cat /proc/meminfo
+print("=== Disk Usage ===")
+subprocess.call(['df', '-h'])
 
-# Check CPU info
-shannot cat /proc/cpuinfo
+print("\n=== Memory ===")
+with open('/proc/meminfo') as f:
+    for line in f.readlines()[:5]:
+        print(line.strip())
 
-# List running processes (limited view due to PID namespace)
-shannot ps aux
-
-# Check system load
-shannot uptime
-
-# View network interfaces (read-only)
-shannot ip addr show
+print("\n=== Processes ===")
+subprocess.call(['ps', 'aux', '--sort=-pcpu'])
 ```
 
-### File Inspection
-
 ```bash
-# Read configuration files
-shannot cat /etc/os-release
-shannot cat /etc/fstab
-
-# Search for patterns
-shannot grep -r "error" /var/log
-
-# Find files
-shannot find /etc -name "*.conf"
-
-# Check file permissions
-shannot ls -la /etc/passwd
+shannot run diagnostics.py
+shannot approve  # Review and execute
 ```
 
 ### Log Analysis
 
-```bash
-# View recent logs
-shannot tail -n 100 /var/log/messages
+```python
+# analyze_logs.py
+import subprocess
 
-# Search logs
-shannot grep "ERROR" /var/log/syslog
-
-# Count log entries
-shannot wc -l /var/log/*.log
+# These commands are typically auto-approved
+subprocess.call(['grep', 'ERROR', '/var/log/app.log'])
+subprocess.call(['tail', '-n', '100', '/var/log/syslog'])
 ```
 
-### Kernel Log Analysis
+### Configuration Inspection
 
-The systemd profile includes journalctl for accessing kernel logs:
+```python
+# check_config.py
+import os
 
-```bash
-# View kernel logs (equivalent to dmesg)
-shannot --profile systemd journalctl -k
+# Read system configuration
+with open('/etc/os-release') as f:
+    print(f.read())
 
-# Alternative syntax (--dmesg is equivalent to -k)
-shannot --profile systemd journalctl --dmesg
-
-# Last hour of kernel messages
-shannot --profile systemd journalctl -k --since "1 hour ago"
-
-# Kernel errors only
-shannot --profile systemd journalctl -k -p err
-
-# Current boot kernel logs
-shannot --profile systemd journalctl -k -b 0
-
-# Previous boot kernel logs
-shannot --profile systemd journalctl -k -b -1
-
-# Search for hardware errors
-shannot --profile systemd journalctl -k | grep -i "error\|fail"
-
-# Check for disk issues
-shannot --profile systemd journalctl -k | grep -i "ata\|scsi\|disk"
-
-# Memory-related kernel messages
-shannot --profile systemd journalctl -k | grep -i "oom\|memory"
-
-# Network hardware issues
-shannot --profile systemd journalctl -k | grep -i "eth\|wlan"
-
-# Combined filters: recent boot errors
-shannot --profile systemd journalctl -k -b 0 -p err
-```
-
-**Why journalctl instead of dmesg?**
-
-- `dmesg` requires `CAP_SYSLOG` capability (restricted in sandbox)
-- `journalctl -k` reads from journal files (accessible with proper permissions)
-- `journalctl --dmesg` is equivalent to `journalctl -k`
-- Both access the same kernel ring buffer data
-- journalctl provides better filtering and time-based queries
-
-**Setup for Full Access:**
-
-For complete access to kernel logs, add your user to the `systemd-journal` group:
-
-```bash
-sudo usermod -aG systemd-journal $USER
-# Log out and back in for changes to take effect
-```
-
-### Service Discovery Without D-Bus
-
-The systemd profile uses **filesystem-based service discovery** for enhanced security. Traditional `systemctl` commands require D-Bus access, which has been removed from the profile because D-Bus provides two-way IPC that could be used to modify system state.
-
-Instead, you can discover and monitor services using read-only filesystem methods:
-
-#### List Running Services
-
-```bash
-# List all running services via cgroup filesystem
-shannot --profile systemd ls -1 /sys/fs/cgroup/system.slice/ | grep '\.service$'
-
-# Use systemd-cgls for hierarchical view
-shannot --profile systemd systemd-cgls /sys/fs/cgroup/system.slice
-
-# Cross-reference with services that have logged
-shannot --profile systemd journalctl -F _SYSTEMD_UNIT | grep '\.service$'
-```
-
-#### Check Service Resource Usage
-
-```bash
-# Check if a service is running
-shannot --profile systemd test -d /sys/fs/cgroup/system.slice/nginx.service && echo "Running" || echo "Not Running"
-
-# Get service PIDs
-shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/cgroup.procs
-
-# Check memory usage (in bytes)
-shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/memory.current
-
-# Check CPU statistics
-shannot --profile systemd cat /sys/fs/cgroup/system.slice/nginx.service/cpu.stat
-
-# Monitor all services with resource usage
-shannot --profile systemd systemd-cgtop --depth=3 -n 1
-```
-
-#### Find Failed Services
-
-```bash
-# Search for services with errors today
-shannot --profile systemd journalctl -p err --since today | grep '\.service'
-
-# Find failed service starts
-shannot --profile systemd journalctl --since "1 hour ago" | grep -i "failed to start"
-
-# Check for service crashes
-shannot --profile systemd journalctl --since today | grep -i "core dump"
-```
-
-#### Analyze Service Logs
-
-```bash
-# View recent logs for a service
-shannot --profile systemd journalctl -u nginx -n 50
-
-# Check for errors in last hour
-shannot --profile systemd journalctl -u nginx -p err --since "1 hour ago"
-
-# Count service restarts
-shannot --profile systemd journalctl -u nginx --since today | grep -c "Started"
-
-# View service logs from previous boot
-shannot --profile systemd journalctl -u nginx -b -1
-```
-
-#### Capabilities Comparison
-
-| Feature | systemctl (D-Bus) | Filesystem Method |
-|---------|-------------------|-------------------|
-| List running services | ✅ `systemctl list-units` | ⚠️ Parse `/sys/fs/cgroup/system.slice/` |
-| Service state (active/failed) | ✅ `systemctl status` | ❌ Must infer from logs |
-| Resource usage | ⚠️ Limited | ✅ Full cgroup stats |
-| Service logs | ✅ `journalctl -u` | ✅ `journalctl -u` |
-| Start/stop service | ❌ (read-only) | ❌ (read-only) |
-
-**Why No D-Bus Access?**
-
-- **Security**: D-Bus socket enables two-way communication (less secure than read-only)
-- **Read-only guarantee**: Filesystem methods are truly read-only
-- **Sufficient data**: cgroup v2 exposes all necessary monitoring information  
-- **Better for automation**: File-based access is more scriptable
-
-**What You Can Still Do:**
-
-- ✅ List running services (via `/sys/fs/cgroup/`)
-- ✅ Monitor resource usage (via cgroup files and `systemd-cgtop`)
-- ✅ Analyze logs (via `journalctl`)
-- ✅ Find failures (via journal queries)
-- ❌ Query service state (active/inactive) - must infer from cgroups + logs
-- ❌ View service dependencies - parse unit files if needed
-
-
-## Python API
-
-For programmatic usage, see [API documentation](api.md).
-
-### Custom Bubblewrap Path
-
-```bash
-# Use custom bwrap binary
-shannot run --bubblewrap /opt/custom/bin/bwrap ls /
-
-# Or set environment variable
-export BWRAP=/opt/custom/bin/bwrap
-shannot ls /
-```
-
-### Debugging
-
-```bash
-# Enable verbose logging
-shannot --verbose ls /
-
-# Export profile to verify configuration
-shannot export | jq .
-
-# Check which commands are allowed
-shannot export | jq '.allowed_commands'
+# Check environment
+for key, value in sorted(os.environ.items()):
+    print(f"{key}={value}")
 ```
 
 ## Limitations
 
-### What the Sandbox CAN Do
+### What Sandboxed Code CAN Do
 
-- Execute allowed commands
-- Read files from mounted paths
-- Write to tmpfs locations (/tmp, /run)
-- View limited process information
+- Read files from virtual filesystem
+- Execute subprocess calls (captured for approval)
+- Write to virtual /tmp (mapped to real directory if configured)
+- Access virtual /proc for system information
 
-### What the Sandbox CANNOT Do
+### What Sandboxed Code CANNOT Do
 
-- Modify the host filesystem
-- Access the network (by default)
-- See all host processes
-- Execute disallowed commands
-- Persist data between runs
+- Modify the host filesystem directly
+- Access the network (sockets disabled)
+- Execute code outside the sandbox
+- Bypass the approval workflow for subprocess calls
 
-### Common Gotchas
+### Known Constraints
 
-1. **Command paths**: Use full paths or ensure command is in allowed list
-   ```bash
-   # May fail if 'ls' isn't in allowed_commands
-   shannot ls /
-
-   # Better: use full path
-   shannot /usr/bin/ls /
-   ```
-
-2. **Shell features**: The sandbox doesn't provide a shell
-   ```bash
-   # Won't work - no shell to interpret *
-   shannot ls /*.conf
-
-   # Use find instead
-   shannot find / -maxdepth 1 -name "*.conf"
-   ```
-
-3. **Environment variables**: Only those in profile are available
-   ```bash
-   # May not have expected PATH
-   shannot env
-   ```
+- **Python 3.6 syntax only** - PyPy sandbox limitation
+- **1-hour session TTL** - Pending sessions expire after 1 hour
+- **No interactive input** - stdin is not passed through by default
 
 ## Next Steps
 
-- Configure [profiles.md](profiles.md) for your use case
-- See [deployment.md](deployment.md) for production deployment
-- Review security considerations in the main README
+- [Profile Configuration](profiles.md) - Customize command approval
+- [Configuration Guide](configuration.md) - Remote targets and MCP
+- [Deployment Guide](deployment.md) - Production deployment
+- [Troubleshooting](troubleshooting.md) - Common issues

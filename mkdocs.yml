@@ -1,5 +1,5 @@
 site_name: Shannot Documentation
-site_description: Secure read-only sandboxing for LLM agents and system diagnostics
+site_description: Secure sandboxed execution for LLM agents and system diagnostics
 site_author: corv89
 site_url: https://corv89.github.io/shannot/
 repo_url: https://github.com/corv89/shannot
@@ -55,7 +55,7 @@ plugins:
             show_if_no_docstring: false
             inherited_members: false
             filters:
-              - "!^_" # Exclude private members
+              - "!^_"  # Exclude private members
 
 markdown_extensions:
   - admonition
@@ -88,26 +88,23 @@ nav:
   - Advanced:
       - Configuration: configuration.md
       - Deployment: deployment.md
-      - Seccomp Filters: seccomp.md
+      - Troubleshooting: troubleshooting.md
   - Integrations:
       - MCP/Claude Desktop: mcp.md
+      - MCP Testing: mcp-testing.md
   - Development:
       - Testing: testing.md
-      - Troubleshooting: troubleshooting.md
-  - API Reference:
+      - Migrating from v0.3.x: migrating-from-v3.md
+  - Reference:
       - Overview: api.md
-      - Core:
-          - Sandbox: reference/sandbox.md
-          - Process: reference/process.md
-          - Config: reference/config.md
-      - Executors:
-          - Local Executor: reference/executors/local.md
-          - SSH Executor: reference/executors/ssh.md
+      - Sandbox: reference/sandbox.md
       - Execution: reference/execution.md
+      - Process: reference/process.md
+      - Config: reference/config.md
       - CLI: reference/cli.md
+      - MCP Tools: reference/tools.md
       - MCP Server: reference/mcp_server.md
       - MCP Main: reference/mcp_main.md
-      - Tools: reference/tools.md
 
 extra:
   social:
