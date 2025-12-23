@@ -1,115 +1,109 @@
 # CLI Module
 
-Command-line interface for interacting with Shannot sandboxes.
+Command-line interface for Shannot.
 
 ## Overview
 
-The CLI module provides the command-line entry point for Shannot, enabling users to execute commands in read-only sandboxes directly from the terminal. It handles argument parsing, profile selection, and command execution.
+The CLI provides commands for sandbox execution, session approval, and system management.
 
-**Key Features:**
+## Commands
 
-- Direct command execution in sandboxes
-- Profile auto-discovery and selection
-- Sandbox verification and diagnostics
-- Profile configuration export
-- MCP server installation for LLM integration
-- Remote execution configuration
+### shannot setup
 
-## Command Structure
+Install PyPy stdlib for sandboxing.
 
 ```bash
-shannot [OPTIONS] COMMAND [ARGS...]
-shannot verify                    # Verify sandbox setup
-shannot export                    # Export active profile
-shannot mcp install [CLIENT]      # Install MCP server
-shannot remote add NAME HOST      # Add remote target
+shannot setup              # Install runtime
+shannot setup --force      # Force reinstall
+shannot setup --status     # Check if installed
+shannot setup --remove     # Remove runtime
 ```
 
-## Common Usage Patterns
+### shannot run
 
-### Basic Command Execution
+Execute a Python script in the PyPy sandbox.
 
 ```bash
-# Run a simple command
-shannot ls /
-
-# Read a file
-shannot cat /etc/os-release
-
-# Check disk usage
-shannot df -h
-
-# Use custom profile
-shannot --profile ~/.config/shannot/diagnostics.json df -h
+shannot run script.py                    # Basic execution
+shannot run script.py --tmp=/tmp/work    # Map real directory to /tmp
+shannot run script.py --dry-run          # Queue without executing
+shannot run script.py --target prod      # Execute on remote
 ```
 
-### Verification and Diagnostics
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--pypy-sandbox PATH` | Path to pypy-sandbox executable |
+| `--lib-path PATH` | Path to lib-python and lib_pypy |
+| `--tmp DIR` | Real directory mapped to virtual /tmp |
+| `--dry-run` | Log commands without executing |
+| `--target NAME` | SSH target for remote execution |
+| `--debug` | Enable debug mode |
+
+### shannot approve
+
+Interactive TUI for reviewing and approving sessions.
 
 ```bash
-# Verify sandbox is working
-shannot verify
-
-# Export current profile to see configuration
-shannot export
-
-# Save profile to file
-shannot export > my-config.json
-
-# Verbose output for debugging
-shannot --verbose verify
+shannot approve                    # Launch TUI
+shannot approve list               # List pending sessions
+shannot approve show SESSION_ID    # Show session details
+shannot approve history            # Show recent sessions
 ```
 
-### MCP Server Installation
+**TUI Controls:**
+
+| Key | Action |
+|-----|--------|
+| `j/k` or arrows | Navigate |
+| `Enter` | View details / Execute |
+| `Space` | Toggle selection |
+| `x` | Execute selected |
+| `r` | Reject selected |
+| `q` / `Esc` | Quit |
+
+### shannot execute
+
+Execute a previously created session.
 
 ```bash
-# Install for Claude Desktop
-shannot mcp install claude-desktop
-
-# Install for Claude Code
-shannot mcp install claude-code
-
-# Specify custom profile
-shannot mcp install claude-code --profile diagnostics
-
-# Install on remote system
-shannot mcp install claude-code --target production
+shannot execute --session-id SESSION_ID
+shannot execute --session-id SESSION_ID --json-output
 ```
 
-### Remote Execution
+### shannot remote
+
+Manage SSH remote targets.
 
 ```bash
-# Add a remote server
-shannot remote add prod server.example.com
-
-# Execute on remote
-shannot --target prod df -h
-
-# Configure with SSH options
-shannot remote add staging \
-  --host staging.example.com \
-  --user readonly \
-  --key ~/.ssh/staging_key
+shannot remote add NAME [USER@]HOST    # Add target
+shannot remote list                     # List targets
+shannot remote test NAME                # Test connection
+shannot remote remove NAME              # Remove target
 ```
 
-## Profile Selection
+### shannot status
 
-Shannot searches for profiles in this order:
+Show system health and configuration.
 
-1. `--profile` command-line argument
-2. `$SANDBOX_PROFILE` environment variable
-3. `~/.config/shannot/minimal.json` (preferred user config)
-4. `~/.config/shannot/profile.json` (legacy user config)
-5. Bundled `profiles/minimal.json`
-6. `/etc/shannot/minimal.json` (system-wide)
-7. `/etc/shannot/profile.json` (legacy system)
+```bash
+shannot status             # Full status
+shannot status --runtime   # Runtime only
+shannot status --targets   # Remote targets only
+```
 
-## Related Documentation
+### shannot mcp
 
-- [Usage Guide](../usage.md) - Comprehensive CLI examples and workflows
-- [Configuration](../configuration.md) - Remote target and profile configuration
-- [MCP Integration](../mcp.md) - Model Context Protocol server setup
-- [Deployment](../deployment.md) - Production deployment strategies
+MCP server management.
 
-## API Reference
+```bash
+shannot mcp install                         # Install for Claude Desktop
+shannot mcp install --client claude-code    # Install for Claude Code
+```
 
-::: shannot.cli
+## See Also
+
+- [Usage Guide](../usage.md) - Comprehensive examples
+- [Configuration](../configuration.md) - Profiles and remotes
+- [MCP Integration](../mcp.md) - MCP setup

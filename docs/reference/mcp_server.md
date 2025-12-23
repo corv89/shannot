@@ -401,7 +401,7 @@ shannot-mcp --profile ~/.config/shannot/profile1.json \
 - [MCP Integration Guide](../mcp.md) - Complete MCP setup and usage
 - [MCP Testing](../mcp-testing.md) - Testing procedures
 - [MCP Main Module](mcp_main.md) - Entry point and CLI
-- [Session Management](../../README.md#session-approval-workflow) - Session workflow
+- [Session Management](../usage.md#session-workflow) - Session workflow
 
 ## API Reference
 

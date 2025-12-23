@@ -2,46 +2,60 @@
 
 [![Tests](https://github.com/corv89/shannot/actions/workflows/test.yml/badge.svg)](https://github.com/corv89/shannot/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/corv89/shannot/blob/main/LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Linux](https://img.shields.io/badge/os-linux-green.svg)](https://www.kernel.org/)
 
-**Shannot** lets LLM agents and automated tools safely explore your Linux systems without risk of modification. Built on [bubblewrap](https://github.com/containers/bubblewrap), it provides bulletproof read-only sandboxing for system diagnostics, monitoring, and exploration - perfect for giving Claude or other AI assistants safe access to your servers.
+**Shannot** lets LLM agents and automated tools safely explore your Linux systems without risk of modification. Built on [PyPy sandbox](https://doc.pypy.org/en/latest/sandbox.html) architecture, it provides hardened sandboxing for system diagnostics, monitoring, and exploration - perfect for giving Claude or other AI assistants safe access to your systems.
 
 > Claude __shannot__ do *that!*
 
 ## Features
 
-:lock: **Run Untrusted Commands Safely**
-Let LLM agents explore your system without risk of modification • Network-isolated execution • Control exactly which commands are allowed
+:lock: **Run Untrusted Code Safely**
 
-:robot: **Works with Claude Desktop**
-Plug-and-play [MCP integration](mcp.md) - give Claude safe read-only access to your servers
+- PyPy sandbox intercepts all system calls
+- Virtual filesystem prevents unauthorized access
+- Network-isolated execution (no socket access)
+- Session-based approval workflow for subprocess execution
+
+:robot: **Perfect for LLM Agents**
+
+- Let Claude and other AI assistants explore systems safely
+- Command approval profiles control what executes automatically
+- Interactive TUI for reviewing queued operations
+- [MCP integration](mcp.md) for Claude Desktop and Claude Code
 
 :globe_with_meridians: **Control Remote Systems**
-Run sandboxed commands on Linux servers from your macOS or Windows laptop via SSH
+
+- Run sandboxed scripts on Linux servers from any platform via SSH
+- Zero-dependency SSH implementation using stdlib only
+- Auto-deployment to remote hosts (no manual installation needed)
+- Named remotes configuration for easy target management
 
 :zap: **Deploy in Minutes**
-Python client + bubblewrap on target • No containers, VMs, or complex setup required
+
+- Zero external dependencies - pure Python stdlib only
+- Auto-setup downloads PyPy runtime on first use
+- No containers, VMs, or complex configuration required
+- Works out of the box on any Linux system
 
 ## Quick Start
 
 ### Installation
 
-**Client** (any platform): Python 3.10+
-**Target** (Linux only): bubblewrap
+**Requirements:**
+
+- **Host**: Python 3.11+ (zero runtime dependencies!)
+- **Sandbox**: PyPy sandbox binary (auto-downloaded on first run)
 
 === "UV (Recommended)"
 
     ```bash
     # Install UV
     curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
-    # Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
 
     # Install shannot
     uv tool install shannot
-
-    # Or with MCP support for Claude Desktop
-    uv tool install "shannot[mcp]"
     ```
 
 === "pipx (Ubuntu/Debian)"
@@ -53,98 +67,76 @@ Python client + bubblewrap on target • No containers, VMs, or complex setup re
 
     # Install shannot
     pipx install shannot
-
-    # Or with optional dependencies
-    pipx install "shannot[mcp]"  # MCP/Claude Desktop support
     ```
 
 === "pip"
 
     ```bash
-    # Basic installation
     pip install --user shannot
-
-    # With optional dependencies
-    pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
     ```
-
-### Install bubblewrap (Linux only)
-
-```bash
-# Debian/Ubuntu
-sudo apt install bubblewrap
-
-# Fedora/RHEL
-sudo dnf install bubblewrap
-
-# Arch Linux
-sudo pacman -S bubblewrap
-```
 
 See [Installation Guide](installation.md) for detailed instructions.
 
 ### Basic Usage
 
 ```bash
-# Run a command in read-only sandbox
-shannot ls /
+# 1. Install PyPy runtime (one-time setup)
+shannot setup
 
-# Verify bubblewrap is available
-shannot verify
+# 2. Run a script in the sandbox
+shannot run script.py
 
-# Export MCP configuration for Claude Desktop
-shannot export
+# 3. Review and approve pending operations
+shannot approve
+
+# Check system status
+shannot status
 ```
 
 See [Usage Guide](usage.md) for more examples.
 
 ## How It Works
 
-Shannot wraps Linux's bubblewrap tool to create lightweight, secure sandboxes:
+Unlike traditional container-based sandboxes, Shannot operates at the system call level, providing fine-grained control over exactly what sandboxed code can do.
 
-1. **Namespace isolation** - Each command runs in isolated namespaces (PID, mount, network, etc.)
-2. **Read-only mounts** - System directories are mounted read-only
-3. **Temporary filesystems** - Writable locations use ephemeral tmpfs
-4. **Command allowlisting** - Only explicitly permitted commands can execute
-5. **No persistence** - All changes are lost when the command exits
+1. **System call interception** - All syscalls from sandboxed code are intercepted and virtualized by PyPy sandbox
+2. **Virtual filesystem** - File operations map to controlled paths, preventing unauthorized access
+3. **Subprocess approval workflow** - Commands queue in sessions for human review before execution
+4. **Profile-based control** - Approval profiles define which commands run immediately vs. require approval
+5. **Zero persistence** - All changes exist only within the session, nothing touches the real system
 
-## Python API
-
-```python
-from shannot import SandboxManager, load_profile_from_path
-
-profile = load_profile_from_path("~/.config/shannot/profile.json")
-manager = SandboxManager(profile, Path("/usr/bin/bwrap"))
-
-result = manager.run(["ls", "/"])
-print(f"Output: {result.stdout}")
-print(f"Duration: {result.duration:.2f}s")
-```
-
-See [API Reference](api.md) for complete documentation.
+This architecture enables LLM agents to explore systems safely while giving humans final control over any potentially risky operations.
 
 ## Documentation
 
 - **[Installation Guide](installation.md)** - Install Shannot on any platform
-- **[Usage Guide](usage.md)** - Learn basic commands and workflows
-- **[Profile Configuration](profiles.md)** - Configure sandbox behavior
-- **[Configuration](configuration.md)** - Remote execution, Ansible, systemd
+- **[Usage Guide](usage.md)** - Learn CLI commands and session workflow
+- **[Profile Configuration](profiles.md)** - Configure command approval behavior
+- **[Configuration](configuration.md)** - Remote targets, MCP setup
 - **[Deployment](deployment.md)** - Production deployment guide
-- **[MCP Integration](mcp.md)** - Claude Desktop setup
-- **[API Reference](api.md)** - Python API documentation
-- **[Testing](testing.md)** - Running and writing tests
+- **[MCP Integration](mcp.md)** - Claude Desktop and Claude Code setup
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
+- **[Migrating from v0.3.x](migrating-from-v3.md)** - Upgrade guide for older versions
 
 ## Security Considerations
 
-Shannot provides strong isolation but **is not a security boundary**:
+Shannot provides strong isolation but **is not a complete security boundary**:
 
-- Sandbox escapes possible via kernel exploits
-- Read-only access still exposes system information
-- No built-in CPU/memory limits (use systemd/cgroups)
+**What Shannot provides:**
+
+- System call interception and virtualization
+- Virtual filesystem isolation
+- Subprocess execution control with approval workflow
+- Zero network access (sockets disabled)
+
+**Known limitations:**
+
+- PyPy sandbox interpreter vulnerabilities could allow escape
+- Virtual filesystem still exposes information about mapped paths
+- No built-in CPU/memory resource limits
 - Don't run as root unless necessary
 
-For production, combine with SELinux/AppArmor, seccomp filters, and resource limits.
+For production, combine with SELinux/AppArmor, resource limits (systemd/cgroups), and principle of least privilege.
 
 ## Contributing
 
@@ -153,5 +145,3 @@ Contributions welcome! See [CONTRIBUTING.md](https://github.com/corv89/shannot/b
 ## License
 
 Apache 2.0 - See [LICENSE](https://github.com/corv89/shannot/blob/main/LICENSE)
-
-Built on [Bubblewrap](https://github.com/containers/bubblewrap) and [libseccomp](https://github.com/seccomp/libseccomp)

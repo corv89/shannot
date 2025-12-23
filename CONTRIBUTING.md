@@ -59,6 +59,271 @@ make test-coverage
 make pre-commit-install  # re-install hooks after changing environments
 ```
 
+## Architecture
+
+### PyPy Sandbox Architecture
+
+Shannot uses PyPy's sandbox mode for security through **syscall interception** rather than Linux containers:
+
+1. **System Call Interception**: PyPy sandbox intercepts all system calls from sandboxed code
+2. **Virtual Filesystem (VFS)**: Filesystem operations are virtualized, providing controlled read-only access
+3. **Subprocess Virtualization**: Command execution requires approval via session-based workflow
+4. **Network Isolation**: Socket operations are virtualized (no actual network access)
+5. **Session-Based Approval**: Operations queue in sessions for interactive review before execution
+
+**NOT Used:**
+- No bubblewrap (removed in v0.4.0)
+- No Linux namespaces/cgroups
+- No containers or VMs
+
+### Module Organization
+
+```
+shannot/
+├── __init__.py              # Exports: VirtualizedProc, signature, sigerror (low-level API)
+├── __main__.py              # Package entry point for -m execution
+├── cli.py                   # Main CLI (setup, run, approve, execute, remote, status)
+├── config.py                # XDG paths, VERSION, profile/remote management
+├── virtualizedproc.py       # Core PyPy sandbox process controller
+├── session.py               # Session data structures and management
+├── run_session.py           # Main session execution logic
+├── runtime.py               # PyPy stdlib download and setup
+├── approve.py               # Interactive TUI for session approval
+├── deploy.py                # Deploy sessions to remote hosts
+├── interact.py              # Interactive sandbox shell
+├── sandboxio.py             # Low-level I/O protocol handling
+├── structs.py               # Data structures (Capture, Pending, etc.)
+├── queue.py                 # Session queue management
+├── pending_write.py         # Deferred write operations
+├── remote.py                # Remote target configuration
+├── ssh.py                   # Zero-dependency SSH client (stdlib only)
+├── mix_pypy.py              # PyPy sandbox initialization mixin
+├── mix_vfs.py               # Virtual filesystem mixin
+├── mix_subprocess.py        # Subprocess execution mixin (profiles)
+├── mix_remote.py            # Remote execution mixin
+├── mix_socket.py            # Socket virtualization mixin
+├── mix_accept_input.py      # Input capture mixin
+├── mix_dump_output.py       # Output streaming mixin
+├── mix_grab_output.py       # Output capture mixin
+├── vfs_procfs.py            # Virtual /proc filesystem
+├── stubs/
+│   ├── __init__.py
+│   ├── _signal.py           # Virtualized signal module
+│   └── subprocess.py        # Virtualized subprocess module
+```
+
+### Configuration & Data Paths
+
+Shannot follows XDG Base Directory specification:
+
+**Configuration:**
+- Global profile: `~/.config/shannot/profile.json`
+- Project profile: `.shannot/profile.json`
+- Remote targets: `~/.config/shannot/remotes.toml`
+
+**Data:**
+- Runtime (PyPy stdlib): `~/.local/share/shannot/runtime/`
+- Sessions: `~/.local/share/shannot/sessions/`
+- PyPy sandbox binary: `~/.local/share/shannot/runtime/pypy-sandbox` (or from PATH)
+
+**Profile Structure (Command Approval):**
+```json
+{
+  "auto_approve": [
+    "cat", "ls", "find", "grep", "head", "tail", "wc", "du", "df"
+  ],
+  "always_deny": [
+    "rm -rf /",
+    "dd if=/dev/zero",
+    ":(){ :|:& };:"
+  ]
+}
+```
+
+### Zero Dependencies Philosophy
+
+Shannot maintains **zero runtime dependencies** to maximize portability and minimize attack surface:
+
+**What This Means:**
+- Only Python 3.11+ stdlib is used (no pip packages at runtime)
+- PyPy sandbox binary is the only external requirement
+- SSH implemented using stdlib `subprocess` + `shlex` (no paramiko/fabric)
+- No networking libraries (requests, httpx, etc.)
+- No serialization libraries beyond stdlib (json, pickle)
+
+**Development Dependencies Are OK:**
+- Pytest, Ruff, Basedpyright for testing/linting
+- MkDocs for documentation
+- Nuitka for binary building
+- Pre-commit for git hooks
+
+### Session-Based Approval Workflow
+
+Understanding the session workflow is critical for working with Shannot:
+
+**Workflow Phases:**
+1. **Dry-run**: Sandboxed code executes, operations are captured but not performed
+2. **Review**: User reviews captured operations via `shannot approve`
+3. **Execute**: Approved operations run on host system
+
+**Session Lifecycle:**
+```python
+# 1. User runs script in dry-run mode (default)
+shannot run script.py
+
+# Creates session: ~/.local/share/shannot/sessions/20250122_143022/
+# - session.json: Metadata (script, profile, timestamp)
+# - pending_writes.json: Captured write operations
+# - subprocess_calls.json: Captured subprocess executions
+
+# 2. User reviews session
+shannot approve 20250122_143022
+
+# Interactive TUI shows:
+# - Subprocess commands to execute (with approval profile matching)
+# - File writes to perform
+# - User can approve/deny individual operations
+
+# 3. Operations execute on host
+# - Auto-approved commands run immediately
+# - Denied operations are skipped
+# - Results captured in session/output/
+```
+
+**Key Modules:**
+- `run_session.py`: Orchestrates session execution
+- `session.py`: Session data structures (`SessionData`, `SessionMetadata`)
+- `approve.py`: Interactive TUI for review
+- `queue.py`: Session queue management
+- `pending_write.py`: Deferred write operations
+- `mix_subprocess.py`: Command approval profile matching
+
+### Virtual Filesystem (VFS)
+
+The VFS system provides controlled, read-only access to the host filesystem:
+
+**How It Works:**
+1. **Syscall Interception**: File operations (open, stat, listdir) are intercepted
+2. **Path Mapping**: Virtual paths map to real filesystem locations
+3. **Read-Only**: Write operations are captured, not performed (session workflow)
+4. **Selective Access**: Only explicitly mapped paths are accessible
+
+**Key Implementation** (`mix_vfs.py`):
+```python
+# VFS configuration (typically set during initialization)
+vfs_config = {
+    "/": "/",                    # Root mapped to host root (read-only)
+    "/tmp": session_tmp_dir,     # /tmp mapped to session temp directory
+}
+```
+
+**Special Paths:**
+- `/proc`: Virtual `/proc` filesystem (`vfs_procfs.py`)
+- `/tmp`: Session-isolated temp directory (writable during approval)
+- Other paths: Read-only access to host filesystem
+
+### Remote Execution
+
+Shannot can execute sessions on remote Linux hosts via SSH (zero-dependency implementation):
+
+**Architecture:**
+```
+Local Host                          Remote Host
+----------                          -----------
+shannot run --target prod script.py
+    ↓
+Create session locally
+    ↓
+shannot deploy prod SESSION_ID
+    ↓
+SSH (stdlib subprocess) --------→  scp session files
+                                   ↓
+                                   shannot execute SESSION_ID
+                                   ↓
+                                   Run in PyPy sandbox
+                                   ↓
+                       ←---------- scp results back
+    ↓
+Display results locally
+```
+
+**Configuration** (`~/.config/shannot/remotes.toml`):
+```toml
+[targets.prod]
+host = "prod.example.com"
+user = "admin"
+profile = "diagnostics"  # Optional: use specific profile on remote
+
+[targets.staging]
+host = "staging.example.com"
+user = "deploy"
+```
+
+**Key Modules:**
+- `remote.py`: Remote target configuration
+- `deploy.py`: Deploy sessions to remote hosts
+- `ssh.py`: Zero-dependency SSH using stdlib `subprocess`
+- `mix_remote.py`: Remote execution mixin
+
+### Common Patterns & Gotchas
+
+**Path Handling:**
+```python
+from pathlib import Path
+
+# ✅ Good: Use Path for filesystem operations
+config_dir = Path("~/.config/shannot").expanduser()
+session_file = config_dir / "session.json"
+
+# ❌ Bad: String concatenation
+config_dir = os.path.expanduser("~/.config/shannot")
+session_file = config_dir + "/session.json"
+```
+
+**Error Handling:**
+```python
+# ✅ Good: Specific exceptions with context
+try:
+    session = load_session(session_id)
+except FileNotFoundError:
+    raise RuntimeError(f"Session {session_id} not found in {SESSION_DIR}")
+
+# ❌ Bad: Bare except or generic exceptions
+try:
+    session = load_session(session_id)
+except Exception:
+    raise Exception("Failed to load session")
+```
+
+**Version Detection:**
+```python
+# ✅ Good: Use importlib.metadata with fallback
+from importlib.metadata import version
+
+try:
+    VERSION = version("shannot")
+except Exception:
+    VERSION = "0.4.0-dev"  # Fallback for development
+```
+
+**PyPy Sandbox Binary Detection:**
+```python
+# ✅ Good: Check multiple locations
+def find_pypy_sandbox() -> Path | None:
+    """Find PyPy sandbox binary from PATH or runtime dir."""
+    # Check PATH first
+    result = subprocess.run(["which", "pypy-sandbox"], capture_output=True)
+    if result.returncode == 0:
+        return Path(result.stdout.decode().strip())
+
+    # Check runtime directory
+    runtime_bin = get_runtime_dir() / "pypy-sandbox"
+    if runtime_bin.exists():
+        return runtime_bin
+
+    return None
+```
+
 ## Development Workflow
 
 ### 1. Create a Branch

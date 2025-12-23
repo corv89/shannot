@@ -2,50 +2,36 @@
 
 Complete installation guide for Shannot on all supported platforms.
 
-## Prerequisites
+## Requirements
 
-### System Requirements
+### Host System
 
-**Client** (any platform):
-- Python 3.10 or newer
+- **Python 3.11+** (CPython or PyPy)
+- **Zero runtime dependencies** - pure Python stdlib only
 
-**Target** (Linux only):
-- Linux with kernel 3.8 or newer
-- bubblewrap package
+### Sandbox Runtime
 
-### Check Your System
-
-```bash
-# Check Python version
-python3 --version
-
-# Check Linux kernel version (Linux only)
-uname -r
-
-# Check if bubblewrap is installed (Linux only)
-which bwrap
-bwrap --version
-```
+- **PyPy sandbox binary** - auto-downloaded on first run via `shannot setup`
+- Storage: ~50MB in `~/.local/share/shannot/runtime/`
 
 ## Installation
 
-### Client Installation (Any Platform)
+### UV (Recommended)
 
-#### Recommended: UV (Cross-platform)
+[UV](https://docs.astral.sh/uv/) is the fastest way to install Python tools:
 
 ```bash
-# Install UV (works on macOS, Linux, Windows)
-curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
-# Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
+# Install UV (macOS/Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or Windows
+irm https://astral.sh/uv/install.ps1 | iex
 
 # Install shannot
 uv tool install shannot
-
-# Or with MCP support for Claude Desktop
-uv tool install "shannot[mcp]"
 ```
 
-#### Alternative: pipx (Ubuntu/Debian)
+### pipx (Ubuntu/Debian)
 
 Ubuntu and Debian mark system Python as "externally managed" (PEP 668). Use `pipx`:
 
@@ -56,27 +42,19 @@ pipx ensurepath
 
 # Install shannot
 pipx install shannot
-
-# Or with optional dependencies
-pipx install "shannot[mcp]"  # MCP/Claude Desktop support
-pipx install "shannot[all]"  # All optional features
 ```
 
-#### Traditional: pip
+### pip
 
 ```bash
 # Basic installation
 pip install --user shannot
 
-# With optional dependencies
-pip install --user "shannot[mcp]"  # MCP/Claude Desktop support
-pip install --user "shannot[all]"  # All optional features
-
 # Note: On Ubuntu/Debian, you may need --break-system-packages
 # (not recommended, use pipx or uv instead)
 ```
 
-#### From Source
+### From Source
 
 ```bash
 # Clone the repository
@@ -87,82 +65,92 @@ cd shannot
 uv tool install .
 
 # Or with pip
-pip install --user .
+pip install --user -e .
 ```
 
-### Target Installation (Linux Only)
+## Post-Installation Setup
 
-If your target is a remote Linux system, only bubblewrap is required (Python not needed):
+### 1. Install PyPy Runtime
 
-#### Debian / Ubuntu
+After installing shannot, run the setup command to download the PyPy sandbox runtime:
 
 ```bash
-sudo apt install bubblewrap
+shannot setup
 ```
 
-#### Fedora / RHEL / CentOS
+This downloads:
+- PyPy 3.6 stdlib (~50MB)
+- Stored in `~/.local/share/shannot/runtime/`
+
+**Note:** The PyPy sandbox binary itself must be separately compiled or downloaded. See the project repository for details.
+
+### 2. Verify Installation
 
 ```bash
-sudo dnf install bubblewrap
-```
-
-#### openSUSE
-
-```bash
-sudo zypper install bubblewrap
-```
-
-#### Arch Linux
-
-```bash
-sudo pacman -S bubblewrap
-```
-
-### Optional Dependencies
-
-```bash
-# MCP server for Claude Desktop
-pip install --user "shannot[mcp]"
-
-# Remote execution via SSH
-pip install --user "shannot[remote]"
-
-# Development tools (testing, linting)
-pip install --user "shannot[dev]"
-
-# Everything
-pip install --user "shannot[all]"
-```
-
-## Post-Installation
-
-### Verify Installation
-
-```bash
-# Check that shannot command is available
-which shannot
-
-# Check version
+# Check shannot version
 shannot --version
 
-# Run verification test
-shannot verify
+# Check runtime and configuration status
+shannot status
 ```
 
-### Configure Profile
+Expected output:
+```
+Shannot v0.5.1
+Runtime: installed at ~/.local/share/shannot/runtime/
+PyPy sandbox: found at /path/to/pypy-sandbox
+Profiles: using default profile
+```
 
-Create a custom profile:
+## Remote Target Setup
+
+Shannot can execute sandboxed scripts on remote Linux hosts via SSH. Remote targets are auto-deployed - no manual installation required on the remote.
+
+### Add a Remote Target
 
 ```bash
-# Create config directory
-mkdir -p ~/.config/shannot
+# Add a remote server
+shannot remote add prod user@prod.example.com
 
-# Copy profile
-cp profiles/readonly.json ~/.config/shannot/profile.json
-
-# Edit as needed
-${EDITOR:-nano} ~/.config/shannot/profile.json
+# With explicit options
+shannot remote add staging \
+  --host staging.example.com \
+  --user deploy \
+  --port 22
 ```
+
+### Test Connection
+
+```bash
+shannot remote test prod
+```
+
+### List Configured Remotes
+
+```bash
+shannot remote list
+```
+
+Remote targets are stored in `~/.config/shannot/remotes.toml`.
+
+## Configuration Paths
+
+Shannot follows XDG Base Directory specification:
+
+| Type | Path |
+|------|------|
+| Config | `~/.config/shannot/` |
+| Data | `~/.local/share/shannot/` |
+| Runtime | `~/.local/share/shannot/runtime/` |
+| Sessions | `~/.local/share/shannot/sessions/` |
+
+### Profile Locations
+
+Approval profiles are loaded in order of precedence:
+
+1. `.shannot/profile.json` (project-local)
+2. `~/.config/shannot/profile.json` (global)
+3. Built-in default profile
 
 ## Troubleshooting
 
@@ -176,44 +164,36 @@ python3 -m shannot --version
 
 # Add user bin to PATH
 export PATH="$HOME/.local/bin:$PATH"
+
+# Or for UV
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Permission Denied
+### Runtime Not Found
 
-If bubblewrap fails with permission errors:
+If `shannot status` shows runtime not installed:
 
 ```bash
-# Check bubblewrap permissions
-ls -l $(which bwrap)
+# Install the runtime
+shannot setup
 
-# bwrap should be setuid root
-sudo chmod u+s $(which bwrap)
+# Force reinstall
+shannot setup --force
 ```
 
 ### Python Version Issues
 
-If your system Python is too old:
+Shannot requires Python 3.11+:
 
 ```bash
-# Install newer Python (example for RHEL/CentOS)
-sudo dnf install python3.9
+# Check Python version
+python3 --version
 
-# Use specific Python version
-python3.9 -m pip install --user shannot
-python3.9 -m shannot verify
-```
+# Install newer Python if needed (example for Fedora/RHEL)
+sudo dnf install python3.11
 
-### Profile Not Found
-
-If shannot can't find a profile:
-
-```bash
-# Specify profile explicitly
-shannot --profile /path/to/profile.json run ls /
-
-# Or set environment variable
-export SANDBOX_PROFILE=/path/to/profile.json
-shannot run ls /
+# Use specific version
+python3.11 -m pip install --user shannot
 ```
 
 ## Uninstallation
@@ -222,16 +202,18 @@ shannot run ls /
 # Uninstall shannot
 pip uninstall shannot
 
+# Or with UV
+uv tool uninstall shannot
+
 # Remove configuration
 rm -rf ~/.config/shannot
 
-# Remove system-wide installation (if applicable)
-sudo pip uninstall shannot
-sudo rm -rf /etc/shannot
+# Remove runtime and sessions
+rm -rf ~/.local/share/shannot
 ```
 
 ## Next Steps
 
-- Read [usage.md](usage.md) for command-line usage
-- Learn about [profiles.md](profiles.md) for configuration
-- See [deployment.md](deployment.md) for advanced scenarios
+- [Usage Guide](usage.md) - Learn CLI commands and session workflow
+- [Profile Configuration](profiles.md) - Configure command approval behavior
+- [MCP Integration](mcp.md) - Set up Claude Desktop integration

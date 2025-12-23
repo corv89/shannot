@@ -704,9 +704,9 @@ shannot-mcp --verbose
 
 ## Next Steps
 
-- **[Session Management](../README.md#session-approval-workflow)** - Learn about session approval workflow
-- **[Profiles](../README.md#profiles)** - Create custom approval profiles
-- **[Remote Execution](../README.md#remote-execution)** - Execute on remote Linux hosts
+- **[Session Management](usage.md#session-workflow)** - Learn about session approval workflow
+- **[Profiles](profiles.md)** - Create custom approval profiles
+- **[Remote Execution](deployment.md)** - Execute on remote Linux hosts
 
 ## Getting Help
 

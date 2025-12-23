@@ -1,379 +1,355 @@
 # Deployment Guide
 
-Practical deployment scenarios for Shannot in production environments.
+Production deployment guide for Shannot on local and remote systems.
 
-## Quick Remote Deployment
+## Quick Start
 
-### Direct SSH Install
-
-Install Shannot on a remote Linux system via SSH:
+### Local Deployment
 
 ```bash
-# Using UV (recommended - fastest)
-ssh user@remote "curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv tool install shannot"
+# Install shannot
+uv tool install shannot
 
-# Or using pipx (if already available)
-ssh user@remote "sudo apt install -y bubblewrap && pipx install shannot"
+# Setup PyPy runtime
+shannot setup
 
-# Install only bubblewrap (if client is elsewhere)
-ssh user@remote "sudo apt install -y bubblewrap"  # Debian/Ubuntu
-ssh user@remote "sudo dnf install -y bubblewrap"  # Fedora/RHEL
+# Verify installation
+shannot status
 ```
 
-## Configuration Management
+### Remote Deployment
 
-### Ansible
+```bash
+# Add a remote target
+shannot remote add prod user@prod.example.com
 
-Ansible playbook for deploying Shannot:
+# Test connection
+shannot remote test prod
+
+# Run script on remote (auto-deploys on first use)
+shannot run script.py --target prod
+```
+
+## Auto-Deployment
+
+When executing on a remote target for the first time, Shannot automatically:
+
+1. **Deploys itself** - Uploads to `/tmp/shannot-v{version}/`
+2. **Sets up runtime** - Configures PyPy sandbox environment
+3. **Executes script** - Runs in sandboxed environment
+
+No manual installation on remotes is required.
+
+### Deployment Location
+
+```
+/tmp/shannot-v0.5.1/
+├── shannot           # CLI executable
+├── lib-python/       # Python stdlib
+└── lib_pypy/         # PyPy modules
+```
+
+### Deployment Check
+
+Deployment is fast - just runs `test -x /tmp/shannot-v{version}/shannot` over SSH. Only uploads if binary is missing.
+
+## Multi-Server Setup
+
+### Configure Multiple Remotes
+
+```bash
+# Production server
+shannot remote add prod \
+  --host prod.example.com \
+  --user deploy
+
+# Staging server
+shannot remote add staging \
+  --host staging.example.com \
+  --user admin
+
+# Development VM
+shannot remote add dev \
+  --host 192.168.1.100 \
+  --user developer \
+  --port 2222
+```
+
+### Remotes Configuration
+
+Remote targets are stored in `~/.config/shannot/remotes.toml`:
+
+```toml
+[remotes.prod]
+host = "prod.example.com"
+user = "deploy"
+port = 22
+
+[remotes.staging]
+host = "staging.example.com"
+user = "admin"
+port = 22
+
+[remotes.dev]
+host = "192.168.1.100"
+user = "developer"
+port = 2222
+```
+
+### Multi-Server Execution
+
+```bash
+# Run diagnostics on all servers
+for server in prod staging dev; do
+  echo "=== $server ==="
+  shannot run diagnostics.py --target $server
+done
+```
+
+## Claude Desktop Integration
+
+### Install MCP Configuration
+
+```bash
+shannot mcp install
+```
+
+This configures Claude Desktop to use Shannot for sandboxed script execution.
+
+### Configuration Location
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Roaming\Claude\claude_desktop_config.json`
+
+### Manual Configuration
+
+```json
+{
+  "mcpServers": {
+    "shannot": {
+      "command": "shannot-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+```
+
+### With Verbose Logging
+
+```json
+{
+  "mcpServers": {
+    "shannot": {
+      "command": "shannot-mcp",
+      "args": ["--verbose"],
+      "env": {}
+    }
+  }
+}
+```
+
+See [MCP Integration](mcp.md) for complete MCP documentation.
+
+## CI/CD Integration
+
+### GitHub Actions
 
 ```yaml
-# playbook.yml
----
-- name: Deploy Shannot Sandbox
-  hosts: all
-  become: yes
+name: Run Diagnostics
 
-  tasks:
-    - name: Install bubblewrap
-      package:
-        name: bubblewrap
-        state: present
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
 
-    - name: Install pipx (Debian/Ubuntu)
-      package:
-        name: pipx
-        state: present
-      when: ansible_os_family == "Debian"
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Install shannot with pipx
-      become_user: "{{ deploy_user | default('shannot') }}"
-      command: pipx install shannot
-      args:
-        creates: "~/.local/bin/shannot"
+      - name: Install shannot
+        run: |
+          pip install shannot
+          shannot setup
 
-    - name: Create system config directory
-      file:
-        path: /etc/shannot
-        state: directory
-        mode: '0755'
+      - name: Run diagnostics
+        run: |
+          shannot run diagnostics.py --dry-run
 
-    - name: Deploy minimal profile
-      copy:
-        src: files/minimal.json
-        dest: /etc/shannot/profile.json
-        mode: '0644'
-
-    - name: Deploy diagnostics profile
-      copy:
-        src: files/diagnostics.json
-        dest: /etc/shannot/diagnostics.json
-        mode: '0644'
-
-    - name: Verify installation
-      become_user: "{{ deploy_user | default('shannot') }}"
-      command: shannot verify
-      register: verify_result
-      changed_when: false
-      failed_when: verify_result.rc != 0
+      - name: Show pending operations
+        run: |
+          shannot approve list
 ```
 
-Run with:
-```bash
-ansible-playbook -i inventory.ini playbook.yml
+### Jenkins Pipeline
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('Setup') {
+            steps {
+                sh 'pip install shannot'
+                sh 'shannot setup'
+            }
+        }
+
+        stage('Run Diagnostics') {
+            steps {
+                sh 'shannot run diagnostics.py --dry-run'
+                sh 'shannot approve list'
+            }
+        }
+    }
+}
 ```
 
-## SSH Integration
+## Security Best Practices
 
-### Restricted Shell for Read-Only Access
-
-Give SSH users read-only access by forcing all their commands through the sandbox:
+### SSH Key Management
 
 ```bash
-# 1. Create dedicated user
-sudo useradd -m -s /usr/local/bin/shannot-shell readonly-user
+# Generate dedicated key
+ssh-keygen -t ed25519 -f ~/.ssh/shannot_key -C "shannot@$(hostname)"
 
-# 2. Create the wrapper shell script
-sudo tee /usr/local/bin/shannot-shell > /dev/null << 'EOF'
-#!/bin/bash
-# Force all SSH commands through shannot sandbox
+# Copy to remote
+ssh-copy-id -i ~/.ssh/shannot_key.pub user@remote
 
-if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
-    # Run the user's command in the sandbox
-    exec shannot $SSH_ORIGINAL_COMMAND
-else
-    # Interactive login not allowed
-    echo "Error: This account only accepts SSH commands"
-    echo "Usage: ssh readonly-user@host 'ls /var/log'"
-    exit 1
-fi
-EOF
-
-sudo chmod +x /usr/local/bin/shannot-shell
-
-# 3. Test it
-ssh readonly-user@host 'df -h'           # Works - runs in sandbox
-ssh readonly-user@host 'cat /etc/passwd' # Works - read-only
-ssh readonly-user@host 'rm /tmp/test'    # Fails - sandbox blocks writes
+# Use with shannot (relies on SSH agent or config)
+ssh-add ~/.ssh/shannot_key
 ```
 
-**How it works:**
-- User SSHs in with a command: `ssh user@host 'df -h'`
-- SSH sets `$SSH_ORIGINAL_COMMAND` to `df -h`
-- The wrapper script runs `shannot df -h` instead
-- Command executes in read-only sandbox
-- User cannot get an interactive shell
+### SSH Config
 
-### SSH Forced Command for Specific Keys
+```
+# ~/.ssh/config
+Host prod
+    HostName prod.example.com
+    User deploy
+    IdentityFile ~/.ssh/shannot_key
+    Port 22
 
-Restrict a specific SSH key to only run certain commands:
+Host staging
+    HostName staging.example.com
+    User admin
+    IdentityFile ~/.ssh/shannot_key
+```
+
+Then in remotes.toml, use the SSH config alias:
+
+```toml
+[remotes.prod]
+host = "prod"
+user = "deploy"
+port = 22
+```
+
+### Least Privilege
+
+Create dedicated service accounts on remotes:
 
 ```bash
-# /home/monitoring/.ssh/authorized_keys
+# On remote server
+sudo useradd -m -s /bin/bash shannot-agent
+sudo passwd -l shannot-agent  # Disable password login
 
-# Allow only disk diagnostics with this key
-command="shannot df -h" ssh-rsa AAAAB3NzaC1yc2E... user@laptop
-
-# Allow a specific script with this key
-command="shannot /usr/local/bin/system-health-check.sh" ssh-rsa AAAAB3NzaC1... monitoring@server
+# Add SSH key
+sudo -u shannot-agent mkdir -p /home/shannot-agent/.ssh
+sudo -u shannot-agent chmod 700 /home/shannot-agent/.ssh
+# Add public key to authorized_keys
 ```
 
-**How it works:**
-- Regardless of what command the user tries to run, SSH forces the `command=` value
-- The forced command runs through shannot automatically
-- User cannot run anything else with that key
+### Approval Profiles
 
-**Example:**
-```bash
-# User has key configured with: command="shannot df -h"
+Use restrictive profiles for production:
 
-# User tries:
-ssh -i monitoring.key user@host 'rm -rf /'
-
-# SSH actually runs:
-shannot df -h  # Ignores the 'rm -rf /' completely
+```json
+{
+  "auto_approve": [
+    "cat", "head", "tail",
+    "ls", "find",
+    "df", "free", "uptime"
+  ],
+  "always_deny": [
+    "rm", "mv", "cp",
+    "chmod", "chown",
+    "systemctl start", "systemctl stop"
+  ]
+}
 ```
 
-## Remote Execution Setup
+## Monitoring
 
-Control remote Linux systems from your macOS or Windows laptop.
-
-### Quick Remote Setup
-
-```bash
-# 1. Ensure remote has bubblewrap installed
-ssh user@remote "which bwrap || sudo apt install -y bubblewrap"
-
-# 2. Add remote to shannot
-shannot remote add myserver \
-  --host remote.example.com \
-  --user myuser \
-  --key ~/.ssh/id_rsa
-
-# 3. Test connection
-shannot remote test myserver
-
-# 4. Run commands
-shannot -t myserver df -h
-shannot -t myserver cat /etc/os-release
-```
-
-### Multi-Server Monitoring
-
-Set up monitoring for multiple servers:
+### Session History
 
 ```bash
-# Add all your servers
-shannot remote add web1 web1.company.com --user monitoring
-shannot remote add web2 web2.company.com --user monitoring
-shannot remote add db1 db1.company.com --user monitoring --profile minimal
+# View recent sessions
+shannot approve history
 
-# Create monitoring script
-cat > check-servers.sh << 'EOF'
-#!/bin/bash
-for server in web1 web2 db1; do
-  echo "=== $server ==="
-  echo "Disk:"
-  shannot -t $server df -h / | tail -1
-  echo "Memory:"
-  shannot -t $server free -h | grep Mem:
-  echo "Uptime:"
-  shannot -t $server uptime
-  echo
-done
-EOF
-
-chmod +x check-servers.sh
-./check-servers.sh
+# Output:
+# + 20250115-disk-check-a3f2    executed    2h ago
+# o 20250115-log-analysis-b4c5  pending     1h ago
+# x 20250114-cleanup-c6d7       rejected    1d ago
 ```
 
-### Claude Desktop with Remote Access
+### Status Icons
 
-Give Claude read-only access to your production servers:
-
-```bash
-# 1. Add production server
-shannot remote add prod \
-  --host prod.company.com \
-  --user readonly \
-  --key ~/.ssh/prod_readonly_key \
-  --profile minimal
-
-# 2. Test it works
-shannot -t prod df -h
-
-# 3. Install MCP with remote target
-shannot mcp install --target prod
-
-# 4. Restart Claude Desktop
-# Now ask Claude: "Check disk space on the prod server"
-```
-
-## User-Specific Deployments
-
-### Per-User Installation
-
-Install for individual users without root:
-
-```bash
-# Install for current user
-pip install --user shannot
-
-# Create user config
-mkdir -p ~/.config/shannot
-cp profiles/minimal.json ~/.config/shannot/profile.json
-
-# Verify
-shannot verify
-```
-
-### User-Specific Profiles
-
-Users can have custom profiles:
-
-```bash
-# Default: ~/.config/shannot/profile.json
-shannot ls /
-
-# Custom profile
-shannot --profile ~/.config/shannot/diagnostics.json df -h
-
-# Via environment variable
-export SANDBOX_PROFILE=~/.config/shannot/custom.json
-shannot cat /etc/os-release
-```
-
-## Troubleshooting Deployments
-
-### Verify Bubblewrap Installation
-
-Check that bubblewrap is properly installed:
-
-```bash
-# Check if bwrap is installed
-which bwrap
-
-# Check version
-bwrap --version
-
-# Test basic functionality (should fail with "No permissions" - this is expected)
-bwrap --ro-bind / / --dev /dev --proc /proc ls / 2>&1 | grep -q "unshare" && echo "Needs user namespace support - see troubleshooting.md"
-```
-
-**Note:** Bubblewrap uses unprivileged user namespaces, not setuid. If you see permission errors, see [troubleshooting.md](troubleshooting.md) for platform-specific fixes.
-
-### Test Profile
-
-Verify profile is valid:
-
-```bash
-# Validate syntax
-shannot --profile /etc/shannot/profile.json export > /dev/null
-
-# Test basic command
-shannot --profile /etc/shannot/profile.json ls /
-
-# Verbose mode for debugging
-shannot --verbose --profile /etc/shannot/profile.json verify
-```
-
-### Network Isolation
-
-Test that network is properly isolated:
-
-```bash
-# Should fail (network isolated by default)
-shannot ping -c 1 8.8.8.8
-
-# Should succeed (reading local file)
-shannot cat /etc/resolv.conf
-```
-
-### Profile Path Issues
-
-If profile isn't found:
-
-```bash
-# Check search order (verbose mode shows which profiles are tried)
-shannot --verbose ls / 2>&1 | grep profile
-
-# Specify explicitly with environment variable
-export SANDBOX_PROFILE=/etc/shannot/profile.json
-shannot ls /
-
-# Or use command line flag
-shannot --profile /etc/shannot/profile.json ls /
-```
-
-## Security Considerations
-
-### File Permissions
-
-Ensure profiles are protected:
-
-```bash
-# System profiles should be root-owned
-sudo chown root:root /etc/shannot/*.json
-sudo chmod 644 /etc/shannot/*.json
-
-# User profiles
-chmod 600 ~/.config/shannot/profile.json
-```
-
-### Profile Validation
-
-Always validate profiles before deployment:
-
-```bash
-# Test in non-production first
-shannot --profile new-profile.json verify
-
-# Check for overly permissive settings
-jq '.network_isolation' new-profile.json  # Should be true
-jq '.allowed_commands' new-profile.json    # Should be minimal
-```
+| Icon | Status |
+|------|--------|
+| `o` | Pending |
+| `-` | Approved |
+| `+` | Executed |
+| `x` | Rejected |
+| `!` | Failed |
 
 ### Audit Logging
 
-Enable audit logging for sandboxed commands:
+Enable verbose logging for audit trails:
 
 ```bash
-# Log all shannot invocations
-alias shannot='logger -t shannot "User $USER command: $*"; /usr/bin/shannot'
+shannot run script.py --debug 2>&1 | tee audit.log
 ```
 
-## Best Practices
+## Troubleshooting
 
-1. **Start Minimal** - Use `minimal.json` as default, expand as needed
-2. **Test Profiles** - Always run `shannot verify` after deployment
-3. **Separate Profiles** - Different profiles for different use cases
-4. **Monitor Logs** - Set up centralized logging early
-5. **Update Regularly** - Keep shannot and bubblewrap updated
-6. **Document Changes** - Track profile modifications
-7. **Backup Profiles** - Version control your profiles
+### Remote Connection Failed
 
-## See Also
+```bash
+# Test SSH manually
+ssh user@host
 
-- [installation.md](installation.md) - Installation details
-- [usage.md](usage.md) - Basic usage
-- [api.md](api.md) - Python API for automation
-- [profiles.md](profiles.md) - Profile configuration
+# Check SSH key
+ssh -i ~/.ssh/key user@host
+
+# Verify in known_hosts
+ssh-keygen -R host && ssh user@host
+```
+
+### Deployment Failed
+
+```bash
+# Check remote access
+ssh user@host "ls -la /tmp/"
+
+# Manual deployment check
+ssh user@host "test -x /tmp/shannot-v0.5.1/shannot && echo OK"
+```
+
+### Session Not Found
+
+Sessions expire after 1 hour. Create a new session:
+
+```bash
+shannot run script.py
+```
+
+See [Troubleshooting](troubleshooting.md) for more solutions.
+
+## Next Steps
+
+- [MCP Integration](mcp.md) - Claude Desktop/Code setup
+- [Profile Configuration](profiles.md) - Customize command approval
+- [Troubleshooting](troubleshooting.md) - Common issues
