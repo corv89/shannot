@@ -18,29 +18,60 @@ from .config import VERSION
 
 def cmd_setup(args: argparse.Namespace) -> int:
     """Handle 'shannot setup' command."""
-    from .config import RUNTIME_DIR
-    from .runtime import SetupError, is_runtime_installed, remove_runtime, setup_runtime
+    from .config import RUNTIME_DIR, SANDBOX_BINARY_PATH
+    from .runtime import (
+        SetupError,
+        download_sandbox,
+        is_runtime_installed,
+        is_sandbox_installed,
+        remove_runtime,
+        setup_runtime,
+    )
 
+    verbose = not args.quiet
+
+    # --status: show installation status
     if args.status:
         if is_runtime_installed():
-            print(f"Runtime installed at {RUNTIME_DIR}")
-            return 0
+            print(f"✓ Stdlib: {RUNTIME_DIR}")
         else:
-            print("Runtime not installed. Run 'shannot setup' to install.")
-            return 1
+            print("✗ Stdlib not installed")
 
+        if is_sandbox_installed():
+            print(f"✓ Sandbox: {SANDBOX_BINARY_PATH}")
+        else:
+            print("✗ Sandbox binary not installed")
+
+        return 0 if (is_runtime_installed() and is_sandbox_installed()) else 1
+
+    # --remove: remove both
     if args.remove:
-        return 0 if remove_runtime(verbose=not args.quiet) else 1
+        return 0 if remove_runtime(verbose=verbose) else 1
 
+    # Default: install both stdlib and sandbox
+    # 1. Install stdlib
     try:
-        success = setup_runtime(
-            force=args.force,
-            verbose=not args.quiet,
-        )
-        return 0 if success else 1
+        setup_runtime(force=args.force, verbose=verbose)
     except SetupError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+    # 2. Install sandbox binary (graceful failure)
+    if verbose:
+        print()  # Blank line between components
+    try:
+        download_sandbox(force=args.force, verbose=verbose)
+    except SetupError as e:
+        if verbose:
+            print(f"⚠ {e}")
+            print("Setup complete (stdlib only).")
+        # Don't fail - sandbox binary might not be available yet
+        return 0
+
+    if verbose:
+        print("\nSetup complete!")
+
+    return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -105,11 +136,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not executable:
             print("Error: pypy-sandbox not found.", file=sys.stderr)
             print("", file=sys.stderr)
-            print("The sandbox requires the pypy-sandbox binary.", file=sys.stderr)
             print("You can:", file=sys.stderr)
-            print("  1. Build it from PyPy source and add to PATH", file=sys.stderr)
-            print(f"  2. Place it at {RUNTIME_DIR}/pypy-sandbox", file=sys.stderr)
-            print("  3. Specify with --pypy-sandbox <path>", file=sys.stderr)
+            print("  1. Run 'shannot setup' to download pre-built binary", file=sys.stderr)
+            print("  2. Build from source: https://github.com/corv89/pypy", file=sys.stderr)
+            print(f"  3. Place manually at {RUNTIME_DIR}/pypy-sandbox", file=sys.stderr)
+            print("  4. Specify with --pypy-sandbox <path>", file=sys.stderr)
             print("", file=sys.stderr)
             print("Run 'shannot status' to check current status.", file=sys.stderr)
             return 1
