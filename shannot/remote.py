@@ -23,6 +23,71 @@ class RemoteExecutionError(Exception):
     pass
 
 
+def run_remote_fast_path(
+    ssh: SSHConnection,
+    script_content: str,
+) -> dict[str, str | int]:
+    """
+    Execute script on remote immediately without session workflow.
+
+    Used by MCP fast path when all operations are pre-approved.
+    Does not create a session - executes script directly in PyPy sandbox.
+
+    Args:
+        ssh: Connected SSH session
+        script_content: Python script to execute
+
+    Returns:
+        Dictionary with 'exit_code', 'stdout', 'stderr' keys
+    """
+    deploy_dir = get_remote_deploy_dir()
+    work_id = uuid.uuid4().hex[:8]
+    workdir = f"/tmp/shannot-fast-{work_id}"
+
+    try:
+        # Create workdir
+        result = ssh.run(f"mkdir -p {workdir}")
+        if result.returncode != 0:
+            raise RemoteExecutionError(f"Failed to create workdir: {result.stderr.decode()}")
+
+        # Upload script
+        remote_script = f"{workdir}/script.py"
+        ssh.write_file(remote_script, script_content.encode("utf-8"))
+
+        # Execute directly without --dry-run (operations execute immediately)
+        # --json-output captures structured results
+        cmd = (
+            f"{deploy_dir}/shannot run --json-output "
+            f"--tmp={workdir} "
+            f"{deploy_dir}/pypy-sandbox -S {remote_script}"
+        )
+
+        result = ssh.run(cmd, timeout=300)
+
+        # Parse JSON response if available
+        stdout_str = result.stdout.decode("utf-8", errors="replace")
+        stderr_str = result.stderr.decode("utf-8", errors="replace")
+
+        try:
+            response = json.loads(stdout_str)
+            return {
+                "exit_code": response.get("exit_code", result.returncode),
+                "stdout": response.get("stdout", ""),
+                "stderr": response.get("stderr", stderr_str),
+            }
+        except json.JSONDecodeError:
+            # Fallback: use raw output
+            return {
+                "exit_code": result.returncode,
+                "stdout": stdout_str,
+                "stderr": stderr_str,
+            }
+
+    finally:
+        # Clean up workdir
+        ssh.run(f"rm -rf {workdir}")
+
+
 def _create_remote_workdir(ssh: SSHConnection) -> str:
     """Create temporary work directory on remote."""
     work_id = uuid.uuid4().hex[:8]

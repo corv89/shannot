@@ -148,6 +148,7 @@ Execute Python 3.6 script in PyPy sandbox with profile-based approval.
 - `script` (required): Python 3.6 code to execute
 - `profile` (optional): Approval profile (`minimal`, `readonly`, `diagnostics`, default: `minimal`)
 - `name` (optional): Human-readable session name for tracking
+- `target` (optional): Named SSH remote for remote execution (e.g., `prod`, `staging`)
 
 **Python 3.6 Syntax Limitations:**
 - ❌ No f-strings (use `.format()`)
@@ -397,6 +398,21 @@ Runtime status and configuration:
 }
 ```
 
+### sandbox://remotes
+
+List configured SSH remotes for remote execution:
+
+```json
+{
+  "remotes": {
+    "prod": {"host": "prod.example.com", "user": "admin", "port": 22},
+    "staging": {"host": "staging.local", "user": "deploy", "port": 2222}
+  }
+}
+```
+
+If no remotes are configured, returns `{"remotes": {}}`.
+
 ## Examples
 
 ### Disk Space Check
@@ -545,20 +561,89 @@ Either:
 
 ## Remote Execution
 
-Execute sessions on remote Linux hosts via SSH:
+Execute sandboxed scripts on remote Linux hosts via SSH. This is essential for macOS/Windows users (PyPy sandbox requires Linux) and for managing production servers.
+
+### Configuring Remotes
 
 ```bash
-# Configure remote target
+# Add a named remote target
 shannot remote add prod --host prod.example.com --user admin
+
+# Add with custom SSH port
+shannot remote add staging --host staging.local --user deploy --port 2222
 
 # Test connection
 shannot remote test prod
 
-# Install MCP server for remote
-shannot mcp install --target prod
-
-# Claude's requests now execute on prod server
+# List configured remotes
+shannot remote list
 ```
+
+### Using Remote Targets with MCP
+
+**Option 1: Direct target parameter** (recommended for per-request targeting)
+
+Claude can specify the target in each `sandbox_run` request:
+
+```python
+# Execute on prod server
+sandbox_run({
+  "script": "import subprocess\nsubprocess.call(['df', '-h'])",
+  "profile": "diagnostics",
+  "target": "prod"
+})
+
+# Response includes target
+{"status": "success", "stdout": "...", "target": "prod"}
+```
+
+**Option 2: Default remote** (for consistent targeting)
+
+Install MCP server with a default target:
+
+```bash
+shannot mcp install --target prod
+# All requests now execute on prod by default
+```
+
+### Security: Named Remotes Only
+
+For security, the `target` parameter only accepts named remotes configured via `shannot remote add`. Arbitrary `user@host` or `user@host:port` formats are rejected:
+
+```python
+# ❌ Rejected - arbitrary SSH target
+sandbox_run({"script": "...", "target": "attacker@evil.com"})
+# Error: "Arbitrary SSH targets are not allowed"
+
+# ✅ Allowed - named remote
+sandbox_run({"script": "...", "target": "prod"})
+```
+
+This prevents Claude from being social-engineered into connecting to unauthorized hosts.
+
+### Discovering Available Remotes
+
+Claude can query available remotes via the `sandbox://remotes` resource:
+
+```json
+{
+  "remotes": {
+    "prod": {"host": "prod.example.com", "user": "admin", "port": 22},
+    "staging": {"host": "staging.local", "user": "deploy", "port": 2222}
+  }
+}
+```
+
+### Remote Execution Flow
+
+1. **First request**: Shannot automatically deploys itself to the remote (fast check, ~50ms after initial deploy)
+2. **Script execution**: Runs in PyPy sandbox on remote host
+3. **Results returned**: stdout, stderr, exit_code sent back via SSH
+
+Same three execution paths apply:
+- **Fast path**: Auto-approved ops execute immediately on remote
+- **Review path**: Creates local session, user approves, then executes on remote
+- **Blocked path**: Denied ops rejected immediately (never sent to remote)
 
 ## Advanced Usage
 

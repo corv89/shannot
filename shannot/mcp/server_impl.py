@@ -10,9 +10,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..config import VERSION
+from ..config import VERSION, load_remotes
+from ..deploy import ensure_deployed
+from ..remote import run_remote_dry_run
 from ..runtime import find_pypy_sandbox, get_runtime_path
 from ..session import Session, create_session
+from ..ssh import SSHConfig, SSHConnection
 from ..virtualizedproc import VirtualizedProc
 from .server import MCPServer
 from .types import TextContent
@@ -239,6 +242,14 @@ class ShannotMCPServer(MCPServer):
                         "description": "Optional human-readable name for session tracking",
                         "default": "mcp-request",
                     },
+                    "target": {
+                        "type": "string",
+                        "description": (
+                            "Named remote target for SSH execution (e.g., 'prod', 'staging'). "
+                            "Must be configured via 'shannot remote add'. "
+                            "If omitted, executes locally."
+                        ),
+                    },
                 },
                 "required": ["script"],
             },
@@ -295,6 +306,15 @@ class ShannotMCPServer(MCPServer):
             handler=self._handle_status,
         )
 
+        # Resource: Configured SSH remotes
+        self.register_resource(
+            uri="sandbox://remotes",
+            name="SSH Remotes",
+            description="List of configured SSH remote targets for sandbox_run",
+            mime_type="application/json",
+            handler=self._handle_list_remotes,
+        )
+
     def _handle_sandbox_run(self, arguments: dict[str, Any]) -> TextContent:
         """Execute Python script in PyPy sandbox with hybrid approval workflow.
 
@@ -331,6 +351,17 @@ class ShannotMCPServer(MCPServer):
 
         profile = self.profiles[profile_name]
         session_name = arguments.get("name", "mcp-request")
+        target = arguments.get("target")
+
+        # Route to remote execution if target specified
+        if target:
+            return self._handle_remote_sandbox_run(
+                script=script,
+                profile=profile,
+                profile_name=profile_name,
+                session_name=session_name,
+                target=target,
+            )
 
         # AST analysis - best-effort operation detection (UX optimization, NOT security!)
         # Security is enforced at runtime by PyPy sandbox subprocess virtualization.
@@ -583,6 +614,299 @@ class ShannotMCPServer(MCPServer):
                 text=json.dumps({"status": "error", "error": f"Failed to create session: {e}"})
             )
 
+    def _handle_remote_sandbox_run(
+        self,
+        script: str,
+        profile: dict[str, Any],
+        profile_name: str,
+        session_name: str,
+        target: str,
+    ) -> TextContent:
+        """Execute Python script on a remote SSH target.
+
+        Security: Only named remotes from remotes.toml are allowed.
+        Arbitrary user@host:port format is rejected.
+
+        Parameters
+        ----------
+        script : str
+            Python script to execute.
+        profile : dict[str, Any]
+            Loaded profile configuration.
+        profile_name : str
+            Profile name.
+        session_name : str
+            Human-readable session name.
+        target : str
+            Named remote target (e.g., 'prod', 'staging').
+
+        Returns
+        -------
+        TextContent
+            JSON response with status and results/session info.
+        """
+        # Security: Only allow named remotes, reject arbitrary user@host:port
+        try:
+            remotes = load_remotes()
+        except Exception as e:
+            logger.warning(f"Failed to load remotes: {e}")
+            remotes = {}
+
+        if target not in remotes:
+            # Check if it looks like user@host format (disallowed)
+            if "@" in target or ":" in target:
+                return TextContent(
+                    text=json.dumps(
+                        {
+                            "status": "error",
+                            "error": (
+                                f"Arbitrary SSH targets are not allowed. "
+                                f"Configure '{target.split('@')[-1].split(':')[0]}' with: "
+                                f"shannot remote add <name> <host> --user <user>"
+                            ),
+                        }
+                    )
+                )
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error": (
+                            f"Unknown remote target '{target}'. "
+                            f"Available remotes: {', '.join(remotes.keys()) or 'none configured'}. "
+                            f"Add with: shannot remote add {target} <host> --user <user>"
+                        ),
+                    }
+                )
+            )
+
+        remote = remotes[target]
+        resolved_target = remote.target_string
+
+        # AST analysis for fast-path detection (UX optimization, NOT security)
+        try:
+            detected_ops = self._analyze_script_best_effort(script)
+        except Exception as e:
+            logger.warning(f"AST analysis failed: {e}")
+            detected_ops = []
+
+        # Check for denied operations (blocked path)
+        always_deny = profile.get("always_deny", [])
+        for op in detected_ops:
+            for pattern in always_deny:
+                if pattern in op:
+                    return TextContent(
+                        text=json.dumps(
+                            {
+                                "status": "denied",
+                                "reason": f"Script contains denied operation: '{pattern}'",
+                                "detected_operations": detected_ops,
+                                "target": target,
+                            }
+                        )
+                    )
+
+        # Check if all operations are in allowlist (fast path)
+        auto_approve = profile.get("auto_approve", [])
+        all_allowed = (
+            all(any(pattern in op for pattern in auto_approve) for op in detected_ops)
+            if detected_ops
+            else True
+        )
+
+        try:
+            # Connect to remote
+            ssh_config = SSHConfig(target=resolved_target, port=remote.port)
+            with SSHConnection(ssh_config) as ssh:
+                # Ensure shannot is deployed (fast check, only deploys if missing)
+                if not ensure_deployed(ssh):
+                    return TextContent(
+                        text=json.dumps(
+                            {
+                                "status": "error",
+                                "error": f"Failed to deploy shannot to {target}",
+                                "target": target,
+                            }
+                        )
+                    )
+
+                if all_allowed and detected_ops:
+                    # Fast path: execute immediately on remote
+                    logger.info(
+                        f"Remote fast path: all {len(detected_ops)} operations allowed on {target}"
+                    )
+                    return self._execute_remote_fast_path(
+                        ssh=ssh,
+                        script=script,
+                        profile_name=profile_name,
+                        target=target,
+                    )
+
+                # Review path: create session with remote metadata
+                logger.info(f"Remote review path: {len(detected_ops)} operations on {target}")
+                return self._create_remote_approval_session(
+                    script=script,
+                    detected_ops=detected_ops,
+                    profile_name=profile_name,
+                    session_name=session_name,
+                    target=target,
+                )
+
+        except Exception as e:
+            logger.error(f"Remote execution failed: {e}", exc_info=True)
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Remote execution failed: {e}",
+                        "target": target,
+                    }
+                )
+            )
+
+    def _execute_remote_fast_path(
+        self,
+        ssh: SSHConnection,
+        script: str,
+        profile_name: str,
+        target: str,
+    ) -> TextContent:
+        """Execute script immediately on remote (all operations pre-approved).
+
+        Parameters
+        ----------
+        ssh : SSHConnection
+            Connected SSH session.
+        script : str
+            Python script to execute.
+        profile_name : str
+            Profile name (for logging).
+        target : str
+            Remote target name.
+
+        Returns
+        -------
+        TextContent
+            JSON response with execution results.
+        """
+        from ..remote import run_remote_fast_path
+
+        try:
+            start_time = time.time()
+
+            result = run_remote_fast_path(
+                ssh=ssh,
+                script_content=script,
+            )
+
+            duration = time.time() - start_time
+
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "success",
+                        "exit_code": result.get("exit_code", 0),
+                        "stdout": result.get("stdout", ""),
+                        "stderr": result.get("stderr", ""),
+                        "duration": duration,
+                        "profile": profile_name,
+                        "target": target,
+                    }
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Remote fast path execution failed: {e}", exc_info=True)
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Remote execution failed: {e}",
+                        "target": target,
+                    }
+                )
+            )
+
+    def _create_remote_approval_session(
+        self,
+        script: str,
+        detected_ops: list[str],
+        profile_name: str,
+        session_name: str,
+        target: str,
+    ) -> TextContent:
+        """Create session for remote execution requiring user approval.
+
+        Parameters
+        ----------
+        script : str
+            Python script to execute.
+        detected_ops : list[str]
+            Operations detected by AST analysis.
+        profile_name : str
+            Profile name.
+        session_name : str
+            Human-readable session name.
+        target : str
+            Remote target name.
+
+        Returns
+        -------
+        TextContent
+            JSON response with session ID and instructions.
+        """
+        try:
+            # Use run_remote_dry_run to create session with remote metadata
+            session = run_remote_dry_run(
+                target=target,
+                script_path="<mcp>",
+                script_content=script,
+                name=session_name,
+                analysis=f"MCP request with profile '{profile_name}' on {target}",
+            )
+
+            if session is None:
+                # No operations queued - script is pure Python with no subprocess calls
+                return TextContent(
+                    text=json.dumps(
+                        {
+                            "status": "success",
+                            "message": "Script executed (no operations requiring approval)",
+                            "target": target,
+                        }
+                    )
+                )
+
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "pending_approval",
+                        "session_id": session.id,
+                        "detected_operations": detected_ops,
+                        "target": target,
+                        "instructions": [
+                            f"Session created: {session.id}",
+                            f"Target: {target}",
+                            f"Review with: shannot approve show {session.id}",
+                            f"Approve and execute: shannot approve --execute {session.id}",
+                            "Or use session_result tool to poll status",
+                        ],
+                    }
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Remote session creation failed: {e}", exc_info=True)
+            return TextContent(
+                text=json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Failed to create remote session: {e}",
+                        "target": target,
+                    }
+                )
+            )
+
     def _handle_session_result(self, arguments: dict[str, Any]) -> TextContent:
         """Poll result of a pending session.
 
@@ -617,11 +941,15 @@ class ShannotMCPServer(MCPServer):
             session.save()
 
         # Return session status
-        result = {
+        result: dict[str, Any] = {
             "session_id": session.id,
             "status": session.status,
             "created_at": session.created_at,
         }
+
+        # Include target if this is a remote session
+        if session.target:
+            result["target"] = session.target
 
         if session.status == "executed":
             result["exit_code"] = session.exit_code
@@ -632,10 +960,13 @@ class ShannotMCPServer(MCPServer):
             result["error"] = session.error
         elif session.status == "pending":
             result["expires_at"] = session.expires_at
-            result["instructions"] = [
+            instructions = [
                 f"Review with: shannot approve show {session.id}",
                 f"Approve and execute: shannot approve --execute {session.id}",
             ]
+            if session.target:
+                instructions.insert(0, f"Target: {session.target}")
+            result["instructions"] = instructions
         elif session.status == "expired":
             result["message"] = "Session expired (1 hour TTL)"
         elif session.status == "cancelled":
@@ -673,3 +1004,21 @@ class ShannotMCPServer(MCPServer):
             }
 
         return json.dumps(status, indent=2)
+
+    def _handle_list_remotes(self) -> str:
+        """Resource handler: list configured SSH remotes."""
+        try:
+            remotes = load_remotes()
+        except Exception as e:
+            logger.warning(f"Failed to load remotes: {e}")
+            return json.dumps({"remotes": {}, "error": str(e)}, indent=2)
+
+        remotes_dict = {}
+        for name, remote in remotes.items():
+            remotes_dict[name] = {
+                "host": remote.host,
+                "user": remote.user,
+                "port": remote.port,
+            }
+
+        return json.dumps({"remotes": remotes_dict}, indent=2)
