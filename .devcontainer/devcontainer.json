@@ -1,6 +1,6 @@
 {
   "name": "Shannot Development Environment",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
 
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
