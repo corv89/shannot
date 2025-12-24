@@ -112,6 +112,8 @@ def execute_script(
                     ),
                 }
             )
+            # Centralize file_writes_pending to avoid conflicting definitions in base classes
+            file_writes_pending: list = []
 
         # Configure dry-run and remote modes
         SandboxedProc.subprocess_dry_run = dry_run
