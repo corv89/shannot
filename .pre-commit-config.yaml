@@ -29,15 +29,12 @@ repos:
       - id: ruff-format
         args: [--check]
 
-  # TODO: Re-enable after fixing mixin type architecture
-  # See: https://github.com/corv89/shannot/issues/XXX
-  # - repo: https://github.com/RobertCraigie/pyright-python
-  #   rev: v1.1.389
-  #   hooks:
-  #     - id: pyright
-  #       name: basedpyright
-  #       entry: basedpyright
-  #       language: python
-  #       types: [python]
-  #       require_serial: true
-  #       additional_dependencies: ["basedpyright>=1.0"]
+  - repo: local
+    hooks:
+      - id: basedpyright
+        name: basedpyright
+        entry: uv run basedpyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true

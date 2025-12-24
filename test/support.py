@@ -1,10 +1,21 @@
+from __future__ import annotations
+
 import subprocess
 import time
+from typing import TYPE_CHECKING, Any
 
 from shannot.mix_grab_output import MixGrabOutput
 
+if TYPE_CHECKING:
+    from shannot.virtualizedproc import VirtualizedProc
+
 
 class BaseTest:
+    vproccls: type[VirtualizedProc]
+    pypy_c_sandbox: str
+    popen: subprocess.Popen[Any]
+    virtualizedproc: VirtualizedProc
+
     def execute(self, args, env=None):
         assert isinstance(args, (list, tuple))
         myclass = self.vproccls

@@ -277,7 +277,7 @@ def execute_remote_session(session: Session) -> int:
         if remote_workdir:
             _cleanup_remote_workdir(ssh, remote_workdir)
 
-        return session.exit_code
+        return session.exit_code or 0
 
 
 def run_remote_with_approvals(session: Session, ssh: SSHConnection) -> int:

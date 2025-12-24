@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import io
 import json
 import logging
 import time
@@ -12,11 +11,11 @@ from typing import Any
 
 from ..config import VERSION, load_remotes
 from ..deploy import ensure_deployed
+from ..execute import execute_script
 from ..remote import run_remote_dry_run
 from ..runtime import find_pypy_sandbox, get_runtime_path
 from ..session import Session, create_session
 from ..ssh import SSHConfig, SSHConnection
-from ..virtualizedproc import VirtualizedProc
 from .server import MCPServer
 from .types import TextContent
 
@@ -515,23 +514,11 @@ class ShannotMCPServer(MCPServer):
         try:
             start_time = time.time()
 
-            # Create VirtualizedProc and execute script
-            proc = VirtualizedProc(
+            # Execute script in PyPy sandbox using shared execution function
+            result = execute_script(
+                script,
                 pypy_bin=self.runtime["pypy_sandbox"],
-                lib_python=self.runtime["lib_python"],
-                lib_pypy=self.runtime["lib_pypy"],
-            )
-
-            # Capture stdout/stderr
-            stdout_buffer = io.StringIO()
-            stderr_buffer = io.StringIO()
-
-            # Execute script (this will run in PyPy sandbox with subprocess virtualization)
-            # Note: Full integration with mix_subprocess.py auto-approval happens here
-            exit_code = proc.run(
-                script=script,
-                stdout=stdout_buffer,
-                stderr=stderr_buffer,
+                dry_run=False,  # MCP fast-path executes directly
             )
 
             duration = time.time() - start_time
@@ -541,15 +528,18 @@ class ShannotMCPServer(MCPServer):
                 text=json.dumps(
                     {
                         "status": "success",
-                        "exit_code": exit_code,
-                        "stdout": stdout_buffer.getvalue(),
-                        "stderr": stderr_buffer.getvalue(),
+                        "exit_code": result.exit_code,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
                         "duration": duration,
                         "profile": profile_name,
                     }
                 )
             )
 
+        except RuntimeError as e:
+            logger.error(f"Fast path execution failed: {e}", exc_info=True)
+            return TextContent(text=json.dumps({"status": "error", "error": str(e)}))
         except Exception as e:
             logger.error(f"Fast path execution failed: {e}", exc_info=True)
             return TextContent(

@@ -24,7 +24,7 @@ class SSHConfig:
     target: str  # user@host
     connect_timeout: int = 10
     command_timeout: int = 30
-    control_path: Path = field(default=None)
+    control_path: Path | None = field(default=None)
     port: int = 22
 
     def __post_init__(self):
@@ -214,7 +214,7 @@ class SSHConnection:
                 raise OSError(errno.EACCES, f"Permission denied: {path}")
             raise OSError(errno.EIO, f"Failed to write {path}: {stderr}")
 
-    def stat_file(self, path: str) -> os.stat_result:
+    def stat_file(self, path: str) -> _StatResult:
         """
         Get file stat info via stat command.
 
@@ -328,7 +328,7 @@ class SSHConnection:
 
         # Remove socket file if it exists
         try:
-            if self.config.control_path.exists():
+            if self.config.control_path and self.config.control_path.exists():
                 self.config.control_path.unlink()
         except OSError:
             pass  # Socket already removed or inaccessible

@@ -100,10 +100,10 @@ def main(argv):
         elif option == "--session-id":
             session_id = value
         elif option == "--script-name":
-            SandboxedProc.subprocess_script_name = value
+            SandboxedProc.subprocess_script_name = value  # type: ignore[misc]
             sandbox_args["script_name"] = value
         elif option == "--analysis":
-            SandboxedProc.subprocess_analysis = value
+            SandboxedProc.subprocess_analysis = value  # type: ignore[misc]
             sandbox_args["analysis"] = value
         elif option == "--target":
             SandboxedProc.remote_target = value
@@ -194,6 +194,7 @@ def main(argv):
             stdout=subprocess.PIPE,
         )
         vp = SandboxedProc(popen1.stdin, popen1.stdout)
+        assert popen1.stdout is not None
         errors = vp.check_dump(popen1.stdout.read())
         if errors:
             for error in errors:
@@ -226,7 +227,7 @@ def main(argv):
             if os.path.exists(real_script_path):
                 try:
                     with open(real_script_path) as f:
-                        virtualizedproc.subprocess_script_content = f.read()
+                        virtualizedproc.subprocess_script_content = f.read()  # type: ignore[misc]
                 except (OSError, UnicodeDecodeError):
                     pass  # Script content is optional, continue without it
 
@@ -235,7 +236,7 @@ def main(argv):
 
     # Add pre-approved commands (for recovery when remote session was cleaned up)
     if approved_commands:
-        virtualizedproc.subprocess_approved.extend(approved_commands)
+        virtualizedproc.subprocess_approved.update(approved_commands)
 
     # Load session commands if re-executing an approved session
     # (must be after profile so session commands take precedence)

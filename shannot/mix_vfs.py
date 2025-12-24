@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import errno
 import os
 import stat
 import sys
 from io import BytesIO
+from typing import BinaryIO
 
 from .sandboxio import NULL
 from .structs import DT_DIR, DT_REG, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
@@ -24,6 +27,7 @@ class FSObject:
     """
 
     read_only = True
+    kind: int = 0  # Subclasses must override with stat.S_IFDIR or stat.S_IFREG
 
     def stat(self):
         try:
@@ -61,19 +65,24 @@ class FSObject:
             e_mode |= (s.st_mode & stat.S_IRWXG) >> 3
         return (e_mode & mode) == mode
 
-    def keys(self):
+    def keys(self) -> list[str]:
+        """Return list of child names. Raises OSError for non-directories."""
         raise OSError(errno.ENOTDIR, self)
 
-    def join(self, name):
+    def join(self, name: str) -> FSObject:
+        """Return child node by name. Raises OSError for non-directories."""
         raise OSError(errno.ENOTDIR, self)
 
-    def open(self):
+    def open(self) -> BinaryIO:
+        """Open and return file-like object. Raises OSError for directories."""
         raise OSError(errno.EACCES, self)
 
-    def getsize(self):
+    def getsize(self) -> int:
+        """Return size in bytes."""
         return 0
 
-    def is_dir(self):
+    def is_dir(self) -> bool:
+        """Return True if this is a directory."""
         return stat.S_ISDIR(self.kind)
 
 
@@ -85,13 +94,13 @@ class Dir(FSObject):
 
     kind = stat.S_IFDIR
 
-    def __init__(self, entries=None):
-        self.entries = entries if entries is not None else {}
+    def __init__(self, entries: dict[str, FSObject] | None = None):
+        self.entries: dict[str, FSObject] = entries if entries is not None else {}
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return sorted(self.entries.keys())
 
-    def join(self, name):
+    def join(self, name: str) -> FSObject:
         try:
             return self.entries[name]
         except KeyError:
@@ -120,7 +129,7 @@ class RealDir(Dir):
     def __repr__(self):
         return f"<RealDir {self.path}>"
 
-    def keys(self):
+    def keys(self) -> list[str]:
         names = os.listdir(self.path)
         if not self.show_dotfiles:
             names = [name for name in names if not name.startswith(".")]
@@ -128,7 +137,7 @@ class RealDir(Dir):
             names = [name for name in names if not name.lower().endswith(excl)]
         return sorted(names)
 
-    def join(self, name):
+    def join(self, name: str) -> FSObject:
         if name.startswith(".") and not self.show_dotfiles:
             raise OSError(errno.ENOENT, name)
         for excl in self.exclude:
@@ -167,11 +176,11 @@ class OverlayDir(RealDir):
     def __repr__(self):
         return f"<OverlayDir {self.path} (+{len(self.overrides)} overrides)>"
 
-    def keys(self):
+    def keys(self) -> list[str]:
         real_keys = set(super().keys())
         return sorted(real_keys | set(self.overrides.keys()))
 
-    def join(self, name):
+    def join(self, name: str) -> FSObject:
         if name in self.overrides:
             return self.overrides[name]
         return super().join(name)
@@ -182,31 +191,31 @@ class File(FSObject):
 
     kind = stat.S_IFREG
 
-    def __init__(self, data, mode=0):
+    def __init__(self, data: bytes, mode: int = 0):
         self.data = data
         self.kind |= mode
 
-    def getsize(self):
+    def getsize(self) -> int:
         return len(self.data)
 
-    def open(self):
+    def open(self) -> BinaryIO:
         return BytesIO(self.data)
 
 
 class RealFile(File):
     """File backed by a real filesystem path (read-only access)."""
 
-    def __init__(self, path, mode=0):
+    def __init__(self, path: str, mode: int = 0):
         self.path = path
-        self.kind |= mode
+        self.kind = stat.S_IFREG | mode
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<RealFile {self.path}>"
 
-    def getsize(self):
+    def getsize(self) -> int:
         return os.stat(self.path).st_size
 
-    def open(self):
+    def open(self) -> BinaryIO:
         try:
             return open(self.path, "rb")
         except OSError as e:
@@ -231,14 +240,15 @@ def vfs_signature(sig, filearg=None):
             try:
                 return func(self, *args) or 0
             except OSError as e:
+                err_code = e.errno if e.errno is not None else 0
                 if self.debug_errors:
                     filename = ""
                     if filearg is not None:
                         filename = repr(self.vfs_fetch_path(args[filearg]))
-                    err_name = errno.errorcode.get(e.errno, f"Errno {e.errno}")
+                    err_name = errno.errorcode.get(err_code, f"Errno {err_code}")
                     msg = f"subprocess: vfs: {sig.split('(')[0]}({filename}) => {err_name}\n"
                     sys.stderr.write(msg)
-                self.sandio.set_errno(e.errno)
+                self.sandio.set_errno(err_code)
                 if sig.endswith("i"):
                     return -1
                 if sig.endswith("p"):
@@ -326,7 +336,7 @@ class MixVFS:
 
         return Dir(
             {
-                "pypy": File("", mode=0o111),
+                "pypy": File(b"", mode=0o111),
                 "lib-python": RealDir(lib_python, exclude=exclude),
                 "lib_pypy": OverlayDir(lib_pypy, overrides=stubs, exclude=exclude),
             }
@@ -335,7 +345,7 @@ class MixVFS:
     def vfs_fetch_path(self, p_pathname):
         if isinstance(p_pathname, str):
             return p_pathname
-        return self.sandio.read_charp(p_pathname, MAX_PATH).decode("utf-8")
+        return self.sandio.read_charp(p_pathname, MAX_PATH).decode("utf-8")  # type: ignore[attr-defined]
 
     def vfs_getnode(self, p_pathname):
         path = self.vfs_fetch_path(p_pathname)
@@ -351,7 +361,7 @@ class MixVFS:
     def vfs_write_stat(self, p_statbuf, node):
         stat_struct = node.stat()
         bytes_data = struct_to_bytes(stat_struct)
-        self.sandio.write_buffer(p_statbuf, bytes_data)
+        self.sandio.write_buffer(p_statbuf, bytes_data)  # type: ignore[attr-defined]
 
     def vfs_allocate_fd(self, f, node):
         if node.is_dir():
@@ -380,7 +390,7 @@ class MixVFS:
             st_gid=GID,
         )
         bytes_data = struct_to_bytes(stat_struct)
-        self.sandio.write_buffer(p_statbuf, bytes_data)
+        self.sandio.write_buffer(p_statbuf, bytes_data)  # type: ignore[attr-defined]
 
     @vfs_signature("stat64(pp)i", filearg=0)
     def s_stat64(self, p_pathname, p_statbuf):
@@ -400,7 +410,7 @@ class MixVFS:
             if fd in (0, 1, 2):
                 self.vfs_stat_for_pipe(p_statbuf)
                 return
-            return super().s_fstat64(fd, p_statbuf)
+            return super().s_fstat64(fd, p_statbuf)  # type: ignore[misc]
         self.vfs_write_stat(p_statbuf, node)
 
     @vfs_signature("access(pi)i", filearg=0)
@@ -493,12 +503,12 @@ class MixVFS:
             path, write_buf, original, node = self.vfs_write_buffers[fd]
             if count < 0:
                 count = 0
-            data = self.sandio.read_buffer(p_buf, min(count, MAX_WRITE_CHUNK))
+            data = self.sandio.read_buffer(p_buf, min(count, MAX_WRITE_CHUNK))  # type: ignore[attr-defined]
             write_buf.write(data)
             return len(data)
 
         # Delegate stdout/stderr to parent
-        return super().s_write(fd, p_buf, count)
+        return super().s_write(fd, p_buf, count)  # type: ignore[misc]
 
     @vfs_signature("read(ipi)i")
     def s_read(self, fd, p_buf, count):
@@ -508,18 +518,18 @@ class MixVFS:
             if count < 0:
                 count = 0
             data = write_buf.read(min(count, MAX_WRITE_CHUNK))
-            self.sandio.write_buffer(p_buf, data)
+            self.sandio.write_buffer(p_buf, data)  # type: ignore[attr-defined]
             return len(data)
 
         try:
             f = self.vfs_get_file(fd)
         except OSError:
-            return super().s_read(fd, p_buf, count)
+            return super().s_read(fd, p_buf, count)  # type: ignore[misc]
         if count < 0:
             count = 0
         # don't try to read more than MAX_WRITE_CHUNK at once here
         data = f.read(min(count, MAX_WRITE_CHUNK))
-        self.sandio.write_buffer(p_buf, data)
+        self.sandio.write_buffer(p_buf, data)  # type: ignore[attr-defined]
         return len(data)
 
     @vfs_signature("lseek(iii)i")
@@ -549,7 +559,7 @@ class MixVFS:
             raise OSError(errno.EMFILE, "trying to open too many directories")
         node = self.vfs_getnode(p_name)
         fdir = OpenDir(node)
-        p = self.sandio.malloc(b"\x00" * SIZEOF_DIRENT)
+        p = self.sandio.malloc(b"\x00" * SIZEOF_DIRENT)  # type: ignore[attr-defined]
         self.vfs_open_dirs[p.addr] = fdir
         return p
 
@@ -576,10 +586,10 @@ class MixVFS:
             raise OSError(errno.EOVERFLOW, subnode)
         dirent.d_name = name
         bytes_data = struct_to_bytes(dirent)
-        self.sandio.write_buffer(p_dir, bytes_data)
+        self.sandio.write_buffer(p_dir, bytes_data)  # type: ignore[attr-defined]
         return p_dir
 
     @vfs_signature("closedir(p)i")
     def s_closedir(self, p_dir):
         del self.vfs_open_dirs[p_dir.addr]
-        self.sandio.free(p_dir)
+        self.sandio.free(p_dir)  # type: ignore[attr-defined]

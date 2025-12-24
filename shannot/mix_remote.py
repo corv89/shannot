@@ -5,7 +5,7 @@ from __future__ import annotations
 import errno
 import stat
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, BinaryIO
 
 from .mix_vfs import GID, INO_COUNTER, UID, Dir, FSObject
 from .structs import new_stat
@@ -77,14 +77,14 @@ class RemoteFile(FSObject):
             st_gid=st_gid,
         )
 
-    def getsize(self):
+    def getsize(self) -> int:
         """Return file size."""
         try:
             return self.stat().st_size
         except OSError:
             return 0
 
-    def open(self):
+    def open(self) -> BinaryIO:
         """Return file-like object with remote content."""
         if self._cached_content is None:
             try:
@@ -149,7 +149,7 @@ class RemoteDir(FSObject):
             st_gid=st_gid,
         )
 
-    def keys(self):
+    def keys(self) -> list[str]:
         """List directory contents."""
         if self._cached_keys is None:
             try:
@@ -158,7 +158,7 @@ class RemoteDir(FSObject):
                 self._cached_keys = []
         return self._cached_keys
 
-    def join(self, name: str):
+    def join(self, name: str) -> RemoteDir | RemoteFile:
         """
         Traverse to child node.
 
@@ -203,7 +203,7 @@ class MixRemote:
     remote_paths: list = ["/proc", "/sys", "/var/log", "/etc", "/run"]
 
     # Internal state
-    _ssh_connection: SSHConnection = None
+    _ssh_connection: SSHConnection | None = None
 
     def __init__(self, *args, **kwargs):
         # Extract remote args from kwargs if provided
@@ -225,6 +225,8 @@ class MixRemote:
         """Initialize SSH connection and mount remote paths into VFS."""
         from .ssh import SSHConnection
 
+        # remote_target is guaranteed non-None here (called only when _is_remote() is True)
+        assert self.remote_target is not None
         self._ssh_connection = SSHConnection(self.remote_target)
 
         if not self._ssh_connection.connect():
@@ -253,7 +255,7 @@ class MixRemote:
             return
 
         # Navigate to parent and create directories as needed
-        current = self.vfs_root
+        current = self.vfs_root  # type: ignore[attr-defined]
 
         # Create parent directories as virtual Dir objects
         for _i, part in enumerate(path_parts[:-1]):
