@@ -4,6 +4,8 @@ Platform and architecture-specific struct layouts for IPC with the
 PyPy sandbox subprocess.
 """
 
+from __future__ import annotations
+
 import platform
 import sys
 from ctypes import (
@@ -18,6 +20,7 @@ from ctypes import (
     c_ushort,
     sizeof,
 )
+from typing import TYPE_CHECKING
 
 ARCH = platform.machine()
 IS_LINUX = sys.platform.startswith("linux")
@@ -36,8 +39,35 @@ class Timespec(Structure):
     ]
 
 
-# Platform-specific struct dirent
-if IS_MACOS:
+# Platform-specific struct dirent and stat
+# Use TYPE_CHECKING to provide a single definition for type checkers
+# while keeping runtime platform-specific definitions
+if TYPE_CHECKING:
+    from typing import ClassVar
+
+    # Type-checking definition (using Linux x86_64 layout as canonical)
+    class Dirent(Structure):
+        _fields_: ClassVar[list[tuple[str, type]]]  # type: ignore[misc]
+        d_ino: int
+        d_off: int
+        d_reclen: int
+        d_type: int
+        d_name: bytes
+
+    class Stat(Structure):
+        _fields_: ClassVar[list[tuple[str, type]]]  # type: ignore[misc]
+        st_dev: int
+        st_ino: int
+        st_nlink: int
+        st_mode: int
+        st_uid: int
+        st_gid: int
+        st_rdev: int
+        st_size: int
+        st_blksize: int
+        st_blocks: int
+
+elif IS_MACOS:
 
     class Dirent(Structure):
         _fields_ = [
@@ -47,20 +77,7 @@ if IS_MACOS:
             ("d_namlen", c_ubyte),  # 1 byte
             ("d_name", c_char * 256),  # 256 bytes
         ]
-else:  # Linux
 
-    class Dirent(Structure):
-        _fields_ = [
-            ("d_ino", c_ulong),  # 8 bytes
-            ("d_off", c_ulong),  # 8 bytes
-            ("d_reclen", c_ushort),  # 2 bytes
-            ("d_type", c_ubyte),  # 1 byte
-            ("d_name", c_char * 256),  # 256 bytes (+ 5 bytes padding)
-        ]
-
-
-# Platform and architecture-specific struct stat
-if IS_MACOS:
     # macOS stat64 structure
     class Stat(Structure):
         _fields_ = [
@@ -83,7 +100,18 @@ if IS_MACOS:
             ("st_lspare", c_int),
             ("st_qspare", c_longlong * 2),
         ]
+
 elif IS_LINUX and ARCH == "aarch64":
+
+    class Dirent(Structure):
+        _fields_ = [
+            ("d_ino", c_ulong),  # 8 bytes
+            ("d_off", c_ulong),  # 8 bytes
+            ("d_reclen", c_ushort),  # 2 bytes
+            ("d_type", c_ubyte),  # 1 byte
+            ("d_name", c_char * 256),  # 256 bytes (+ 5 bytes padding)
+        ]
+
     # Linux aarch64 - verified on Ubuntu 20.04 arm64 (128 bytes)
     class Stat(Structure):
         _fields_ = [
@@ -107,7 +135,18 @@ elif IS_LINUX and ARCH == "aarch64":
             ("st_ctime_nsec", c_long),  # 8
             ("__unused", c_uint * 2),  # 8
         ]  # Total: 128 bytes
+
 elif IS_LINUX and ARCH == "x86_64":
+
+    class Dirent(Structure):
+        _fields_ = [
+            ("d_ino", c_ulong),  # 8 bytes
+            ("d_off", c_ulong),  # 8 bytes
+            ("d_reclen", c_ushort),  # 2 bytes
+            ("d_type", c_ubyte),  # 1 byte
+            ("d_name", c_char * 256),  # 256 bytes (+ 5 bytes padding)
+        ]
+
     # Linux x86_64 (144 bytes)
     class Stat(Structure):
         _fields_ = [
@@ -127,6 +166,7 @@ elif IS_LINUX and ARCH == "x86_64":
             ("st_ctim", Timespec),  # 16 bytes
             ("_reserved", c_long * 3),  # 24 bytes
         ]  # Total: 144 bytes
+
 else:
     raise NotImplementedError(f"Unsupported platform: {sys.platform}/{ARCH}")
 

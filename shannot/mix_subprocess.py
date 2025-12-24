@@ -10,6 +10,7 @@ from .queue import write_pending
 from .virtualizedproc import signature
 
 if TYPE_CHECKING:
+    from ._protocols import HasSandio
     from .ssh import SSHConnection
 
 
@@ -139,35 +140,35 @@ class MixSubprocess:
         return result.returncode
 
     @signature("system(p)i")
-    def s_system(self, p_command):
+    def s_system(self: HasSandio, p_command):
         cmd = self.sandio.read_charp(p_command, 4096).decode("utf-8")
 
         # Dry-run mode: log everything, execute nothing
-        if self.subprocess_dry_run:
-            self.subprocess_pending.append(cmd)
-            if self.subprocess_auto_persist:
-                self.save_pending()
+        if self.subprocess_dry_run:  # type: ignore[attr-defined]
+            self.subprocess_pending.append(cmd)  # type: ignore[attr-defined]
+            if self.subprocess_auto_persist:  # type: ignore[attr-defined]
+                self.save_pending()  # type: ignore[attr-defined]
             sys.stderr.write(f"[DRY-RUN] {cmd}\n")
             return 0
 
-        permission = self._check_permission(cmd)
+        permission = self._check_permission(cmd)  # type: ignore[attr-defined]
 
         if permission == "deny":
             sys.stderr.write(f"[DENIED] {cmd}\n")
             return 127  # Command not found
 
         elif permission == "queue":
-            self.subprocess_pending.append(cmd)
-            if self.subprocess_auto_persist:
-                self.save_pending()
+            self.subprocess_pending.append(cmd)  # type: ignore[attr-defined]
+            if self.subprocess_auto_persist:  # type: ignore[attr-defined]
+                self.save_pending()  # type: ignore[attr-defined]
             sys.stderr.write(f"[QUEUED] {cmd}\n")
             # Return fake success - script continues, but command didn't run
             return 0
 
         elif permission == "allow":
-            target_info = f" @ {self.remote_target}" if self.remote_target else ""
+            target_info = f" @ {self.remote_target}" if self.remote_target else ""  # type: ignore[attr-defined]
             sys.stderr.write(f"[EXEC{target_info}] {cmd}\n")
-            return self._execute_command(cmd)
+            return self._execute_command(cmd)  # type: ignore[attr-defined]
 
         return 127
 

@@ -67,6 +67,8 @@ def sigerror(sig, error=FATAL, returns=FATAL):
     else:
         raise ValueError(f"{sig!r}: invalid return type code")
 
+    # error is known to be an int at this point (not FATAL)
+    assert isinstance(error, int)
     error_name = errno.errorcode.get(error, f"Errno {error}")
     stubmsg = f"subprocess: stub: {sig} => {error_name}\n"
 

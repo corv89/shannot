@@ -14,7 +14,7 @@ Usage:
     })
 """
 
-from .mix_vfs import Dir, File
+from .mix_vfs import Dir, File, FSObject
 
 
 def _format_cmdline(args):
@@ -261,7 +261,7 @@ def build_sys(num_cpus=1):
     cpu_range = _format_cpu_range(num_cpus).encode("utf-8")
 
     # Build cpu entries: cpu0, cpu1, ...
-    cpu_entries = {
+    cpu_entries: dict[str, FSObject] = {
         "online": File(cpu_range),
         "present": File(cpu_range),
         "possible": File(cpu_range),

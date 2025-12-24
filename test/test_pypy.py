@@ -43,6 +43,7 @@ class TestVirtualizedProc(support.BaseTest):
 
     def test_check_dump(self):
         vp = self.execute(["/tmp/pypy"], env={"RPY_SANDBOX_DUMP": "1"})
+        assert self.popen.stdout is not None
         errors = vp.check_dump(self.popen.stdout.read())
         for error in errors:
             print(error)
@@ -57,13 +58,14 @@ class TestVirtualizedProc(support.BaseTest):
         vp = self.execute(["/bin/pypy", "-S", "-c", "print(6*7)"])
         vp.run()
         out = self.close()
-        assert out.endswith("42\n")
+        assert out is not None and out.endswith("42\n")
 
     def test_listdir_forbidden(self):
         vp = self.execute(["/bin/pypy", "-S", "-c", 'import os; os.listdir("/")'])
-        self.virtualizedproc.virtual_fd_directories = 0
+        self.virtualizedproc.virtual_fd_directories = 0  # type: ignore[misc]
         vp.run()
         out = self.close(expected_exitcode=1)
+        assert out is not None
         assert (
             "Operation not permitted:" in out  # pypy2
             or "No module named 'encodings'" in out
@@ -71,10 +73,10 @@ class TestVirtualizedProc(support.BaseTest):
 
     def test_listdir(self):
         vp = self.execute(["/bin/pypy", "-S", "-c", 'import os; print(os.listdir("/"))'])
-        self.virtualizedproc.virtual_fd_directories = 20
+        self.virtualizedproc.virtual_fd_directories = 20  # type: ignore[misc]
         vp.run()
         out = self.close()
-        assert out.endswith("['bin', 'tmp']\n")
+        assert out is not None and out.endswith("['bin', 'tmp']\n")
 
     def test_regexp(self):
         vp = self.execute(
@@ -87,4 +89,4 @@ class TestVirtualizedProc(support.BaseTest):
         )
         vp.run()
         out = self.close()
-        assert out.endswith("adsjsatf\n")
+        assert out is not None and out.endswith("adsjsatf\n")

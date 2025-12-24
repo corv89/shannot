@@ -72,6 +72,7 @@ class TestMCPServer:
 
         response = server.handle_request(request)
 
+        assert response is not None
         assert response["jsonrpc"] == "2.0"
         assert response["id"] == 1
         assert "result" in response
@@ -86,6 +87,7 @@ class TestMCPServer:
 
         response = server.handle_request(request)
 
+        assert response is not None
         assert response["jsonrpc"] == "2.0"
         assert response["id"] == 1
         assert response["result"] == {}
@@ -105,6 +107,7 @@ class TestMCPServer:
 
         response = server.handle_request(request)
 
+        assert response is not None
         assert response["jsonrpc"] == "2.0"
         assert "result" in response
         assert "tools" in response["result"]
@@ -134,6 +137,7 @@ class TestMCPServer:
 
         response = server.handle_request(request)
 
+        assert response is not None
         assert response["jsonrpc"] == "2.0"
         assert "result" in response
         assert "content" in response["result"]
@@ -147,6 +151,7 @@ class TestMCPServer:
 
         response = server.handle_request(request)
 
+        assert response is not None
         assert response["jsonrpc"] == "2.0"
         assert "error" in response
         assert "Unknown method" in response["error"]["message"]
@@ -235,8 +240,9 @@ subprocess.call(['cat', 'file.txt'])
 
         import ast
 
-        node = ast.parse("['ls', '/tmp']").body[0].value
-        cmd = server._extract_command_from_ast(node)
+        stmt = ast.parse("['ls', '/tmp']").body[0]
+        assert isinstance(stmt, ast.Expr)
+        cmd = server._extract_command_from_ast(stmt.value)
         assert cmd == "ls /tmp"
 
     def test_extract_command_from_ast_string(self):
@@ -245,8 +251,9 @@ subprocess.call(['cat', 'file.txt'])
 
         import ast
 
-        node = ast.parse("'ls /tmp'").body[0].value
-        cmd = server._extract_command_from_ast(node)
+        stmt = ast.parse("'ls /tmp'").body[0]
+        assert isinstance(stmt, ast.Expr)
+        cmd = server._extract_command_from_ast(stmt.value)
         assert cmd == "ls /tmp"
 
     def test_handle_sandbox_run_invalid_script(self):

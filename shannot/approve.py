@@ -17,7 +17,7 @@ import os
 import sys
 import termios
 import tty
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,11 +34,7 @@ class Action:
     """Action returned from views to be handled by main loop."""
 
     name: str  # "execute", "reject", "view", "back", "quit"
-    sessions: list[Session] = None
-
-    def __post_init__(self):
-        if self.sessions is None:
-            self.sessions = []
+    sessions: list[Session] = field(default_factory=list)
 
 
 # ==============================================================================
@@ -100,12 +96,12 @@ class View:
         """Render the view to the terminal."""
         raise NotImplementedError
 
-    def handle_key(self, key: str) -> View | None:
+    def handle_key(self, key: str) -> Action | View | None:
         """
         Handle keypress.
 
         Returns:
-            A new View to switch to, or None to stay on this view.
+            An Action to execute, a new View to switch to, or None to stay on this view.
         """
         raise NotImplementedError
 
@@ -118,7 +114,7 @@ class View:
 class SessionListView(View):
     """Main view showing list of pending sessions with multi-select."""
 
-    def __init__(self, sessions: list[Session] = None):
+    def __init__(self, sessions: list[Session] | None = None):
         if sessions is None:
             from .session import Session
 
