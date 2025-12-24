@@ -26,19 +26,24 @@ class HasVFSRoot(Protocol):
     vfs_root: Dir
 
 
+# fmt: off
 class HasSyscallRead(Protocol):
     """Protocol for classes that provide s_read syscall handler."""
 
-    def s_read(self, fd: int, p_buf: Ptr, count: int) -> int: ...
+    def s_read(self, fd: int, p_buf: Ptr, count: int) -> int:
+        ...
 
 
 class HasSyscallWrite(Protocol):
     """Protocol for classes that provide s_write syscall handler."""
 
-    def s_write(self, fd: int, p_buf: Ptr, count: int) -> int: ...
+    def s_write(self, fd: int, p_buf: Ptr, count: int) -> int:
+        ...
 
 
 class HasSyscallFstat(Protocol):
     """Protocol for classes that provide s_fstat64 syscall handler."""
 
-    def s_fstat64(self, fd: int, p_statbuf: Ptr) -> int: ...
+    def s_fstat64(self, fd: int, p_statbuf: Ptr) -> int:
+        ...
+# fmt: on
