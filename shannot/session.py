@@ -81,11 +81,36 @@ class Session:
         """Persist session to disk."""
         self.session_dir.mkdir(parents=True, exist_ok=True)
         metadata_path = self.session_dir / "session.json"
+
+        # Detect status change for audit logging
+        old_status = None
+        if metadata_path.exists():
+            try:
+                old_data = json.loads(metadata_path.read_text())
+                old_status = old_data.get("status")
+            except (OSError, json.JSONDecodeError):
+                pass
+
         metadata_path.write_text(json.dumps(asdict(self), indent=2))
 
+        # Log status change if detected
+        if old_status and old_status != self.status:
+            from .audit import log_session_status_changed
+
+            log_session_status_changed(self, old_status, self.status)
+
     @classmethod
-    def load(cls, session_id: str) -> Session:
-        """Load session from disk."""
+    def load(cls, session_id: str, *, audit: bool = True) -> Session:
+        """Load session from disk.
+
+        Parameters
+        ----------
+        session_id
+            The session ID to load
+        audit
+            Whether to log this load to audit log. Set False for
+            read-only queries like status display.
+        """
         session_dir = SESSIONS_DIR / session_id
         metadata_path = session_dir / "session.json"
 
@@ -93,7 +118,14 @@ class Session:
             raise FileNotFoundError(f"Session not found: {session_id}")
 
         data = json.loads(metadata_path.read_text())
-        return cls(**data)
+        session = cls(**data)
+
+        if audit:
+            from .audit import log_session_loaded
+
+            log_session_loaded(session)
+
+        return session
 
     def save_script(self, content: str) -> None:
         """Save the script content to session directory."""
@@ -135,7 +167,7 @@ class Session:
             for session_dir in SESSIONS_DIR.iterdir():
                 if session_dir.is_dir():
                     try:
-                        sessions.append(Session.load(session_dir.name))
+                        sessions.append(Session.load(session_dir.name, audit=False))
                     except (FileNotFoundError, json.JSONDecodeError):
                         pass
         # Sort by creation date, newest first
@@ -198,6 +230,11 @@ def create_session(
     if script_content:
         session.save_script(script_content)
 
+    # Audit log session creation
+    from .audit import log_session_created
+
+    log_session_created(session)
+
     return session
 
 
@@ -234,7 +271,7 @@ def execute_session(session: Session) -> int:
         )
         # run_session updates session status, but we capture output here too
         # in case run_session fails to do so
-        session = Session.load(session.id)  # Reload to get updates from run_session
+        session = Session.load(session.id, audit=False)  # Reload to get updates
         return session.exit_code or result.returncode
     except Exception as e:
         session.status = "failed"

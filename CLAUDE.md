@@ -100,8 +100,10 @@ def example(path: Path | str | None = None) -> dict[str, Path]:
 | `~/.config/shannot/profile.json` | Global approval profile |
 | `.shannot/profile.json` | Project approval profile |
 | `~/.config/shannot/remotes.toml` | SSH remote targets |
+| `~/.config/shannot/audit.json` | Audit logging config |
 | `~/.local/share/shannot/runtime/` | PyPy stdlib |
 | `~/.local/share/shannot/sessions/` | Session data |
+| `~/.local/share/shannot/audit/` | Audit logs (JSONL) |
 
 ## References
 

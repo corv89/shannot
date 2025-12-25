@@ -142,6 +142,7 @@ class MixSubprocess:
     @signature("system(p)i")
     def s_system(self: HasSandio, p_command):
         cmd = self.sandio.read_charp(p_command, 4096).decode("utf-8")
+        base, _ = self._parse_command(cmd)  # type: ignore[attr-defined]
 
         # Dry-run mode: log everything, execute nothing
         if self.subprocess_dry_run:  # type: ignore[attr-defined]
@@ -149,12 +150,35 @@ class MixSubprocess:
             if self.subprocess_auto_persist:  # type: ignore[attr-defined]
                 self.save_pending()  # type: ignore[attr-defined]
             sys.stderr.write(f"[DRY-RUN] {cmd}\n")
+
+            # Audit log queued command in dry-run mode
+            from .audit import log_command_decision
+
+            log_command_decision(
+                session_id=None,  # Session not yet created
+                command=cmd,
+                decision="queue",
+                reason="dry_run",
+                base_command=base,
+                target=self.remote_target,  # type: ignore[attr-defined]
+            )
             return 0
 
         permission = self._check_permission(cmd)  # type: ignore[attr-defined]
 
         if permission == "deny":
             sys.stderr.write(f"[DENIED] {cmd}\n")
+            # Audit log denied command
+            from .audit import log_command_decision
+
+            log_command_decision(
+                session_id=None,
+                command=cmd,
+                decision="deny",
+                reason="always_deny",
+                base_command=base,
+                target=self.remote_target,  # type: ignore[attr-defined]
+            )
             return 127  # Command not found
 
         elif permission == "queue":
@@ -162,12 +186,39 @@ class MixSubprocess:
             if self.subprocess_auto_persist:  # type: ignore[attr-defined]
                 self.save_pending()  # type: ignore[attr-defined]
             sys.stderr.write(f"[QUEUED] {cmd}\n")
+            # Audit log queued command
+            from .audit import log_command_decision
+
+            log_command_decision(
+                session_id=None,
+                command=cmd,
+                decision="queue",
+                reason="not_in_auto_approve",
+                base_command=base,
+                target=self.remote_target,  # type: ignore[attr-defined]
+            )
             # Return fake success - script continues, but command didn't run
             return 0
 
         elif permission == "allow":
             target_info = f" @ {self.remote_target}" if self.remote_target else ""  # type: ignore[attr-defined]
             sys.stderr.write(f"[EXEC{target_info}] {cmd}\n")
+            # Determine reason for allow
+            if cmd in self.subprocess_approved:  # type: ignore[attr-defined]
+                reason = "session_approved"
+            else:
+                reason = "auto_approve"
+            # Audit log allowed command
+            from .audit import log_command_decision
+
+            log_command_decision(
+                session_id=None,
+                command=cmd,
+                decision="allow",
+                reason=reason,
+                base_command=base,
+                target=self.remote_target,  # type: ignore[attr-defined]
+            )
             return self._execute_command(cmd)  # type: ignore[attr-defined]
 
         return 127

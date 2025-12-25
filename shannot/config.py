@@ -42,6 +42,7 @@ def _xdg_config_home() -> Path:
 DATA_DIR = _xdg_data_home() / "shannot"
 SESSIONS_DIR = DATA_DIR / "sessions"
 RUNTIME_DIR = DATA_DIR / "runtime"
+AUDIT_DIR = DATA_DIR / "audit"
 
 # Runtime paths (after setup)
 RUNTIME_LIB_PYTHON = RUNTIME_DIR / "lib-python"

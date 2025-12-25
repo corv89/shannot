@@ -489,6 +489,19 @@ class MixVFS:
                 )
                 self.file_writes_pending.append(pending)
                 sys.stderr.write(f"[QUEUED WRITE] {path} ({len(content)} bytes)\n")
+
+                # Audit log file write queueing
+                from .audit import log_file_write_queued
+
+                remote_target = getattr(self, "remote_target", None)
+                log_file_write_queued(
+                    session_id=None,  # Session not yet created
+                    path=path,
+                    size_bytes=len(content),
+                    is_new_file=(original is None),
+                    remote=is_remote,
+                    target=remote_target,
+                )
             return
 
         # Regular file close
