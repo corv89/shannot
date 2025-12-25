@@ -89,7 +89,7 @@ class Session:
                 old_data = json.loads(metadata_path.read_text())
                 old_status = old_data.get("status")
             except (OSError, json.JSONDecodeError):
-                pass
+                pass  # Ignore if file doesn't exist or is corrupt
 
         metadata_path.write_text(json.dumps(asdict(self), indent=2))
 
