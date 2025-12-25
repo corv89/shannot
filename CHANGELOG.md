@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2025-12-25
+
+### Features
+
+- Add append-only JSONL audit logging for security-relevant operations
+- Log session lifecycle, command decisions, file writes, approvals, and remote events
+- Per-file sequence numbers for tamper detection
+- fcntl file locking for concurrent write safety
+- Daily log rotation with configurable retention
+- Audit status shown in `shannot status` output
+
 ## [0.5.2] - 2025-12-23
 
 ### Features

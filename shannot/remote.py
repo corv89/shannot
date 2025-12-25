@@ -143,11 +143,34 @@ def run_remote_dry_run(
     ssh_config = SSHConfig(target=resolved_target, port=port)
 
     with SSHConnection(ssh_config) as ssh:
+        # Audit log remote connection
+        from .audit import log_remote_connection, log_remote_deployment
+
+        log_remote_connection(
+            session_id=None,
+            action="connected",
+            target=resolved_target,
+            port=port,
+        )
+
         # Ensure shannot is deployed
         if not ensure_deployed(ssh):
+            log_remote_deployment(
+                session_id=None,
+                action="failed",
+                target=resolved_target,
+                error="Failed to deploy shannot",
+            )
             raise RemoteExecutionError("Failed to deploy shannot to remote")
 
         deploy_dir = get_remote_deploy_dir()
+
+        log_remote_deployment(
+            session_id=None,
+            action="deployed",
+            target=resolved_target,
+            deploy_dir=deploy_dir,
+        )
         workdir = _create_remote_workdir(ssh)
 
         try:
@@ -238,6 +261,16 @@ def execute_remote_session(session: Session) -> int:
     ssh_config = SSHConfig(target=resolved_target, port=port)
 
     with SSHConnection(ssh_config) as ssh:
+        # Audit log remote connection
+        from .audit import log_remote_connection
+
+        log_remote_connection(
+            session_id=session.id,
+            action="connected",
+            target=resolved_target,
+            port=port,
+        )
+
         deploy_dir = get_remote_deploy_dir()
 
         # Check if remote session still exists

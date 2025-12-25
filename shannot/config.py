@@ -16,7 +16,7 @@ try:
     VERSION = version("shannot")
 except Exception:
     # Fallback for development/edge cases
-    VERSION = "0.5.1-dev"
+    VERSION = "0.6.0-dev"
 
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
@@ -42,6 +42,7 @@ def _xdg_config_home() -> Path:
 DATA_DIR = _xdg_data_home() / "shannot"
 SESSIONS_DIR = DATA_DIR / "sessions"
 RUNTIME_DIR = DATA_DIR / "runtime"
+AUDIT_DIR = DATA_DIR / "audit"
 
 # Runtime paths (after setup)
 RUNTIME_LIB_PYTHON = RUNTIME_DIR / "lib-python"

@@ -537,6 +537,16 @@ def cmd_status(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"  ✗ Error: {e}")
 
+        # Audit status (only in show_all mode)
+        from .audit import get_today_event_count, load_audit_config
+
+        audit_config = load_audit_config()
+        if audit_config.enabled:
+            event_count = get_today_event_count()
+            print(f"  Audit: enabled ({event_count} events today)")
+        else:
+            print("  Audit: disabled")
+
     return 0
 
 

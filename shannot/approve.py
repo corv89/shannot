@@ -661,21 +661,47 @@ class OutputView(View):
 
 def execute_sessions(sessions: list[Session]) -> list[tuple[Session, int]]:
     """Execute sessions and return results."""
+    import time
+
+    from .audit import (
+        log_approval_decision,
+        log_execution_completed,
+        log_execution_started,
+    )
     from .session import Session, execute_session
+
+    # Audit log approval decision
+    log_approval_decision(sessions, "approved", "tui")
 
     results = []
     for session in sessions:
         session.status = "approved"
         session.save()
+
+        # Audit log execution start
+        log_execution_started(session)
+        start_time = time.time()
+
         exit_code = execute_session(session)
+
         # Reload to get updated stdout/stderr
-        session = Session.load(session.id)
+        session = Session.load(session.id, audit=False)
+
+        # Audit log execution complete
+        duration = time.time() - start_time
+        log_execution_completed(session, duration, session.error)
+
         results.append((session, exit_code))
     return results
 
 
 def reject_sessions(sessions: list[Session]) -> None:
     """Mark sessions as rejected."""
+    from .audit import log_approval_decision
+
+    # Audit log rejection decision
+    log_approval_decision(sessions, "rejected", "tui")
+
     for session in sessions:
         session.status = "rejected"
         session.save()
