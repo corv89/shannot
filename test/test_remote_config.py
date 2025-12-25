@@ -8,12 +8,13 @@ from unittest import mock
 import pytest
 
 from shannot.config import (
+    Config,
     Remote,
     add_remote,
     load_remotes,
     remove_remote,
     resolve_target,
-    save_remotes,
+    save_config,
 )
 
 
@@ -21,20 +22,16 @@ class TestRemote:
     """Tests for Remote dataclass."""
 
     def test_target_string(self):
-        r = Remote(name="prod", host="example.com", user="admin", port=22)
+        r = Remote(host="example.com", user="admin", port=22)
         assert r.target_string == "admin@example.com"
 
-    def test_to_dict(self):
-        r = Remote(name="prod", host="example.com", user="admin", port=2222)
-        assert r.to_dict() == {"host": "example.com", "user": "admin", "port": 2222}
-
     def test_default_port(self):
-        r = Remote(name="prod", host="example.com", user="admin")
+        r = Remote(host="example.com", user="admin")
         assert r.port == 22
 
 
 class TestRemotesConfig:
-    """Tests for remotes.toml file operations."""
+    """Tests for config.toml file operations."""
 
     def setup_method(self):
         """Create temp config directory."""
@@ -54,11 +51,12 @@ class TestRemotesConfig:
 
     def test_save_and_load(self):
         """Round-trip save and load."""
-        remotes = {
-            "prod": Remote(name="prod", host="prod.example.com", user="admin", port=22),
-            "staging": Remote(name="staging", host="staging.example.com", user="deploy", port=2222),
+        config = Config()
+        config.remotes = {
+            "prod": Remote(host="prod.example.com", user="admin", port=22),
+            "staging": Remote(host="staging.example.com", user="deploy", port=2222),
         }
-        save_remotes(remotes)
+        save_config(config)
         loaded = load_remotes()
 
         assert len(loaded) == 2
@@ -71,7 +69,6 @@ class TestRemotesConfig:
         """Adding a remote persists it."""
         remote = add_remote("prod", "prod.example.com", user="admin")
 
-        assert remote.name == "prod"
         assert remote.host == "prod.example.com"
         assert remote.user == "admin"
         assert remote.port == 22

@@ -8,7 +8,7 @@ Append-only JSONL logging of security-relevant events including:
 - Session execution events
 - Remote execution events
 
-Configuration via ~/.config/shannot/audit.json or .shannot/audit.json.
+Configuration via [audit] section in config.toml.
 Logs written to ~/.local/share/shannot/audit/*.jsonl.
 
 Events include sequence numbers for tamper detection - gaps indicate deleted entries.
@@ -22,7 +22,7 @@ import getpass
 import json
 import os
 import socket
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -30,11 +30,10 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from .session import Session
 
-from .config import AUDIT_DIR, CONFIG_DIR, find_project_root
+from .config import AuditConfig, load_audit_config
 
 # Constants
-AUDIT_CONFIG_FILENAME = "audit.json"
-AUDIT_LOG_DIR = AUDIT_DIR
+AUDIT_LOG_DIR = load_audit_config().effective_log_dir
 
 EventType = Literal[
     "session_created",
@@ -51,78 +50,6 @@ EventType = Literal[
     "remote_connection",
     "remote_deployment",
 ]
-
-# Map event types to categories for filtering
-EVENT_CATEGORY_MAP: dict[str, str] = {
-    "session_created": "session_lifecycle",
-    "session_loaded": "session_lifecycle",
-    "session_status_changed": "session_lifecycle",
-    "session_expired": "session_lifecycle",
-    "command_decision": "command_decisions",
-    "file_write_queued": "file_writes",
-    "file_write_executed": "file_writes",
-    "approval_decision": "approval_decisions",
-    "execution_started": "execution_events",
-    "execution_completed": "execution_events",
-    "command_executed": "execution_events",
-    "remote_connection": "remote_events",
-    "remote_deployment": "remote_events",
-}
-
-DEFAULT_AUDIT_CONFIG: dict[str, Any] = {
-    "enabled": True,  # Opt-out for better security posture
-    "log_dir": None,  # Uses AUDIT_LOG_DIR
-    "rotation": "daily",
-    "max_files": 30,
-    "events": {
-        "session_lifecycle": True,
-        "command_decisions": True,
-        "file_writes": True,
-        "approval_decisions": True,
-        "execution_events": True,
-        "remote_events": True,
-    },
-}
-
-
-@dataclass
-class AuditConfig:
-    """Audit logging configuration."""
-
-    enabled: bool = True
-    log_dir: Path | None = None
-    rotation: Literal["daily", "session", "none"] = "daily"
-    max_files: int = 30
-    events: dict[str, bool] = field(
-        default_factory=lambda: {
-            "session_lifecycle": True,
-            "command_decisions": True,
-            "file_writes": True,
-            "approval_decisions": True,
-            "execution_events": True,
-            "remote_events": True,
-        }
-    )
-
-    @property
-    def effective_log_dir(self) -> Path:
-        """Return configured log_dir or default."""
-        return self.log_dir or AUDIT_LOG_DIR
-
-    def is_event_enabled(self, event_type: str) -> bool:
-        """Check if a specific event type is enabled."""
-        category = EVENT_CATEGORY_MAP.get(event_type, "session_lifecycle")
-        return self.events.get(category, True)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "enabled": self.enabled,
-            "log_dir": str(self.log_dir) if self.log_dir else None,
-            "rotation": self.rotation,
-            "max_files": self.max_files,
-            "events": self.events.copy(),
-        }
 
 
 @dataclass
@@ -142,57 +69,6 @@ class AuditEvent:
     def to_json(self) -> str:
         """Serialize to compact JSON line (no trailing newline)."""
         return json.dumps(asdict(self), separators=(",", ":"))
-
-
-def get_audit_config_path() -> Path | None:
-    """
-    Get audit config path with precedence.
-
-    1. .shannot/audit.json in project root
-    2. ~/.config/shannot/audit.json (global)
-
-    Returns path if exists, None otherwise.
-    """
-    # Check project-local first
-    project_dir = find_project_root()
-    if project_dir:
-        project_config = project_dir / AUDIT_CONFIG_FILENAME
-        if project_config.exists():
-            return project_config
-
-    # Fall back to global
-    global_config = CONFIG_DIR / AUDIT_CONFIG_FILENAME
-    if global_config.exists():
-        return global_config
-
-    return None
-
-
-def load_audit_config() -> AuditConfig:
-    """Load audit configuration from file or return defaults."""
-    config_path = get_audit_config_path()
-    if config_path is None:
-        return AuditConfig()
-
-    try:
-        data = json.loads(config_path.read_text())
-        log_dir = data.get("log_dir")
-        return AuditConfig(
-            enabled=data.get("enabled", True),
-            log_dir=Path(log_dir) if log_dir else None,
-            rotation=data.get("rotation", "daily"),
-            max_files=data.get("max_files", 30),
-            events=data.get("events", DEFAULT_AUDIT_CONFIG["events"]),
-        )
-    except (OSError, json.JSONDecodeError):
-        return AuditConfig()
-
-
-def save_audit_config(config: AuditConfig) -> None:
-    """Save audit configuration to global config file."""
-    config_path = CONFIG_DIR / AUDIT_CONFIG_FILENAME
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps(config.to_dict(), indent=2) + "\n")
 
 
 class AuditLogger:

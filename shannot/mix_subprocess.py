@@ -25,9 +25,9 @@ class MixSubprocess:
         4. Everything else: queue for review
 
     Profile-based configuration:
-        - .shannot/profile.json (project-local, takes precedence)
-        - ~/.config/shannot/profile.json (global fallback)
-        - DEFAULT_PROFILE if no file exists
+        - .shannot/config.toml (project-local, takes precedence)
+        - ~/.config/shannot/config.toml (global fallback)
+        - Built-in defaults if no config file exists
 
     Modes:
         subprocess_dry_run: bool - log all, execute none
@@ -241,11 +241,11 @@ class MixSubprocess:
 
     def load_profile(self):
         """Load security profile into class attributes."""
-        from .config import load_profile
+        from .config import load_config
 
-        profile = load_profile()
-        self.subprocess_auto_approve.update(profile.get("auto_approve", []))
-        self.subprocess_always_deny.update(profile.get("always_deny", []))
+        profile = load_config().profile
+        self.subprocess_auto_approve.update(profile.auto_approve)
+        self.subprocess_always_deny.update(profile.always_deny)
 
     def save_pending(self):
         """Write pending commands to queue file."""

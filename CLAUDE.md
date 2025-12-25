@@ -24,7 +24,7 @@ shannot remote test NAME    # Test SSH connection
 shannot status              # Check runtime and pending sessions
 ```
 
-**Key Options:** `--profile PATH`, `--target NAME`, `--dry-run`, `--color/--no-color`
+**Key Options:** `--target NAME`, `--dry-run`, `--color/--no-color`
 
 ## Development Commands
 
@@ -97,10 +97,8 @@ def example(path: Path | str | None = None) -> dict[str, Path]:
 
 | Path | Purpose |
 |------|---------|
-| `~/.config/shannot/profile.json` | Global approval profile |
-| `.shannot/profile.json` | Project approval profile |
-| `~/.config/shannot/remotes.toml` | SSH remote targets |
-| `~/.config/shannot/audit.json` | Audit logging config |
+| `~/.config/shannot/config.toml` | Global configuration (profile, audit, remotes) |
+| `.shannot/config.toml` | Project configuration (takes precedence) |
 | `~/.local/share/shannot/runtime/` | PyPy stdlib |
 | `~/.local/share/shannot/sessions/` | Session data |
 | `~/.local/share/shannot/audit/` | Audit logs (JSONL) |

@@ -229,26 +229,26 @@ shannot status
 
 ## Configuration
 
-Shannot uses command approval profiles to control subprocess execution behavior:
+All settings are in a single TOML file:
 
-- **Auto-approve list** - Commands like `ls`, `cat`, `grep` execute immediately
-- **Always deny list** - Dangerous commands like `rm -rf /` are blocked
-- **Profile locations**:
-  - Project-local: `.shannot/profile.json`
-  - Global: `~/.config/shannot/profile.json`
+- **Project-local**: `.shannot/config.toml` (takes precedence)
+- **Global**: `~/.config/shannot/config.toml`
 
-Example profile:
+Example config:
 
-```json
-{
-  "auto_approve": [
-    "cat", "ls", "find", "grep", "head", "tail"
-  ],
-  "always_deny": [
-    "rm -rf /",
-    "dd if=/dev/zero"
-  ]
-}
+```toml
+[profile]
+auto_approve = ["cat", "ls", "find", "grep", "head", "tail"]
+always_deny = ["rm -rf /", "dd if=/dev/zero"]
+
+[audit]
+enabled = true
+rotation = "daily"
+max_files = 30
+
+[remotes.prod]
+host = "prod.example.com"
+user = "admin"
 ```
 
 ## Security Considerations

@@ -11,15 +11,13 @@ from unittest import mock
 
 from shannot.audit import (
     AUDIT_LOG_DIR,
-    AuditConfig,
     AuditEvent,
     AuditLogger,
     get_today_event_count,
-    load_audit_config,
     log_approval_decision,
     log_command_decision,
-    save_audit_config,
 )
+from shannot.config import AuditConfig
 
 
 class TestAuditConfig:
@@ -57,24 +55,13 @@ class TestAuditConfig:
     def test_is_event_enabled_disabled_category(self):
         """Event types disabled when category is disabled."""
         config = AuditConfig()
-        config.events["session_lifecycle"] = False
+        config.events["session"] = False
 
         assert config.is_event_enabled("session_created") is False
         assert config.is_event_enabled("session_loaded") is False
         assert config.is_event_enabled("session_status_changed") is False
         # Other categories still enabled
         assert config.is_event_enabled("command_decision") is True
-
-    def test_to_dict(self):
-        """to_dict returns serializable dict."""
-        config = AuditConfig(enabled=False, rotation="session", max_files=10)
-        d = config.to_dict()
-
-        assert d["enabled"] is False
-        assert d["rotation"] == "session"
-        assert d["max_files"] == 10
-        assert d["log_dir"] is None
-        assert "events" in d
 
 
 class TestAuditEvent:
@@ -169,7 +156,7 @@ class TestAuditLogger:
 
     def test_event_type_filtering(self):
         """Disabled event categories are not logged."""
-        self.config.events["session_lifecycle"] = False
+        self.config.events["session"] = False
         logger = AuditLogger(self.config)
         logger.log("session_created", "test", {"name": "test"})
 
@@ -310,37 +297,3 @@ class TestConvenienceFunctions:
             assert len(log_files) == 0, "Session.list_all() should not audit"
         finally:
             shutil.rmtree(session_dir, ignore_errors=True)
-
-
-class TestConfigPersistence:
-    """Tests for config save/load."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.tmpdir = Path(tempfile.mkdtemp())
-        self.config_dir = self.tmpdir / "config"
-        self.config_dir.mkdir()
-
-    def teardown_method(self):
-        """Clean up test fixtures."""
-        shutil.rmtree(self.tmpdir, ignore_errors=True)
-
-    def test_save_and_load_config(self):
-        """Config can be saved and loaded."""
-        config = AuditConfig(enabled=False, rotation="session", max_files=10)
-
-        # Patch CONFIG_DIR
-        with mock.patch("shannot.audit.CONFIG_DIR", self.config_dir):
-            save_audit_config(config)
-
-            # Verify file was created
-            config_path = self.config_dir / "audit.json"
-            assert config_path.exists()
-
-        # Patch get_audit_config_path to return our config file
-        with mock.patch("shannot.audit.get_audit_config_path", return_value=config_path):
-            loaded = load_audit_config()
-
-        assert loaded.enabled is False
-        assert loaded.rotation == "session"
-        assert loaded.max_files == 10
