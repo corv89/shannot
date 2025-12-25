@@ -50,13 +50,14 @@ def read_single_key() -> str:
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ch = sys.stdin.read(1)
+        # Use os.read() directly to bypass Python's buffered I/O
+        ch = os.read(fd, 1).decode("utf-8", errors="replace")
         if ch == "\x1b":
-            # Check if more data is available (arrow key sequence)
-            # Use a short timeout to distinguish Esc from arrow keys
-            if select.select([sys.stdin], [], [], 0.05)[0]:
-                ch += sys.stdin.read(2)
-            # else: just Esc key
+            # Read escape sequence - arrow keys are ESC [ A/B/C/D
+            while select.select([fd], [], [], 0.02)[0]:
+                ch += os.read(fd, 1).decode("utf-8", errors="replace")
+                if len(ch) >= 4:
+                    break
         return ch
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)

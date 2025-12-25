@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-12-25
+
+### Bug Fixes
+
+- Fix arrow keys not working reliably in approval TUI on some terminals (Ghostty)
+  - Use `os.read()` instead of `sys.stdin.read()` to bypass Python's buffered I/O
+
 ## [0.7.0] - 2025-12-25
 
 ### Breaking Changes
