@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-12-25
+
+### Breaking Changes
+
+- Configuration consolidated to single `config.toml` file
+  - Replaces: `profile.json`, `remotes.toml`, `audit.json`
+  - Project-local: `.shannot/config.toml` (for profile and audit)
+  - Global: `~/.config/shannot/config.toml` (for all settings including remotes)
+- Remotes remain global-only (not read from project-local config)
+- `Remote` dataclass no longer has `name` field (name is the dict key)
+
+### Features
+
+- Unified TOML configuration with sections: `[profile]`, `[audit]`, `[remotes.*]`
+- Human-editable config with comments support
+- Consistent precedence: project-local overrides global
+
 ## [0.6.0] - 2025-12-25
 
 ### Features

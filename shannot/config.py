@@ -1,13 +1,23 @@
-"""Centralized configuration paths for shannot."""
+"""Centralized configuration for shannot.
+
+Single unified config file: config.toml
+- ~/.config/shannot/config.toml (global)
+- .shannot/config.toml (project-local, takes precedence)
+
+Contains sections:
+- [profile] - auto_approve and always_deny command lists
+- [audit] - audit logging settings
+- [remotes.*] - SSH remote targets
+"""
 
 from __future__ import annotations
 
 import getpass
-import json
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 # Version - read from package metadata (pyproject.toml is source of truth)
 try:
@@ -16,7 +26,7 @@ try:
     VERSION = version("shannot")
 except Exception:
     # Fallback for development/edge cases
-    VERSION = "0.6.0-dev"
+    VERSION = "0.7.0-dev"
 
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
@@ -50,6 +60,7 @@ RUNTIME_LIB_PYPY = RUNTIME_DIR / "lib_pypy"
 
 # Config directories
 CONFIG_DIR = _xdg_config_home() / "shannot"
+CONFIG_FILENAME = "config.toml"
 
 # PyPy download source
 PYPY_VERSION = "7.3.3"
@@ -71,18 +82,117 @@ SANDBOX_CHECKSUMS: dict[str, str] = {
     # "darwin-arm64": "",  # Future
 }
 
-# Profile configuration
-PROFILE_FILENAME = "profile.json"
 
-# Remotes configuration
-REMOTES_FILENAME = "remotes.toml"
+# ============================================================================
+# Default values
+# ============================================================================
+
+DEFAULT_AUTO_APPROVE = [
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "ls",
+    "find",
+    "stat",
+    "file",
+    "df",
+    "du",
+    "free",
+    "uptime",
+    "ps",
+    "top",
+    "htop",
+    "pgrep",
+    "systemctl status",
+    "journalctl",
+    "uname",
+    "hostname",
+    "whoami",
+    "id",
+    "env",
+    "printenv",
+    "ip",
+    "ss",
+    "netstat",
+    "date",
+    "cal",
+]
+
+DEFAULT_ALWAYS_DENY = [
+    "rm -rf /",
+    "dd if=/dev/zero",
+    "mkfs",
+    ":(){ :|:& };:",
+    "> /dev/sda",
+]
+
+
+def _default_audit_events() -> dict[str, bool]:
+    return {
+        "session": True,
+        "command": True,
+        "file_write": True,
+        "approval": True,
+        "execution": True,
+        "remote": True,
+    }
+
+
+# ============================================================================
+# Configuration dataclasses
+# ============================================================================
+
+
+@dataclass
+class ProfileConfig:
+    """Command approval profile configuration."""
+
+    auto_approve: list[str] = field(default_factory=lambda: DEFAULT_AUTO_APPROVE.copy())
+    always_deny: list[str] = field(default_factory=lambda: DEFAULT_ALWAYS_DENY.copy())
+
+
+@dataclass
+class AuditConfig:
+    """Audit logging configuration."""
+
+    enabled: bool = True
+    rotation: Literal["daily", "session", "none"] = "daily"
+    max_files: int = 30
+    events: dict[str, bool] = field(default_factory=_default_audit_events)
+    log_dir: Path | None = None  # Override for testing
+
+    @property
+    def effective_log_dir(self) -> Path:
+        """Return the audit log directory."""
+        return self.log_dir if self.log_dir else AUDIT_DIR
+
+    def is_event_enabled(self, event_type: str) -> bool:
+        """Check if an event type is enabled based on category mapping."""
+        # Map event types to categories
+        category_map = {
+            "session_created": "session",
+            "session_loaded": "session",
+            "session_status_changed": "session",
+            "session_expired": "session",
+            "command_decision": "command",
+            "file_write_queued": "file_write",
+            "file_write_executed": "file_write",
+            "approval_decision": "approval",
+            "execution_started": "execution",
+            "execution_completed": "execution",
+            "command_executed": "execution",
+            "remote_connection": "remote",
+            "remote_deployment": "remote",
+        }
+        category = category_map.get(event_type, "session")
+        return self.events.get(category, True)
 
 
 @dataclass
 class Remote:
     """SSH remote target configuration."""
 
-    name: str
     host: str
     user: str
     port: int = 22
@@ -92,51 +202,19 @@ class Remote:
         """Return user@host format."""
         return f"{self.user}@{self.host}"
 
-    def to_dict(self) -> dict:
-        """Convert to dictionary for TOML serialization."""
-        return {"host": self.host, "user": self.user, "port": self.port}
+
+@dataclass
+class Config:
+    """Unified shannot configuration."""
+
+    profile: ProfileConfig = field(default_factory=ProfileConfig)
+    audit: AuditConfig = field(default_factory=AuditConfig)
+    remotes: dict[str, Remote] = field(default_factory=dict)
 
 
-DEFAULT_PROFILE = {
-    "auto_approve": [
-        "cat",
-        "head",
-        "tail",
-        "less",
-        "ls",
-        "find",
-        "stat",
-        "file",
-        "df",
-        "du",
-        "free",
-        "uptime",
-        "ps",
-        "top",
-        "htop",
-        "pgrep",
-        "systemctl status",
-        "journalctl",
-        "uname",
-        "hostname",
-        "whoami",
-        "id",
-        "env",
-        "printenv",
-        "ip",
-        "ss",
-        "netstat",
-        "date",
-        "cal",
-    ],
-    "always_deny": [
-        "rm -rf /",
-        "dd if=/dev/zero",
-        "mkfs",
-        ":(){ :|:& };:",
-        "> /dev/sda",
-    ],
-}
+# ============================================================================
+# Config file loading and saving
+# ============================================================================
 
 
 def find_project_root() -> Path | None:
@@ -150,98 +228,121 @@ def find_project_root() -> Path | None:
     return None
 
 
-def get_profile_path() -> Path | None:
+def get_config_path() -> Path | None:
     """
-    Get profile path with precedence:
-    1. .shannot/profile.json in project root
-    2. ~/.config/shannot/profile.json (global)
+    Get config path with precedence.
+
+    1. .shannot/config.toml in project root
+    2. ~/.config/shannot/config.toml (global)
 
     Returns path if exists, None otherwise.
     """
     # Check project-local first
     project_dir = find_project_root()
     if project_dir:
-        project_profile = project_dir / PROFILE_FILENAME
-        if project_profile.exists():
-            return project_profile
+        project_config = project_dir / CONFIG_FILENAME
+        if project_config.exists():
+            return project_config
 
     # Fall back to global
-    global_profile = CONFIG_DIR / PROFILE_FILENAME
-    if global_profile.exists():
-        return global_profile
+    global_config = CONFIG_DIR / CONFIG_FILENAME
+    if global_config.exists():
+        return global_config
 
     return None
 
 
-def load_profile() -> dict:
+def load_config() -> Config:
     """
-    Load security profile from file.
+    Load unified configuration from TOML file.
 
-    Returns dict with:
-        - auto_approve: list[str] - commands to execute immediately
-        - always_deny: list[str] - commands to never execute
+    Profile and audit settings use precedence:
+    1. .shannot/config.toml (project-local)
+    2. ~/.config/shannot/config.toml (global)
 
-    Uses DEFAULT_PROFILE if no profile file found.
+    Remotes are always loaded from global config only (not project-local).
+
+    Returns Config with defaults if no config file found.
     """
-    profile_path = get_profile_path()
-    if profile_path is None:
-        return DEFAULT_PROFILE.copy()
+    config_path = get_config_path()
 
-    try:
-        data = json.loads(profile_path.read_text())
-        return {
-            "auto_approve": data.get("auto_approve", []),
-            "always_deny": data.get("always_deny", []),
-        }
-    except (OSError, json.JSONDecodeError):
-        return DEFAULT_PROFILE.copy()
+    # Load profile and audit from first available config
+    profile = ProfileConfig()
+    audit = AuditConfig()
 
+    if config_path:
+        try:
+            with open(config_path, "rb") as f:
+                data = tomllib.load(f)
 
-def get_remotes_path() -> Path:
-    """Get path to remotes.toml config file."""
-    return CONFIG_DIR / REMOTES_FILENAME
+            # Parse profile section
+            profile_data = data.get("profile", {})
+            profile = ProfileConfig(
+                auto_approve=profile_data.get("auto_approve", DEFAULT_AUTO_APPROVE.copy()),
+                always_deny=profile_data.get("always_deny", DEFAULT_ALWAYS_DENY.copy()),
+            )
 
+            # Parse audit section
+            audit_data = data.get("audit", {})
+            audit = AuditConfig(
+                enabled=audit_data.get("enabled", True),
+                rotation=audit_data.get("rotation", "daily"),
+                max_files=audit_data.get("max_files", 30),
+                events=audit_data.get("events", _default_audit_events()),
+            )
+        except (OSError, tomllib.TOMLDecodeError):
+            pass  # Use defaults
 
-def load_remotes() -> dict[str, Remote]:
-    """
-    Load remotes from TOML config file.
-
-    Returns:
-        Dictionary mapping remote name to Remote object.
-    """
-    remotes_path = get_remotes_path()
-    if not remotes_path.exists():
-        return {}
-
-    try:
-        with open(remotes_path, "rb") as f:
-            data = tomllib.load(f)
-    except Exception as e:
-        raise RuntimeError(f"Failed to load remotes.toml: {e}") from e
-
+    # Remotes are always loaded from global config only
     remotes: dict[str, Remote] = {}
-    for name, config in data.get("remotes", {}).items():
-        remotes[name] = Remote(
-            name=name,
-            host=config.get("host", ""),
-            user=config.get("user", getpass.getuser()),
-            port=config.get("port", 22),
-        )
-    return remotes
+    global_config = CONFIG_DIR / CONFIG_FILENAME
+    if global_config.exists():
+        try:
+            with open(global_config, "rb") as f:
+                global_data = tomllib.load(f)
+            for name, remote_data in global_data.get("remotes", {}).items():
+                remotes[name] = Remote(
+                    host=remote_data.get("host", ""),
+                    user=remote_data.get("user", getpass.getuser()),
+                    port=remote_data.get("port", 22),
+                )
+        except (OSError, tomllib.TOMLDecodeError):
+            pass  # No remotes
+
+    return Config(profile=profile, audit=audit, remotes=remotes)
 
 
-def save_remotes(remotes: dict[str, Remote]) -> None:
+def save_config(config: Config) -> None:
     """
-    Save remotes to TOML config file.
+    Save unified configuration to global TOML file.
 
     Uses manual TOML formatting to avoid tomli-w dependency.
+    Always writes to ~/.config/shannot/config.toml.
     """
-    remotes_path = get_remotes_path()
-    remotes_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path = CONFIG_DIR / CONFIG_FILENAME
+    config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    lines = ["# SSH remote targets for shannot", ""]
+    lines = ["# Shannot configuration", "# https://github.com/corv89/shannot", ""]
 
-    for name, remote in sorted(remotes.items()):
+    # Profile section
+    lines.append("[profile]")
+    lines.append(_toml_array("auto_approve", config.profile.auto_approve))
+    lines.append(_toml_array("always_deny", config.profile.always_deny))
+    lines.append("")
+
+    # Audit section
+    lines.append("[audit]")
+    lines.append(f"enabled = {str(config.audit.enabled).lower()}")
+    lines.append(f'rotation = "{config.audit.rotation}"')
+    lines.append(f"max_files = {config.audit.max_files}")
+    lines.append("")
+    lines.append("[audit.events]")
+    for event_name, enabled in sorted(config.audit.events.items()):
+        lines.append(f"{event_name} = {str(enabled).lower()}")
+    lines.append("")
+
+    # Remotes section
+    for name, remote in sorted(config.remotes.items()):
         # Quote names that contain dots or special characters
         if "." in name or " " in name or '"' in name:
             quoted_name = f'"{name}"'
@@ -253,37 +354,56 @@ def save_remotes(remotes: dict[str, Remote]) -> None:
         lines.append(f"port = {remote.port}")
         lines.append("")
 
-    remotes_path.write_text("\n".join(lines))
+    config_path.write_text("\n".join(lines))
+
+
+def _toml_array(key: str, values: list[str]) -> str:
+    """Format a TOML array on a single line."""
+    escaped = [f'"{v}"' for v in values]
+    return f"{key} = [{', '.join(escaped)}]"
+
+
+# ============================================================================
+# Remote management helpers
+# ============================================================================
 
 
 def add_remote(name: str, host: str, user: str | None = None, port: int = 22) -> Remote:
     """
     Add a new remote to the configuration.
 
-    Args:
-        name: Unique name for the remote
-        host: Hostname or IP address
-        user: SSH user (defaults to current user)
-        port: SSH port (defaults to 22)
+    Parameters
+    ----------
+    name
+        Unique name for the remote
+    host
+        Hostname or IP address
+    user
+        SSH user (defaults to current user)
+    port
+        SSH port (defaults to 22)
 
-    Returns:
+    Returns
+    -------
+    Remote
         The created Remote object.
 
-    Raises:
-        ValueError: If remote name already exists.
+    Raises
+    ------
+    ValueError
+        If remote name already exists.
     """
-    remotes = load_remotes()
-    if name in remotes:
+    config = load_config()
+    if name in config.remotes:
         raise ValueError(f"Remote '{name}' already exists. Use 'remote remove' first.")
 
     remote = Remote(
-        name=name,
         host=host,
         user=user or getpass.getuser(),
         port=port,
     )
-    remotes[name] = remote
-    save_remotes(remotes)
+    config.remotes[name] = remote
+    save_config(config)
     return remote
 
 
@@ -291,14 +411,16 @@ def remove_remote(name: str) -> bool:
     """
     Remove a remote from the configuration.
 
-    Returns:
+    Returns
+    -------
+    bool
         True if remote was removed, False if it didn't exist.
     """
-    remotes = load_remotes()
-    if name not in remotes:
+    config = load_config()
+    if name not in config.remotes:
         return False
-    del remotes[name]
-    save_remotes(remotes)
+    del config.remotes[name]
+    save_config(config)
     return True
 
 
@@ -312,13 +434,15 @@ def resolve_target(target: str) -> tuple[str, str, int]:
     - host-only format (e.g., "prod.example.com") - uses current user
     - user@host:port format (e.g., "admin@prod.example.com:2222")
 
-    Returns:
+    Returns
+    -------
+    tuple[str, str, int]
         Tuple of (user, host, port)
     """
     # Check if it's a saved remote name
-    remotes = load_remotes()
-    if target in remotes:
-        r = remotes[target]
+    config = load_config()
+    if target in config.remotes:
+        r = config.remotes[target]
         return (r.user, r.host, r.port)
 
     # Parse user@host:port format
@@ -337,3 +461,18 @@ def resolve_target(target: str) -> tuple[str, str, int]:
             pass  # Keep default port if parsing fails
 
     return (user, host, port)
+
+
+# ============================================================================
+# Convenience functions for backward compatibility
+# ============================================================================
+
+
+def load_remotes() -> dict[str, Remote]:
+    """Load remotes from config. Convenience wrapper around load_config()."""
+    return load_config().remotes
+
+
+def load_audit_config() -> AuditConfig:
+    """Load audit config. Convenience wrapper around load_config()."""
+    return load_config().audit
