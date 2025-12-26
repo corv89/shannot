@@ -66,13 +66,13 @@ Poll status of a pending session.
 ### With Claude Desktop
 
 ```bash
-shannot mcp install --client claude-desktop
+shannot setup mcp install --client claude-desktop
 ```
 
 ### With Claude Code
 
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 ## See Also

@@ -15,7 +15,7 @@ Error: PyPy sandbox binary not found
 
 1. Run the setup command:
    ```bash
-   shannot setup
+   shannot setup runtime
    ```
 
 2. Check if pypy-sandbox is in PATH:
@@ -32,19 +32,19 @@ Error: PyPy sandbox binary not found
 
 **Symptoms:**
 ```
-Error: Runtime not installed. Run 'shannot setup' first.
+Error: Runtime not installed. Run 'shannot setup runtime' first.
 ```
 
 **Solution:**
 ```bash
 # Install runtime
-shannot setup
+shannot setup runtime
 
 # Force reinstall
-shannot setup --force
+shannot setup runtime --force
 
 # Check status
-shannot setup --status
+shannot setup runtime --status
 ```
 
 ### "lib-python not found"
@@ -57,7 +57,7 @@ Error: lib-python directory not found at expected location
 **Solution:**
 ```bash
 # Reinstall runtime
-shannot setup --force
+shannot setup runtime --force
 
 # Or specify path explicitly
 shannot run --lib-path /path/to/runtime script.py
@@ -254,12 +254,12 @@ Error: Remote 'xxx' not found in configuration
 
 1. List configured remotes:
    ```bash
-   shannot remote list
+   shannot setup remote list
    ```
 
 2. Add the remote:
    ```bash
-   shannot remote add name user@host
+   shannot setup remote add name user@host
    ```
 
 ## Profile Issues
@@ -273,15 +273,15 @@ Using default profile (no custom profile found)
 
 **Solutions:**
 
-1. Check profile location:
+1. Check config location:
    ```bash
-   ls -la ~/.config/shannot/profile.json
-   ls -la .shannot/profile.json
+   ls -la ~/.config/shannot/config.toml
+   ls -la .shannot/config.toml
    ```
 
-2. Verify JSON syntax:
+2. View config contents:
    ```bash
-   python3 -m json.tool ~/.config/shannot/profile.json
+   cat ~/.config/shannot/config.toml
    ```
 
 3. Check current profile:
@@ -382,7 +382,7 @@ Not:
 
 3. Reinstall MCP configuration:
    ```bash
-   shannot mcp install
+   shannot setup mcp install
    ```
 
 4. Restart Claude Desktop completely
@@ -395,7 +395,7 @@ Not:
 
 **Solution:** Check that the runtime is installed and accessible:
 ```bash
-shannot setup
+shannot setup runtime
 shannot status
 ```
 
@@ -406,7 +406,7 @@ If you're still stuck:
 1. Run diagnostics:
    ```bash
    shannot status
-   shannot setup --status
+   shannot setup runtime --status
    ```
 
 2. Enable debug mode:

@@ -219,9 +219,9 @@ Place in `~/.config/shannot/{name}.json` and server auto-discovers.
 ### Claude Desktop (macOS)
 
 ```bash
-shannot mcp install
+shannot setup mcp install
 # or
-shannot mcp install --client claude-desktop
+shannot setup mcp install --client claude-desktop
 ```
 
 Adds to `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -240,7 +240,7 @@ Adds to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ### Claude Code
 
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 Generates `.mcp.json` snippet or updates user config.
@@ -380,7 +380,7 @@ shannot-mcp --profile ~/.config/shannot/profile1.json \
 # Runtime not found
 {
   "status": "error",
-  "error": "PyPy sandbox runtime not found. Run 'shannot setup' to install."
+  "error": "PyPy sandbox runtime not found. Run 'shannot setup runtime' to install."
 }
 
 # Invalid profile

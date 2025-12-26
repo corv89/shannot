@@ -3,9 +3,10 @@
 shannot: Sandbox control for PyPy sandboxed processes.
 
 Usage:
-    shannot setup           Install PyPy stdlib for sandboxing
-    shannot run [options]   Run a script in the sandbox
-    shannot approve         Interactive session approval (TUI)
+    shannot run             Dry-run a script, create session for review
+    shannot approve         Review and execute pending sessions
+    shannot status          Show system status
+    shannot setup           Configure shannot (interactive menu or subcommands)
 """
 
 from __future__ import annotations
@@ -16,8 +17,8 @@ import sys
 from .config import VERSION
 
 
-def cmd_setup(args: argparse.Namespace) -> int:
-    """Handle 'shannot setup' command."""
+def cmd_setup_runtime(args: argparse.Namespace) -> int:
+    """Handle 'shannot setup runtime' command."""
     from .config import RUNTIME_DIR, SANDBOX_BINARY_PATH
     from .runtime import (
         SetupError,
@@ -70,6 +71,201 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
     if verbose:
         print("\nSetup complete!")
+
+    return 0
+
+
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Handle 'shannot setup' command - dispatch to subcommands or interactive menu."""
+    if args.setup_command is None:
+        # No subcommand = interactive mode
+        return run_setup_menu()
+    elif args.setup_command == "runtime":
+        return cmd_setup_runtime(args)
+    elif args.setup_command == "remote":
+        return cmd_setup_remote(args)
+    elif args.setup_command == "mcp":
+        return cmd_setup_mcp(args)
+    else:
+        return 1
+
+
+def cmd_setup_remote(args: argparse.Namespace) -> int:
+    """Handle 'shannot setup remote' - dispatch to remote subcommands or show help."""
+    if args.remote_command is None:
+        # No subcommand - show interactive remote menu
+        return run_remote_menu()
+    elif args.remote_command == "add":
+        return cmd_remote_add(args)
+    elif args.remote_command == "list":
+        return cmd_remote_list(args)
+    elif args.remote_command == "remove":
+        return cmd_remote_remove(args)
+    elif args.remote_command == "test":
+        return cmd_remote_test(args)
+    else:
+        return 1
+
+
+def cmd_setup_mcp(args: argparse.Namespace) -> int:
+    """Handle 'shannot setup mcp' - dispatch to mcp subcommands or show help."""
+    if args.mcp_command is None:
+        # No subcommand - run MCP install interactively
+        return run_mcp_menu()
+    elif args.mcp_command == "install":
+        return cmd_mcp_install(args)
+    else:
+        return 1
+
+
+def run_setup_menu() -> int:
+    """Interactive setup menu."""
+    from .menu import clear_screen, select_menu
+
+    while True:
+        clear_screen()
+        choice = select_menu(
+            "Shannot Setup",
+            ["Manage remotes", "Install MCP integration", "Exit"],
+        )
+
+        if choice is None or choice == 2:  # Exit
+            return 0
+        elif choice == 0:  # Manage remotes
+            run_remote_menu()
+        elif choice == 1:  # MCP
+            run_mcp_menu()
+
+
+def run_remote_menu() -> int:
+    """Interactive remote management menu."""
+    from .config import load_remotes
+    from .menu import clear_screen, prompt_input, select_menu, wait_for_key
+
+    while True:
+        clear_screen()
+
+        # Show current remotes status
+        try:
+            remotes = load_remotes()
+            if remotes:
+                print("Configured remotes:")
+                for name, remote in sorted(remotes.items()):
+                    print(f"  {name}: {remote.target_string}")
+                print()
+        except RuntimeError:
+            remotes = {}
+
+        choice = select_menu(
+            "Remote Targets",
+            ["Add remote", "Remove remote", "Test connection", "List remotes", "Back"],
+        )
+
+        if choice is None or choice == 4:  # Back
+            return 0
+        elif choice == 0:  # Add
+            print()
+            name = prompt_input("Remote name (e.g., 'prod')")
+            if not name:
+                continue
+            host = prompt_input("Hostname or IP")
+            if not host:
+                continue
+            user = prompt_input("SSH user", default=None)
+            port_str = prompt_input("SSH port", default="22")
+            port = int(port_str) if port_str and port_str.isdigit() else 22
+
+            class AddArgs:
+                pass
+
+            add_args = AddArgs()
+            add_args.name = name  # type: ignore[attr-defined]
+            add_args.host = host  # type: ignore[attr-defined]
+            add_args.user = user  # type: ignore[attr-defined]
+            add_args.port = port  # type: ignore[attr-defined]
+            cmd_remote_add(add_args)  # type: ignore[arg-type]
+            wait_for_key()
+        elif choice == 1:  # Remove
+            try:
+                remotes = load_remotes()
+            except RuntimeError:
+                remotes = {}
+            if not remotes:
+                print("\n  No remotes configured.")
+                wait_for_key()
+                continue
+            remote_names = sorted(remotes.keys())
+            idx = select_menu("Select remote to remove", remote_names + ["Back"])
+            if idx is None or idx == len(remote_names):  # Back or quit
+                continue
+            name = remote_names[idx]
+
+            class RemoveArgs:
+                pass
+
+            remove_args = RemoveArgs()
+            remove_args.name = name  # type: ignore[attr-defined]
+            cmd_remote_remove(remove_args)  # type: ignore[arg-type]
+            wait_for_key()
+        elif choice == 2:  # Test
+            try:
+                remotes = load_remotes()
+            except RuntimeError:
+                remotes = {}
+            if not remotes:
+                print("\n  No remotes configured. Add one first.")
+                wait_for_key()
+                continue
+            remote_names = sorted(remotes.keys())
+            idx = select_menu("Select remote to test", remote_names + ["Back"])
+            if idx is None or idx == len(remote_names):  # Back or quit
+                continue
+            name = remote_names[idx]
+
+            class TestArgs:
+                timeout = 10
+
+            test_args = TestArgs()
+            test_args.name = name  # type: ignore[attr-defined]
+            cmd_remote_test(test_args)  # type: ignore[arg-type]
+            wait_for_key()
+        elif choice == 3:  # List
+
+            class ListArgs:
+                pass
+
+            cmd_remote_list(ListArgs())  # type: ignore[arg-type]
+            wait_for_key()
+
+
+def run_mcp_menu() -> int:
+    """Interactive MCP setup menu."""
+    from .menu import clear_screen, select_menu, wait_for_key
+
+    clear_screen()
+    choice = select_menu(
+        "MCP Integration",
+        ["Install for Claude Desktop", "Install for Claude Code", "Back"],
+    )
+
+    if choice is None or choice == 2:  # Back
+        return 0
+    elif choice == 0:  # Claude Desktop
+
+        class InstallArgs:
+            client = "claude-desktop"
+
+        result = cmd_mcp_install(InstallArgs())  # type: ignore[arg-type]
+        wait_for_key()
+        return result
+    elif choice == 1:  # Claude Code
+
+        class InstallArgs2:
+            client = "claude-code"
+
+        result = cmd_mcp_install(InstallArgs2())  # type: ignore[arg-type]
+        wait_for_key()
+        return result
 
     return 0
 
@@ -304,7 +500,7 @@ def cmd_remote_list(args: argparse.Namespace) -> int:
 
     if not remotes:
         print("No remotes configured.")
-        print("Use 'shannot remote add <name> <host>' to add one.")
+        print("Use 'shannot setup remote add <name> <host>' to add one.")
         return 0
 
     # Calculate column widths
@@ -430,20 +626,36 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
         print("Restart Claude Desktop to see Shannot MCP server.")
 
     elif client == "claude-code":
-        # Output .mcp.json snippet for project
-        snippet = {"mcpServers": {"shannot": {"command": "shannot-mcp", "args": [], "env": {}}}}
+        import shutil
+        import subprocess
+        from pathlib import Path
 
-        print("Add this to your project's .mcp.json file:")
-        print()
-        print(json.dumps(snippet, indent=2))
-        print()
-        print("Or add to user config at:")
-        if sys.platform == "darwin":
-            print("  ~/Library/Application Support/Claude/claude_code_config.json")
-        elif sys.platform == "win32":
-            print("  %APPDATA%\\Claude\\claude_code_config.json")
-        else:
-            print("  ~/.config/Claude/claude_code_config.json")
+        # Find claude CLI - check PATH first, then common install location
+        claude_path = shutil.which("claude")
+        if not claude_path:
+            local_claude = Path.home() / ".claude" / "local" / "claude"
+            if local_claude.exists():
+                claude_path = str(local_claude)
+
+        if claude_path:
+            result = subprocess.run(
+                [claude_path, "mcp", "add", "--transport", "stdio", "shannot", "--", "shannot-mcp"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                print("✓ Added shannot MCP server to Claude Code")
+                return 0
+            elif "already exists" in result.stderr.lower():
+                print("✓ shannot MCP server already configured")
+                return 0
+            else:
+                print(f"Failed: {result.stderr.strip()}")
+                print("\nManual installation:")
+                # Fall through to instructions
+
+        # Fallback: print manual command
+        print("Run: claude mcp add --transport stdio shannot -- shannot-mcp")
 
     else:
         print(f"Error: Unknown client '{client}'", file=sys.stderr)
@@ -560,37 +772,145 @@ def main() -> int:
         action="version",
         version=f"shannot {VERSION}",
     )
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        help="Commands",
+        metavar="{setup,run,approve,status}",
+    )
 
-    # ===== setup subcommand =====
+    # ===== setup subcommand (with sub-subcommands) =====
     setup_parser = subparsers.add_parser(
         "setup",
-        help="Install PyPy stdlib for sandboxing",
+        help="Configure shannot (interactive menu or subcommands)",
+        description="Interactive setup or manage runtime, remotes, and MCP integration",
+    )
+    setup_subparsers = setup_parser.add_subparsers(dest="setup_command", help="Setup commands")
+
+    # setup runtime
+    setup_runtime_parser = setup_subparsers.add_parser(
+        "runtime",
+        help="Install PyPy sandbox runtime",
         description="Download and install PyPy 3.6 stdlib to ~/.local/share/shannot/runtime/",
     )
-    setup_parser.add_argument(
+    setup_runtime_parser.add_argument(
         "--force",
         "-f",
         action="store_true",
         help="Force reinstall even if already installed",
     )
-    setup_parser.add_argument(
+    setup_runtime_parser.add_argument(
         "--quiet",
         "-q",
         action="store_true",
         help="Suppress progress output",
     )
-    setup_parser.add_argument(
+    setup_runtime_parser.add_argument(
         "--status",
         "-s",
         action="store_true",
         help="Check if runtime is installed",
     )
-    setup_parser.add_argument(
+    setup_runtime_parser.add_argument(
         "--remove",
         action="store_true",
         help="Remove installed runtime",
     )
+
+    # setup remote (with sub-subcommands)
+    setup_remote_parser = setup_subparsers.add_parser(
+        "remote",
+        help="Manage SSH remote targets",
+        description="Add, list, test, and remove named SSH targets",
+    )
+    remote_subparsers = setup_remote_parser.add_subparsers(
+        dest="remote_command", help="Remote commands"
+    )
+
+    # setup remote add
+    remote_add_parser = remote_subparsers.add_parser(
+        "add",
+        help="Add a new remote target",
+        description="Save a named SSH target for easy reuse",
+    )
+    remote_add_parser.add_argument(
+        "name",
+        help="Unique name for the remote (e.g., 'prod', 'staging')",
+    )
+    remote_add_parser.add_argument(
+        "host",
+        help="Hostname or IP address",
+    )
+    remote_add_parser.add_argument(
+        "--user",
+        "-u",
+        help="SSH username (defaults to current user)",
+    )
+    remote_add_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=22,
+        help="SSH port (default: 22)",
+    )
+
+    # setup remote list
+    remote_subparsers.add_parser(
+        "list",
+        help="List configured remotes",
+        description="Show all saved SSH targets",
+    )
+
+    # setup remote test
+    remote_test_parser = remote_subparsers.add_parser(
+        "test",
+        help="Test connection to a remote",
+        description="Verify SSH connectivity to a saved or ad-hoc target",
+    )
+    remote_test_parser.add_argument(
+        "name",
+        help="Remote name or user@host target",
+    )
+    remote_test_parser.add_argument(
+        "--timeout",
+        "-t",
+        type=int,
+        default=10,
+        help="Connection timeout in seconds (default: 10)",
+    )
+
+    # setup remote remove
+    remote_remove_parser = remote_subparsers.add_parser(
+        "remove",
+        help="Remove a remote target",
+        description="Delete a saved SSH target",
+    )
+    remote_remove_parser.add_argument(
+        "name",
+        help="Name of remote to remove",
+    )
+
+    # setup mcp (with sub-subcommands)
+    setup_mcp_parser = setup_subparsers.add_parser(
+        "mcp",
+        help="MCP server installation and management",
+        description="Install/manage MCP server for Claude Desktop/Code",
+    )
+    mcp_subparsers = setup_mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
+
+    # setup mcp install
+    mcp_install_parser = mcp_subparsers.add_parser(
+        "install",
+        help="Install MCP server configuration",
+        description="Configure Claude Desktop or Claude Code to use Shannot MCP server",
+    )
+    mcp_install_parser.add_argument(
+        "--client",
+        "-c",
+        choices=["claude-desktop", "claude-code"],
+        default="claude-desktop",
+        help="MCP client to configure (default: claude-desktop)",
+    )
+
     setup_parser.set_defaults(func=cmd_setup)
 
     # ===== run subcommand =====
@@ -668,10 +988,10 @@ def main() -> int:
     )
     approve_parser.set_defaults(func=cmd_approve)
 
-    # ===== execute subcommand =====
+    # ===== execute subcommand (hidden - used by remote protocol) =====
     execute_parser = subparsers.add_parser(
         "execute",
-        help="Execute a session directly",
+        help=argparse.SUPPRESS,
         description="Execute an approved session without TUI (used by remote protocol)",
     )
     execute_parser.add_argument(
@@ -685,88 +1005,8 @@ def main() -> int:
         help="Output results as JSON",
     )
     execute_parser.set_defaults(func=cmd_execute)
-
-    # ===== remote subcommand (with sub-subcommands) =====
-    remote_parser = subparsers.add_parser(
-        "remote",
-        help="Manage SSH remote targets",
-        description="Add, list, test, and remove named SSH targets",
-    )
-    remote_subparsers = remote_parser.add_subparsers(dest="remote_command", help="Remote commands")
-
-    # remote add
-    remote_add_parser = remote_subparsers.add_parser(
-        "add",
-        help="Add a new remote target",
-        description="Save a named SSH target for easy reuse",
-    )
-    remote_add_parser.add_argument(
-        "name",
-        help="Unique name for the remote (e.g., 'prod', 'staging')",
-    )
-    remote_add_parser.add_argument(
-        "host",
-        help="Hostname or IP address",
-    )
-    remote_add_parser.add_argument(
-        "--user",
-        "-u",
-        help="SSH username (defaults to current user)",
-    )
-    remote_add_parser.add_argument(
-        "--port",
-        "-p",
-        type=int,
-        default=22,
-        help="SSH port (default: 22)",
-    )
-    remote_add_parser.set_defaults(func=cmd_remote_add)
-
-    # remote list
-    remote_list_parser = remote_subparsers.add_parser(
-        "list",
-        help="List configured remotes",
-        description="Show all saved SSH targets",
-    )
-    remote_list_parser.set_defaults(func=cmd_remote_list)
-
-    # remote test
-    remote_test_parser = remote_subparsers.add_parser(
-        "test",
-        help="Test connection to a remote",
-        description="Verify SSH connectivity to a saved or ad-hoc target",
-    )
-    remote_test_parser.add_argument(
-        "name",
-        help="Remote name or user@host target",
-    )
-    remote_test_parser.add_argument(
-        "--timeout",
-        "-t",
-        type=int,
-        default=10,
-        help="Connection timeout in seconds (default: 10)",
-    )
-    remote_test_parser.set_defaults(func=cmd_remote_test)
-
-    # remote remove
-    remote_remove_parser = remote_subparsers.add_parser(
-        "remove",
-        help="Remove a remote target",
-        description="Delete a saved SSH target",
-    )
-    remote_remove_parser.add_argument(
-        "name",
-        help="Name of remote to remove",
-    )
-    remote_remove_parser.set_defaults(func=cmd_remote_remove)
-
-    # Handle 'shannot remote' with no subcommand
-    def print_remote_help(args: argparse.Namespace) -> int:
-        remote_parser.print_help()
-        return 0
-
-    remote_parser.set_defaults(func=print_remote_help)
+    # Remove from help listing (keeps command functional but hidden)
+    subparsers._choices_actions = [a for a in subparsers._choices_actions if a.dest != "execute"]
 
     # ===== status subcommand =====
     status_parser = subparsers.add_parser(
@@ -785,36 +1025,6 @@ def main() -> int:
         help="Test target connections only",
     )
     status_parser.set_defaults(func=cmd_status)
-
-    # ===== mcp subcommand (with sub-subcommands) =====
-    mcp_parser = subparsers.add_parser(
-        "mcp",
-        help="MCP server installation and management",
-        description="Install/manage MCP server for Claude Desktop/Code",
-    )
-    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_command", help="MCP commands")
-
-    # mcp install
-    mcp_install_parser = mcp_subparsers.add_parser(
-        "install",
-        help="Install MCP server configuration",
-        description="Configure Claude Desktop or Claude Code to use Shannot MCP server",
-    )
-    mcp_install_parser.add_argument(
-        "--client",
-        "-c",
-        choices=["claude-desktop", "claude-code"],
-        default="claude-desktop",
-        help="MCP client to configure (default: claude-desktop)",
-    )
-    mcp_install_parser.set_defaults(func=cmd_mcp_install)
-
-    # Handle 'shannot mcp' with no subcommand
-    def print_mcp_help(args: argparse.Namespace) -> int:
-        mcp_parser.print_help()
-        return 0
-
-    mcp_parser.set_defaults(func=print_mcp_help)
 
     # Parse and execute
     args = parser.parse_args()

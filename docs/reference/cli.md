@@ -10,13 +10,16 @@ The CLI provides commands for sandbox execution, session approval, and system ma
 
 ### shannot setup
 
-Install PyPy stdlib for sandboxing.
+Interactive setup menu or configuration subcommands.
 
 ```bash
-shannot setup              # Install runtime
-shannot setup --force      # Force reinstall
-shannot setup --status     # Check if installed
-shannot setup --remove     # Remove runtime
+shannot setup                      # Interactive setup menu
+shannot setup runtime              # Install runtime
+shannot setup runtime --force      # Force reinstall
+shannot setup runtime --status     # Check if installed
+shannot setup runtime --remove     # Remove runtime
+shannot setup remote               # Interactive remote management
+shannot setup mcp                  # Interactive MCP setup
 ```
 
 ### shannot run
@@ -63,24 +66,15 @@ shannot approve history            # Show recent sessions
 | `r` | Reject selected |
 | `q` / `Esc` | Quit |
 
-### shannot execute
-
-Execute a previously created session.
-
-```bash
-shannot execute --session-id SESSION_ID
-shannot execute --session-id SESSION_ID --json-output
-```
-
-### shannot remote
+### shannot setup remote
 
 Manage SSH remote targets.
 
 ```bash
-shannot remote add NAME [USER@]HOST    # Add target
-shannot remote list                     # List targets
-shannot remote test NAME                # Test connection
-shannot remote remove NAME              # Remove target
+shannot setup remote add NAME [USER@]HOST    # Add target
+shannot setup remote list                     # List targets
+shannot setup remote test NAME                # Test connection
+shannot setup remote remove NAME              # Remove target
 ```
 
 ### shannot status
@@ -93,13 +87,13 @@ shannot status --runtime   # Runtime only
 shannot status --targets   # Remote targets only
 ```
 
-### shannot mcp
+### shannot setup mcp
 
 MCP server management.
 
 ```bash
-shannot mcp install                         # Install for Claude Desktop
-shannot mcp install --client claude-code    # Install for Claude Code
+shannot setup mcp install                         # Install for Claude Desktop
+shannot setup mcp install --client claude-code    # Install for Claude Code
 ```
 
 ## See Also

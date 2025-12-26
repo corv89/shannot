@@ -4,42 +4,64 @@ Shannot's configuration system for approval profiles, remote targets, and MCP in
 
 ## Overview
 
-Shannot uses a **zero-dependency** philosophy - pure Python stdlib only. Configuration is straightforward:
+Shannot uses a **zero-dependency** philosophy - pure Python stdlib only. Configuration is consolidated into a single `config.toml` file:
 
-- **Approval Profiles** - JSON files controlling command approval behavior
-- **Remote Targets** - TOML file for SSH host configuration
+- **`[profile]`** - Command approval settings (auto_approve, always_deny)
+- **`[audit]`** - Audit logging configuration
+- **`[remotes.*]`** - SSH remote targets
 - **MCP Setup** - Configuration for Claude Desktop and Claude Code
 
-## Approval Profiles
+## Configuration File
 
-Profiles control which subprocess commands execute automatically vs. require approval.
+All settings are in a single TOML file:
 
-### Profile Structure
+- **Project-local**: `.shannot/config.toml` (takes precedence)
+- **Global**: `~/.config/shannot/config.toml`
 
-```json
-{
-  "auto_approve": [
+### Full Example
+
+```toml
+# Shannot configuration
+
+[profile]
+auto_approve = [
     "cat", "head", "tail", "less",
     "ls", "find", "stat", "file",
     "df", "du", "free", "uptime",
-    "ps", "pgrep", "uname", "hostname"
-  ],
-  "always_deny": [
+    "ps", "pgrep", "uname", "hostname",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
     "mkfs",
     ":(){ :|:& };:",
-    "> /dev/sda"
-  ]
-}
+    "> /dev/sda",
+]
+
+[audit]
+enabled = true
+path = "~/.local/share/shannot/audit/shannot.jsonl"
+
+[remotes.prod]
+host = "prod.example.com"
+user = "deploy"
+port = 22
+
+[remotes.staging]
+host = "staging.example.com"
+user = "admin"
 ```
+
+## Approval Profiles
+
+The `[profile]` section controls which subprocess commands execute automatically vs. require approval.
 
 ### Profile Locations
 
 Profiles are loaded in order of precedence:
 
-1. **Project-local**: `.shannot/profile.json`
-2. **Global**: `~/.config/shannot/profile.json`
+1. **Project-local**: `.shannot/config.toml`
+2. **Global**: `~/.config/shannot/config.toml`
 3. **Built-in**: Default profile (if no files found)
 
 ### Creating a Profile
@@ -48,18 +70,17 @@ Profiles are loaded in order of precedence:
 # Create global config directory
 mkdir -p ~/.config/shannot
 
-# Create profile
-cat > ~/.config/shannot/profile.json << 'EOF'
-{
-  "auto_approve": [
+# Create config with profile
+cat > ~/.config/shannot/config.toml << 'EOF'
+[profile]
+auto_approve = [
     "cat", "ls", "find", "grep", "head", "tail",
-    "df", "du", "free", "uptime", "ps"
-  ],
-  "always_deny": [
+    "df", "du", "free", "uptime", "ps",
+]
+always_deny = [
     "rm -rf /",
-    "dd if=/dev/zero"
-  ]
-}
+    "dd if=/dev/zero",
+]
 EOF
 ```
 
@@ -70,14 +91,13 @@ For project-specific settings, create a `.shannot/` directory:
 ```bash
 mkdir -p .shannot
 
-cat > .shannot/profile.json << 'EOF'
-{
-  "auto_approve": [
+cat > .shannot/config.toml << 'EOF'
+[profile]
+auto_approve = [
     "npm", "yarn", "pnpm",
-    "cat", "ls", "grep"
-  ],
-  "always_deny": []
-}
+    "cat", "ls", "grep",
+]
+always_deny = []
 EOF
 ```
 
@@ -87,13 +107,11 @@ See [Profile Configuration](profiles.md) for detailed profile options.
 
 Remote targets are SSH hosts where sandboxed scripts can execute.
 
-### Configuration File
+### Configuration
 
-Remote targets are stored in `~/.config/shannot/remotes.toml`:
+Remote targets are defined in `~/.config/shannot/config.toml` under `[remotes.*]` sections:
 
 ```toml
-# SSH remote targets for shannot
-
 [remotes.prod]
 host = "prod.example.com"
 user = "deploy"
@@ -114,22 +132,22 @@ port = 2222
 
 ```bash
 # Add a remote
-shannot remote add prod --host prod.example.com --user deploy
+shannot setup remote add prod --host prod.example.com --user deploy
 
 # Shorthand format
-shannot remote add staging admin@staging.example.com
+shannot setup remote add staging admin@staging.example.com
 
 # With custom port
-shannot remote add dev --host 192.168.1.100 --user developer --port 2222
+shannot setup remote add dev --host 192.168.1.100 --user developer --port 2222
 
 # List configured remotes
-shannot remote list
+shannot setup remote list
 
 # Test connection
-shannot remote test prod
+shannot setup remote test prod
 
 # Remove a remote
-shannot remote remove staging
+shannot setup remote remove staging
 ```
 
 ### Using Remote Targets
@@ -157,9 +175,9 @@ When targeting a remote for the first time:
 Install MCP configuration for Claude Desktop:
 
 ```bash
-shannot mcp install
+shannot setup mcp install
 # or
-shannot mcp install --client claude-desktop
+shannot setup mcp install --client claude-desktop
 ```
 
 This adds to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
@@ -181,7 +199,7 @@ This adds to `~/Library/Application Support/Claude/claude_desktop_config.json` (
 Install for Claude Code:
 
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 Generates `.mcp.json` or updates user config.
@@ -226,19 +244,20 @@ Shannot follows XDG Base Directory specification:
 
 ```
 ~/.config/shannot/
-├── profile.json          # Global approval profile
-└── remotes.toml          # SSH remote targets
+└── config.toml           # Global config (profile, audit, remotes)
 
 ~/.local/share/shannot/
 ├── runtime/              # PyPy sandbox runtime
 │   ├── lib-python/       # Python stdlib
 │   └── lib_pypy/         # PyPy-specific modules
-└── sessions/             # Session data
-    └── 20250115-abc123/  # Individual session
-        └── session.json
+├── sessions/             # Session data
+│   └── 20250115-abc123/  # Individual session
+│       └── session.json
+└── audit/                # Audit logs
+    └── shannot.jsonl
 
 .shannot/                 # Project-local (optional)
-└── profile.json          # Project-specific profile
+└── config.toml           # Project-specific config
 ```
 
 ## Environment Variables

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-12-26
+
+### Features
+
+- Add interactive arrow-key menu for `shannot setup`
+- Restructure CLI: reduce top-level commands to 4 (run, approve, status, setup)
+- Move `remote` and `mcp` commands under `setup` subcommand
+- Hide `execute` command from help (internal use only)
+- Auto-detect MCP CLI path at `~/.claude/local` for installation
+- Add TTY-aware menu utilities with fallback to numbered input
+
+### Documentation
+
+- Update all docs to use unified `config.toml` format
+- Replace `profile.json` and `remotes.toml` references
+
 ## [0.7.1] - 2025-12-25
 
 ### Bug Fixes

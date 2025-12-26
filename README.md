@@ -71,17 +71,17 @@ cd shannot
 pip install -e .
 ```
 
-**Note:** Shannot has **zero runtime dependencies** - pure Python stdlib only! The PyPy sandbox binary will be auto-downloaded when you first run `shannot setup`.
+**Note:** Shannot has **zero runtime dependencies** - pure Python stdlib only! The PyPy sandbox binary will be auto-downloaded when you first run `shannot setup runtime`.
 
 ## Quick Start
 
 ### 1. Install the runtime
 
 ```bash
-shannot setup
+shannot setup runtime
 ```
 
-This downloads and installs the PyPy 3.6 stdlib to `~/.local/share/shannot/runtime/`.
+This downloads and installs the PyPy 3.6 stdlib to `~/.local/share/shannot/runtime/`. You can also run `shannot setup` for an interactive setup menu.
 
 ### 2. Run a script in the sandbox
 
@@ -117,6 +117,18 @@ This architecture enables LLM agents to explore systems safely while giving huma
 
 ### `shannot setup`
 
+Interactive setup menu or configuration subcommands.
+
+```
+Subcommands:
+  setup               Interactive setup menu
+  setup runtime       Install PyPy sandbox runtime
+  setup remote        Manage SSH remote targets
+  setup mcp           MCP server installation
+```
+
+### `shannot setup runtime`
+
 Install PyPy stdlib for sandboxing.
 
 ```
@@ -151,26 +163,16 @@ Options:
 
 Launch interactive TUI for reviewing and approving pending sessions.
 
-### `shannot execute`
-
-Execute a previously created session directly (used by remote protocol).
-
-```
-Options:
-  --session-id ID  Session ID to execute (required)
-  --json-output    Output results in JSON format
-```
-
-### `shannot remote`
+### `shannot setup remote`
 
 Manage SSH remote targets for executing sandboxed code on remote hosts.
 
 ```
 Subcommands:
-  remote add <name>     Add a new remote target
-  remote list           List configured remote targets
-  remote test <name>    Test connection to a remote target
-  remote remove <name>  Remove a remote target
+  setup remote add <name>     Add a new remote target
+  setup remote list           List configured remote targets
+  setup remote test <name>    Test connection to a remote target
+  setup remote remove <name>  Remove a remote target
 ```
 
 ### `shannot status`

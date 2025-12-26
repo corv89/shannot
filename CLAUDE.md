@@ -14,14 +14,18 @@ Shannot is a sandboxed system administration tool for LLM agents using **PyPy sa
 ## CLI Commands
 
 ```bash
-shannot setup               # Download PyPy 3.6 stdlib
-shannot run SCRIPT          # Execute Python script in sandbox
-shannot approve [SESSION]   # Interactive approval TUI
-shannot execute SESSION     # Direct session execution
-shannot remote add NAME     # Add SSH remote target
-shannot remote list         # List configured remotes
-shannot remote test NAME    # Test SSH connection
-shannot status              # Check runtime and pending sessions
+# Core workflow
+shannot run SCRIPT              # Execute Python script in sandbox
+shannot approve [SESSION]       # Interactive approval TUI
+shannot status                  # Check runtime and pending sessions
+
+# Setup (interactive menu or subcommands)
+shannot setup                   # Interactive setup menu
+shannot setup runtime           # Install PyPy 3.6 stdlib
+shannot setup remote add NAME   # Add SSH remote target
+shannot setup remote list       # List configured remotes
+shannot setup remote test NAME  # Test SSH connection
+shannot setup mcp install       # Install MCP integration
 ```
 
 **Key Options:** `--target NAME`, `--dry-run`, `--color/--no-color`

@@ -23,10 +23,10 @@ MCP (Model Context Protocol) is Anthropic's standard protocol for connecting AI 
 pip install shannot>=0.5.0
 
 # 2. Download PyPy sandbox runtime
-shannot setup
+shannot setup runtime
 
 # 3. Install MCP server for Claude Code
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 
 # 4. Restart Claude Code
 # Now you can ask: "Run a Python script to check disk space"
@@ -41,13 +41,13 @@ Since PyPy sandbox requires Linux, use a remote target:
 pip install shannot>=0.5.0
 
 # 2. Configure remote Linux server
-shannot remote add myserver --host your-server.com --user yourname
+shannot setup remote add myserver --host your-server.com --user yourname
 
 # 3. Test connection
-shannot remote test myserver
+shannot setup remote test myserver
 
 # 4. Install MCP server with remote target
-shannot mcp install --client claude-code --target myserver
+shannot setup mcp install --client claude-code --target myserver
 
 # 5. Restart Claude Code
 ```
@@ -266,13 +266,13 @@ sandbox_run({
 
 ```bash
 # Install for Claude Desktop (default)
-shannot mcp install
+shannot setup mcp install
 
 # Install for Claude Code
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 
 # Use a remote target
-shannot mcp install --client claude-code --target prod
+shannot setup mcp install --client claude-code --target prod
 ```
 
 ### Option B: Manual Configuration
@@ -296,7 +296,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 Edit `%APPDATA%\Claude\claude_desktop_config.json` with the same JSON.
 
 #### Claude Code
-Use the `.mcp.json` snippet from `shannot mcp install --client claude-code`, or:
+Use the `.mcp.json` snippet from `shannot setup mcp install --client claude-code`, or:
 
 ```bash
 # User scope (recommended)
@@ -517,7 +517,7 @@ subprocess.call(['rm', '-rf', '/tmp/*'])
 
 ```bash
 # Download PyPy sandbox
-shannot setup
+shannot setup runtime
 
 # Verify installation
 shannot status
@@ -567,16 +567,16 @@ Execute sandboxed scripts on remote Linux hosts via SSH. This is essential for m
 
 ```bash
 # Add a named remote target
-shannot remote add prod --host prod.example.com --user admin
+shannot setup remote add prod --host prod.example.com --user admin
 
 # Add with custom SSH port
-shannot remote add staging --host staging.local --user deploy --port 2222
+shannot setup remote add staging --host staging.local --user deploy --port 2222
 
 # Test connection
-shannot remote test prod
+shannot setup remote test prod
 
 # List configured remotes
-shannot remote list
+shannot setup remote list
 ```
 
 ### Using Remote Targets with MCP
@@ -602,13 +602,13 @@ sandbox_run({
 Install MCP server with a default target:
 
 ```bash
-shannot mcp install --target prod
+shannot setup mcp install --target prod
 # All requests now execute on prod by default
 ```
 
 ### Security: Named Remotes Only
 
-For security, the `target` parameter only accepts named remotes configured via `shannot remote add`. Arbitrary `user@host` or `user@host:port` formats are rejected:
+For security, the `target` parameter only accepts named remotes configured via `shannot setup remote add`. Arbitrary `user@host` or `user@host:port` formats are rejected:
 
 ```python
 # ❌ Rejected - arbitrary SSH target
@@ -652,7 +652,7 @@ Same three execution paths apply:
 Install with multiple profiles for different use cases:
 
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 Claude can use any profile via the `profile` parameter:

@@ -11,7 +11,7 @@ Production deployment guide for Shannot on local and remote systems.
 uv tool install shannot
 
 # Setup PyPy runtime
-shannot setup
+shannot setup runtime
 
 # Verify installation
 shannot status
@@ -21,10 +21,10 @@ shannot status
 
 ```bash
 # Add a remote target
-shannot remote add prod user@prod.example.com
+shannot setup remote add prod user@prod.example.com
 
 # Test connection
-shannot remote test prod
+shannot setup remote test prod
 
 # Run script on remote (auto-deploys on first use)
 shannot run script.py --target prod
@@ -59,17 +59,17 @@ Deployment is fast - just runs `test -x /tmp/shannot-v{version}/shannot` over SS
 
 ```bash
 # Production server
-shannot remote add prod \
+shannot setup remote add prod \
   --host prod.example.com \
   --user deploy
 
 # Staging server
-shannot remote add staging \
+shannot setup remote add staging \
   --host staging.example.com \
   --user admin
 
 # Development VM
-shannot remote add dev \
+shannot setup remote add dev \
   --host 192.168.1.100 \
   --user developer \
   --port 2222
@@ -77,7 +77,7 @@ shannot remote add dev \
 
 ### Remotes Configuration
 
-Remote targets are stored in `~/.config/shannot/remotes.toml`:
+Remote targets are defined in `~/.config/shannot/config.toml` under `[remotes.*]` sections:
 
 ```toml
 [remotes.prod]
@@ -111,7 +111,7 @@ done
 ### Install MCP Configuration
 
 ```bash
-shannot mcp install
+shannot setup mcp install
 ```
 
 This configures Claude Desktop to use Shannot for sandboxed script execution.
@@ -193,7 +193,7 @@ pipeline {
         stage('Setup') {
             steps {
                 sh 'pip install shannot'
-                sh 'shannot setup'
+                sh 'shannot setup runtime'
             }
         }
 
@@ -238,7 +238,7 @@ Host staging
     IdentityFile ~/.ssh/shannot_key
 ```
 
-Then in remotes.toml, use the SSH config alias:
+Then in config.toml, use the SSH config alias:
 
 ```toml
 [remotes.prod]

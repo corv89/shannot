@@ -4,23 +4,24 @@ Approval profiles control which subprocess commands execute automatically, which
 
 ## Profile Structure
 
-```json
-{
-  "auto_approve": [
+Profile settings are defined in the `[profile]` section of `config.toml`:
+
+```toml
+[profile]
+auto_approve = [
     "cat", "head", "tail", "less",
     "ls", "find", "stat", "file",
     "df", "du", "free", "uptime",
     "ps", "pgrep", "systemctl status",
-    "uname", "hostname", "whoami", "id"
-  ],
-  "always_deny": [
+    "uname", "hostname", "whoami", "id",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
     "mkfs",
     ":(){ :|:& };:",
-    "> /dev/sda"
-  ]
-}
+    "> /dev/sda",
+]
 ```
 
 ### Fields
@@ -66,8 +67,8 @@ subprocess.call(['LC_ALL=C', 'ls', '-la'])          # Matches "ls"
 
 Profiles are loaded in order of precedence:
 
-1. **Project-local**: `.shannot/profile.json`
-2. **Global**: `~/.config/shannot/profile.json`
+1. **Project-local**: `.shannot/config.toml`
+2. **Global**: `~/.config/shannot/config.toml`
 3. **Built-in**: Default profile
 
 ### Project-Local Profile
@@ -77,11 +78,10 @@ Create a `.shannot/` directory in your project root:
 ```bash
 mkdir -p .shannot
 
-cat > .shannot/profile.json << 'EOF'
-{
-  "auto_approve": ["npm", "yarn", "cat", "ls"],
-  "always_deny": ["rm -rf"]
-}
+cat > .shannot/config.toml << 'EOF'
+[profile]
+auto_approve = ["npm", "yarn", "cat", "ls"]
+always_deny = ["rm -rf"]
 EOF
 ```
 
@@ -92,27 +92,26 @@ Create in your config directory:
 ```bash
 mkdir -p ~/.config/shannot
 
-cat > ~/.config/shannot/profile.json << 'EOF'
-{
-  "auto_approve": [
+cat > ~/.config/shannot/config.toml << 'EOF'
+[profile]
+auto_approve = [
     "cat", "head", "tail", "grep",
-    "ls", "find", "df", "free"
-  ],
-  "always_deny": [
+    "ls", "find", "df", "free",
+]
+always_deny = [
     "rm -rf /",
-    "dd if=/dev/zero"
-  ]
-}
+    "dd if=/dev/zero",
+]
 EOF
 ```
 
 ## Default Profile
 
-If no profile file is found, Shannot uses a built-in default:
+If no config file is found, Shannot uses a built-in default:
 
-```json
-{
-  "auto_approve": [
+```toml
+[profile]
+auto_approve = [
     "cat", "head", "tail", "less",
     "ls", "find", "stat", "file",
     "df", "du", "free", "uptime",
@@ -121,16 +120,15 @@ If no profile file is found, Shannot uses a built-in default:
     "uname", "hostname", "whoami", "id",
     "env", "printenv",
     "ip", "ss", "netstat",
-    "date", "cal"
-  ],
-  "always_deny": [
+    "date", "cal",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
     "mkfs",
     ":(){ :|:& };:",
-    "> /dev/sda"
-  ]
-}
+    "> /dev/sda",
+]
 ```
 
 ## Example Profiles
@@ -139,30 +137,29 @@ If no profile file is found, Shannot uses a built-in default:
 
 For strict read-only access:
 
-```json
-{
-  "auto_approve": [
+```toml
+[profile]
+auto_approve = [
     "cat", "head", "tail", "less",
     "ls", "find", "stat",
-    "df", "free", "uptime"
-  ],
-  "always_deny": [
+    "df", "free", "uptime",
+]
+always_deny = [
     "rm", "mv", "cp",
     "chmod", "chown",
     "dd", "mkfs",
     "systemctl start", "systemctl stop",
-    "service start", "service stop"
-  ]
-}
+    "service start", "service stop",
+]
 ```
 
 ### Diagnostics
 
 For system diagnostics with broader access:
 
-```json
-{
-  "auto_approve": [
+```toml
+[profile]
+auto_approve = [
     "cat", "head", "tail", "less", "grep", "awk", "sed",
     "ls", "find", "stat", "file", "wc",
     "df", "du", "free", "uptime", "vmstat", "iostat",
@@ -170,41 +167,39 @@ For system diagnostics with broader access:
     "systemctl status", "journalctl",
     "ip", "ss", "netstat", "ping", "traceroute",
     "uname", "hostname", "hostnamectl",
-    "lsblk", "fdisk -l", "mount"
-  ],
-  "always_deny": [
+    "lsblk", "fdisk -l", "mount",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
     "mkfs",
     ":(){ :|:& };:",
     "> /dev/sda",
     "shutdown", "reboot", "halt",
-    "systemctl start", "systemctl stop", "systemctl restart"
-  ]
-}
+    "systemctl start", "systemctl stop", "systemctl restart",
+]
 ```
 
 ### Development
 
 For development environments:
 
-```json
-{
-  "auto_approve": [
+```toml
+[profile]
+auto_approve = [
     "cat", "head", "tail", "grep",
     "ls", "find", "stat",
     "npm", "yarn", "pnpm",
     "pip", "pip3", "python", "python3",
     "git status", "git log", "git diff",
-    "make", "cmake"
-  ],
-  "always_deny": [
+    "make", "cmake",
+]
+always_deny = [
     "rm -rf /",
     "rm -rf ~",
     "dd if=/dev/zero",
-    "git push --force"
-  ]
-}
+    "git push --force",
+]
 ```
 
 ## Permission Check Order
@@ -253,20 +248,19 @@ shannot approve
 
 Begin with a small `auto_approve` list and expand as needed:
 
-```json
-{
-  "auto_approve": ["cat", "ls", "df"],
-  "always_deny": ["rm -rf /"]
-}
+```toml
+[profile]
+auto_approve = ["cat", "ls", "df"]
+always_deny = ["rm -rf /"]
 ```
 
 ### 2. Block Dangerous Commands
 
 Always populate `always_deny` with known dangerous patterns:
 
-```json
-{
-  "always_deny": [
+```toml
+[profile]
+always_deny = [
     "rm -rf /",
     "rm -rf ~",
     "dd if=/dev/zero",
@@ -275,9 +269,8 @@ Always populate `always_deny` with known dangerous patterns:
     "chmod -R 777 /",
     "chown -R",
     "shutdown",
-    "reboot"
-  ]
-}
+    "reboot",
+]
 ```
 
 ### 3. Use Project-Local Profiles
@@ -285,8 +278,8 @@ Always populate `always_deny` with known dangerous patterns:
 Different projects have different needs:
 
 ```
-project-a/.shannot/profile.json  # Allows npm, yarn
-project-b/.shannot/profile.json  # Allows pip, python
+project-a/.shannot/config.toml  # Allows npm, yarn
+project-b/.shannot/config.toml  # Allows pip, python
 ```
 
 ### 4. Review Before Approval
@@ -320,28 +313,26 @@ Check if the command matches exactly:
 
 Check `always_deny` patterns. Prefix matching may catch unintended commands:
 
-```json
-// This will block ALL rm commands, not just "rm -rf /"
-{
-  "always_deny": ["rm"]
-}
+```toml
+# This will block ALL rm commands, not just "rm -rf /"
+[profile]
+always_deny = ["rm"]
 
-// Better: be specific
-{
-  "always_deny": ["rm -rf /", "rm -rf ~"]
-}
+# Better: be specific
+[profile]
+always_deny = ["rm -rf /", "rm -rf ~"]
 ```
 
 ### Profile Not Loading
 
-Verify file location and JSON syntax:
+Verify file location and TOML syntax:
 
 ```bash
 # Check which profile is being used
 shannot status
 
-# Validate JSON syntax
-python3 -m json.tool ~/.config/shannot/profile.json
+# View config file
+cat ~/.config/shannot/config.toml
 ```
 
 ## See Also
