@@ -59,7 +59,9 @@ def run_remote_fast_path(
         cmd = (
             f"{deploy_dir}/shannot run --json-output "
             f"--tmp={workdir} "
-            f"{deploy_dir}/pypy-sandbox -S {remote_script}"
+            f"--lib-path={deploy_dir} "
+            f"--pypy-sandbox={deploy_dir}/pypy3-c "
+            f"{remote_script}"
         )
 
         result = ssh.run(cmd, timeout=300)
@@ -181,7 +183,9 @@ def run_remote_dry_run(
             cmd = (
                 f"{deploy_dir}/shannot run --dry-run --json-output "
                 f"--tmp={workdir} "
-                f"{deploy_dir}/pypy-sandbox -S {remote_script}"
+                f"--lib-path={deploy_dir} "
+                f"--pypy-sandbox={deploy_dir}/pypy3-c "
+                f"{remote_script}"
             )
 
             result = ssh.run(cmd, timeout=300)
@@ -347,8 +351,10 @@ def run_remote_with_approvals(session: Session, ssh: SSHConnection) -> int:
         cmd = (
             f"{deploy_dir}/shannot run "
             f"--tmp={workdir} "
+            f"--lib-path={deploy_dir} "
+            f"--pypy-sandbox={deploy_dir}/pypy3-c "
             f"--approved-commands={json.dumps(approved_commands_json)} "
-            f"{deploy_dir}/pypy-sandbox -S {remote_script}"
+            f"{remote_script}"
         )
 
         result = ssh.run(cmd, timeout=600)

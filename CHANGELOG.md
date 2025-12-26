@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Implement modular remote runtime deployment
+  - Deploy three separate artifacts: CLI binary, PyPy sandbox, PyPy stdlib
+  - Auto-download artifacts from GitHub releases and python.org
+  - Local caching at `~/.local/share/shannot/cache/`
+  - Incremental updates: only changed components are re-deployed
+  - CLI from `corv89/shannot` releases
+  - PyPy sandbox from `corv89/pypy` releases (with SHA256 verification)
+  - PyPy stdlib from official `downloads.python.org/pypy` (with SHA256 verification)
+
+### Bug Fixes
+
+- Fix remote execution commands to use correct `--pypy-sandbox` and `--lib-path` arguments
+
 ## [0.8.6] - 2025-12-26
 
 ### Features
