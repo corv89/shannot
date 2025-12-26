@@ -23,6 +23,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .session import Session
 
+from .config import DangerLevel, classify_command_danger, load_config
+
+# Danger level color codes for TUI display
+DANGER_COLORS = {
+    DangerLevel.SAFE: "\033[2;32m",  # Dim green
+    DangerLevel.CAUTION: "\033[33m",  # Yellow
+    DangerLevel.DANGER: "\033[31m",  # Red
+    DangerLevel.UNKNOWN: "",  # No color
+}
+COLOR_RESET = "\033[0m"
+
 
 # ==============================================================================
 # Action - uniform return type from views
@@ -244,12 +255,20 @@ class SessionDetailView(View):
             visible_rows = 3
         visible_cmds = s.commands[self.scroll : self.scroll + visible_rows]
 
+        # Load profile once for danger classification
+        profile = load_config().profile
+
         for i, cmd in enumerate(visible_cmds):
             idx = self.scroll + i + 1
             display = cmd[: cols - 10]
             if len(cmd) > cols - 10:
                 display += "..."
-            print(f"   {idx:>3}. {display}")
+
+            # Classify and color the command
+            danger = classify_command_danger(cmd, profile)
+            color = DANGER_COLORS.get(danger, "")
+            reset = COLOR_RESET if color else ""
+            print(f"   {idx:>3}. {color}{display}{reset}")
 
         remaining = len(s.commands) - self.scroll - len(visible_cmds)
         if remaining > 0:
