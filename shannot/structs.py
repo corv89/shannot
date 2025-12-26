@@ -203,6 +203,41 @@ def new_timeval(sec: int, usec: int) -> Timeval:
     return Timeval(tv_sec=sec, tv_usec=usec)
 
 
+# struct utsname (from sys/utsname.h)
+# Linux uses 65-byte fields (including null terminator)
+class Utsname(Structure):
+    _fields_ = [
+        ("sysname", c_char * 65),  # e.g., "Linux"
+        ("nodename", c_char * 65),  # hostname
+        ("release", c_char * 65),  # e.g., "5.10.0"
+        ("version", c_char * 65),  # e.g., "#1 SMP"
+        ("machine", c_char * 65),  # e.g., "x86_64"
+        ("domainname", c_char * 65),  # GNU extension
+    ]
+
+
+SIZEOF_UTSNAME = sizeof(Utsname)
+
+
+def new_utsname(
+    sysname: bytes = b"Linux",
+    nodename: bytes = b"sandbox",
+    release: bytes = b"5.10.0",
+    version: bytes = b"#1 SMP",
+    machine: bytes = b"x86_64",
+    domainname: bytes = b"",
+) -> Utsname:
+    """Create a Utsname struct with given fields."""
+    return Utsname(
+        sysname=sysname,
+        nodename=nodename,
+        release=release,
+        version=version,
+        machine=machine,
+        domainname=domainname,
+    )
+
+
 def struct_to_bytes(s: Structure) -> bytes:
     """Convert any ctypes Structure to bytes."""
     return bytes(s)

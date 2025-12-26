@@ -13,10 +13,10 @@ import time
 from dataclasses import dataclass
 
 # Minimal script that exercises basic sandbox functionality
-# Uses os.getpid() which verifies syscall virtualization (returns virtual PID)
+# Uses platform.node() which verifies uname syscall virtualization
 SELF_TEST_SCRIPT = """\
-import os
-print('sandbox pid:', os.getpid())
+import platform
+print('sandbox host:', platform.node())
 """
 
 

@@ -18,11 +18,11 @@ class TestSelfTestResult:
         result = SelfTestResult(
             success=True,
             elapsed_ms=15.5,
-            output="hello from myhost",
+            output="sandbox host: sandbox",
         )
         assert result.success is True
         assert result.elapsed_ms == 15.5
-        assert result.output == "hello from myhost"
+        assert result.output == "sandbox host: sandbox"
         assert result.error is None
 
     def test_failure_result(self):
@@ -45,9 +45,9 @@ class TestSelfTestScript:
         # Should parse without error
         compile(SELF_TEST_SCRIPT, "<selftest>", "exec")
 
-    def test_script_uses_getpid(self):
-        """Test that the script uses os.getpid()."""
-        assert "os.getpid()" in SELF_TEST_SCRIPT
+    def test_script_uses_platform_node(self):
+        """Test that the script uses platform.node()."""
+        assert "platform.node()" in SELF_TEST_SCRIPT
         assert "print" in SELF_TEST_SCRIPT
 
 
@@ -79,7 +79,7 @@ class TestRunLocalSelfTest:
         """Test successful subprocess execution."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = b"hello from testhost\n"
+        mock_result.stdout = b"sandbox host: sandbox\n"
         mock_result.stderr = b""
 
         with (
@@ -90,7 +90,7 @@ class TestRunLocalSelfTest:
             result = run_local_self_test()
 
         assert result.success is True
-        assert result.output == "hello from testhost"
+        assert result.output == "sandbox host: sandbox"
         assert result.error is None
         assert result.elapsed_ms > 0
 
@@ -133,7 +133,7 @@ class TestRunLocalSelfTest:
         """Test that we extract the last non-empty line from output."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = b"Setup message\n\nhello from testhost\n"
+        mock_result.stdout = b"Setup message\n\nsandbox host: sandbox\n"
         mock_result.stderr = b""
 
         with (
@@ -144,4 +144,4 @@ class TestRunLocalSelfTest:
             result = run_local_self_test()
 
         assert result.success is True
-        assert result.output == "hello from testhost"
+        assert result.output == "sandbox host: sandbox"
