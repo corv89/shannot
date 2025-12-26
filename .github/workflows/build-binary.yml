@@ -35,28 +35,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install nuitka ordered-set zstandard
           pip install -e .
+          sudo apt-get install -y upx-ucl
 
       - name: Build binary
         run: python build_binary.py
 
-      - name: Get version
-        id: version
-        run: echo "version=$(python -c 'from shannot.config import VERSION; print(VERSION)')" >> $GITHUB_OUTPUT
-
-      - name: Create tarball
+      - name: Compress with UPX
         run: |
-          cd dist
-          # Rename binary to just 'shannot' for extraction
-          mv shannot-linux-${{ matrix.arch }} shannot
-          chmod +x shannot
-          tar -czvf shannot-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz shannot
-          rm shannot
+          upx --best dist/shannot-linux-${{ matrix.arch }}
+          ls -lh dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: shannot-binary-${{ matrix.arch }}
-          path: dist/shannot-*.tar.gz
+          path: dist/shannot-linux-${{ matrix.arch }}
 
   upload-release:
     name: Upload to GitHub Release
