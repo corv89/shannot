@@ -32,6 +32,7 @@ class TestMCPProtocolCompliance:
         if which:
             return Path(which)
         pytest.skip("shannot-mcp not found")
+        raise AssertionError("unreachable")  # pytest.skip raises
 
     def test_mcp_probe_test_suite(self, shannot_mcp_path: Path):
         """Run mcp-probe test suite against shannot-mcp."""

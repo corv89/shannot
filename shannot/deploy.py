@@ -79,8 +79,9 @@ def get_release_tarball(arch: str) -> Path:
         return tarball
 
     raise FileNotFoundError(
-        f"Release tarball not found for {arch}. "
-        f"Set {RELEASE_PATH_ENV} or place tarball at {tarball}"
+        f"Release tarball not found for {arch}.\n"
+        f"For development, build first: make build-binary\n"
+        f"Or set {RELEASE_PATH_ENV}=/path/to/tarball"
     )
 
 

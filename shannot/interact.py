@@ -37,6 +37,7 @@ def main(argv):
             "target=",
             "json-output",
             "approved-commands=",
+            "code=",
         ],
     )
 
@@ -60,6 +61,7 @@ def main(argv):
     raw_stdout = False
     json_output = False
     approved_commands = []
+    inline_code = None  # For -c flag
     executable = arguments[0]
 
     # Capture sandbox args as structured dict for session re-execution
@@ -114,6 +116,8 @@ def main(argv):
             import json as json_module
 
             approved_commands = json_module.loads(value)
+        elif option == "--code":
+            inline_code = value
         elif option in ["-h", "--help"]:
             return help()
         else:
@@ -132,6 +136,30 @@ def main(argv):
         sys.stderr.write("Fix permissions with:\n")
         sys.stderr.write(f"  chmod +x {executable}\n")
         return 1
+
+    # Read script content - either from --code or from file
+    # Script will be injected into VFS after instance creation
+    script_content: bytes | None = None
+    script_arg_idx: int | None = None
+
+    if inline_code is not None:
+        # -c flag: use inline code directly
+        script_content = inline_code.encode("utf-8")
+        # Add virtual script path to arguments
+        arguments.append("/script.py")
+    else:
+        # Find script file in arguments and read it
+        for i, arg in enumerate(arguments[1:], 1):
+            if arg.endswith(".py") and not arg.startswith("-"):
+                if os.path.exists(arg):
+                    with open(arg, "rb") as f:
+                        script_content = f.read()
+                    script_arg_idx = i
+                break
+
+        # Replace script path with virtual path
+        if script_content is not None and script_arg_idx is not None:
+            arguments[script_arg_idx] = "/script.py"
 
     # Auto-detect runtime if --lib-path not specified
     if not lib_path_specified:
@@ -212,24 +240,19 @@ def main(argv):
     )
     virtualizedproc = SandboxedProc(popen.stdin, popen.stdout)
 
+    # Inject script into VFS (instance-level, not class)
+    if script_content is not None:
+        from .mix_vfs import File
+
+        virtualizedproc.vfs_root.entries["script.py"] = File(script_content)
+
     # Set sandbox args for session re-execution
     virtualizedproc.subprocess_sandbox_args = sandbox_args
 
-    # Capture script path from arguments (look for .py files after the executable)
-    script_args = [a for a in arguments[1:] if a.endswith(".py")]
-    if script_args:
-        virtualizedproc.subprocess_script_path = script_args[0]
-        # Try to read script content from VFS if tmp is mapped
-        if sandbox_args.get("tmp"):
-            import os
-
-            real_script_path = os.path.join(sandbox_args["tmp"], os.path.basename(script_args[0]))
-            if os.path.exists(real_script_path):
-                try:
-                    with open(real_script_path) as f:
-                        virtualizedproc.subprocess_script_content = f.read()  # type: ignore[misc]
-                except (OSError, UnicodeDecodeError):
-                    pass  # Script content is optional, continue without it
+    # Capture script path and content for session metadata
+    virtualizedproc.subprocess_script_path = "/script.py"  # type: ignore[misc]
+    if script_content is not None:
+        virtualizedproc.subprocess_script_content = script_content.decode("utf-8", errors="replace")  # type: ignore[misc]
 
     # Load security profile (populates auto_approve, always_deny)
     virtualizedproc.load_profile()

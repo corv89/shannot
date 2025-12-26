@@ -272,6 +272,14 @@ def run_mcp_menu() -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Handle 'shannot run' command."""
+    # Validate: need either script or -c
+    if not args.script and not args.code:
+        print("Error: Must specify either a script or -c CODE", file=sys.stderr)
+        return 1
+    if args.script and args.code:
+        print("Error: Cannot specify both script and -c", file=sys.stderr)
+        return 1
+
     # If target specified, use remote execution path
     if args.target:
         return cmd_run_remote(args)
@@ -357,11 +365,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.analysis:
         argv.append(f"--analysis={args.analysis}")
 
-    # Add executable and script with args
+    # Pass --code before executable (getopt stops at first positional)
+    if args.code:
+        argv.append(f"--code={args.code}")
+
+    # Add executable
     argv.append(str(executable))
     argv.append("-S")  # Suppress site module import (not useful in sandbox)
-    argv.append(args.script)
-    argv.extend(args.script_args)
+
+    # Script file: pass path (interact will read and inject into VFS)
+    if not args.code:
+        argv.append(args.script)
+        argv.extend(args.script_args)
 
     # Execute directly
     return interact_main(argv)
@@ -522,6 +537,8 @@ def cmd_remote_list(args: argparse.Namespace) -> int:
 def cmd_remote_test(args: argparse.Namespace) -> int:
     """Handle 'shannot remote test' command."""
     from .config import resolve_target
+    from .deploy import ensure_deployed, is_deployed
+    from .selftest import run_remote_self_test
     from .ssh import SSHConfig, SSHConnection
 
     try:
@@ -531,31 +548,43 @@ def cmd_remote_test(args: argparse.Namespace) -> int:
         return 1
 
     target = f"{user}@{host}"
-    print(f"Testing connection to {target}:{port}...")
+    target_display = f"{target}:{port}" if port != 22 else target
+    print(f"Testing {args.name} ({target_display})...")
 
     # Create SSHConfig with resolved values
     config = SSHConfig(target=target, port=port, connect_timeout=args.timeout)
 
     with SSHConnection(config) as ssh:
+        # Step 1: Test SSH connection
         if not ssh.connect():
-            print(f"FAILED: Could not connect to {target}:{port}")
+            print("  ✗ SSH connection failed")
+            return 1
+        print("  ✓ SSH connection")
+
+        # Step 2: Check/deploy shannot
+        try:
+            if is_deployed(ssh):
+                print("  ✓ Shannot deployed")
+            else:
+                print("  ⟳ Deploying runtime...", end="", flush=True)
+                ensure_deployed(ssh)
+                print(" done")
+        except Exception as e:
+            print(f"\n  ✗ Deployment failed: {e}")
             return 1
 
-        # Run a simple command to verify
-        result = ssh.run("echo OK")
-        if result.returncode == 0 and b"OK" in result.stdout:
-            print(f"SUCCESS: Connected to {target}:{port}")
-            # Get remote hostname for verification
-            hostname_result = ssh.run("hostname")
-            if hostname_result.returncode == 0:
-                hostname = hostname_result.stdout.decode().strip()
-                print(f"  Remote hostname: {hostname}")
-            return 0
+        # Step 3: Run sandbox self-test
+        result = run_remote_self_test(user, host, port, deploy_if_missing=False)
+        if result.success:
+            print(f"  ✓ Sandbox execution ({result.elapsed_ms:.0f}ms)")
+            print(f"    Output: {result.output!r}")
         else:
-            print("FAILED: Connection succeeded but test command failed")
-            if result.stderr:
-                print(f"  Error: {result.stderr.decode()}")
+            print("  ✗ Sandbox execution failed")
+            print(f"    Error: {result.error}")
             return 1
+
+    print(f"\nRemote '{args.name}' is ready.")
+    return 0
 
 
 def cmd_remote_remove(args: argparse.Namespace) -> int:
@@ -693,13 +722,24 @@ def cmd_status(args: argparse.Namespace) -> int:
             print("    Build pypy-sandbox from PyPy source and add to PATH,")
             print(f"    or place in {RUNTIME_DIR}/pypy-sandbox")
 
+        # Run self-test if both runtime and sandbox are available
+        if is_runtime_installed() and sandbox_path:
+            from .selftest import run_local_self_test
+
+            result = run_local_self_test()
+            if result.success:
+                print(f"  ✓ Self-test: passed ({result.elapsed_ms:.0f}ms)")
+                print(f"    Output: {result.output!r}")
+            else:
+                print("  ✗ Self-test: FAILED")
+                print(f"    Error: {result.error}")
+
         if show_all:
             print()
 
     # Targets status
     if show_targets:
-        from .config import load_remotes, resolve_target
-        from .ssh import SSHConfig, SSHConnection
+        from .config import load_remotes
 
         print("Targets:")
         try:
@@ -712,25 +752,10 @@ def cmd_status(args: argparse.Namespace) -> int:
             print("  No remotes configured")
         else:
             for name, remote in sorted(remotes.items()):
-                user, host, port = resolve_target(name)
                 target_str = remote.target_string
                 if remote.port != 22:
                     target_str += f":{remote.port}"
-
-                # Test connection with short timeout
-                config = SSHConfig(target=f"{user}@{host}", port=port, connect_timeout=5)
-                try:
-                    with SSHConnection(config) as ssh:
-                        if ssh.connect():
-                            result = ssh.run("echo OK", timeout=5)
-                            if result.returncode == 0:
-                                print(f"  ✓ {name} ({target_str}) — connected")
-                            else:
-                                print(f"  ✗ {name} ({target_str}) — command failed")
-                        else:
-                            print(f"  ✗ {name} ({target_str}) — connection failed")
-                except Exception as e:
-                    print(f"  ✗ {name} ({target_str}) — {e}")
+                print(f"  {name}: {target_str}")
         if show_all:
             print()
 
@@ -921,7 +946,15 @@ def main() -> int:
     )
     run_parser.add_argument(
         "script",
+        nargs="?",
         help="Python script to execute in the sandbox",
+    )
+    run_parser.add_argument(
+        "-c",
+        "--code",
+        dest="code",
+        metavar="CODE",
+        help="Execute Python code string directly (like python -c)",
     )
     run_parser.add_argument(
         "script_args",
