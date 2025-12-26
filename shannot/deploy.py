@@ -18,7 +18,7 @@ def detect_arch(ssh: SSHConnection) -> str:
     """
     Detect remote architecture.
 
-    Returns: "x86_64" or "aarch64"
+    Returns: "x86_64" or "arm64"
 
     Raises:
         RuntimeError: If architecture detection fails or unsupported
@@ -54,16 +54,16 @@ def get_deployed_version(ssh: SSHConnection) -> str | None:
     return None
 
 
-def get_release_tarball(arch: str) -> Path:
+def get_release_binary(arch: str) -> Path:
     """
-    Get path to release tarball for architecture.
+    Get path to release binary for architecture.
 
     Looks for:
     1. $SHANNOT_RELEASE_PATH environment variable
-    2. ./releases/shannot-{version}-linux-{arch}.tar.gz
+    2. ./releases/shannot-linux-{arch}
 
     Raises:
-        FileNotFoundError: If tarball not found
+        FileNotFoundError: If binary not found
     """
     # Check environment variable first
     env_path = os.environ.get(RELEASE_PATH_ENV)
@@ -74,14 +74,14 @@ def get_release_tarball(arch: str) -> Path:
 
     # Look in releases directory (relative to package)
     releases_dir = Path(__file__).parent.parent / "releases"
-    tarball = releases_dir / f"shannot-{VERSION}-linux-{arch}.tar.gz"
-    if tarball.exists():
-        return tarball
+    binary = releases_dir / f"shannot-linux-{arch}"
+    if binary.exists():
+        return binary
 
     raise FileNotFoundError(
-        f"Release tarball not found for {arch}.\n"
+        f"Release binary not found for {arch}.\n"
         f"For development, build first: make build-binary\n"
-        f"Or set {RELEASE_PATH_ENV}=/path/to/tarball"
+        f"Or set {RELEASE_PATH_ENV}=/path/to/binary"
     )
 
 
@@ -108,9 +108,9 @@ def deploy(ssh: SSHConnection, force: bool = False) -> bool:
         sys.stderr.write(f"[ERROR] {e}\n")
         return False
 
-    # Get tarball
+    # Get binary
     try:
-        tarball = get_release_tarball(arch)
+        binary = get_release_binary(arch)
     except FileNotFoundError as e:
         sys.stderr.write(f"[ERROR] {e}\n")
         return False
@@ -123,17 +123,14 @@ def deploy(ssh: SSHConnection, force: bool = False) -> bool:
         sys.stderr.write(f"[ERROR] Failed to create deploy directory: {result.stderr.decode()}\n")
         return False
 
-    # Read tarball content
-    with open(tarball, "rb") as f:
-        tarball_content = f.read()
+    # Read binary content
+    with open(binary, "rb") as f:
+        binary_content = f.read()
 
-    # Upload and extract tarball
-    # Use cat to write tarball, then extract
+    # Upload binary directly
     result = ssh.run(
-        f"cat > /tmp/shannot-deploy.tar.gz && "
-        f"tar -xzf /tmp/shannot-deploy.tar.gz -C {deploy_dir} && "
-        f"rm /tmp/shannot-deploy.tar.gz",
-        input_data=tarball_content,
+        f"cat > {deploy_dir}/shannot && chmod +x {deploy_dir}/shannot",
+        input_data=binary_content,
         timeout=120,
     )
 

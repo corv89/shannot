@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] - 2025-12-26
+
+### Build
+
+- Add UPX compression to reduce binary size by 50-70%
+  - Simplify release workflow to use bare binaries instead of tarballs
+  - Add LTO (Link Time Optimization) to Nuitka build
+  - Add more stdlib exclusions (unittest, pydoc, doctest)
+
 ## [0.8.3] - 2025-12-26
 
 ### Bug Fixes

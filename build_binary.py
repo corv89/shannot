@@ -129,7 +129,11 @@ def build_binary(output_dir: Path, debug: bool = False) -> Path:
         "--nofollow-import-to=turtle",
         "--nofollow-import-to=test",
         "--nofollow-import-to=distutils",
+        "--nofollow-import-to=unittest",
+        "--nofollow-import-to=pydoc",
+        "--nofollow-import-to=doctest",
         # Build options
+        "--lto=yes",  # Link Time Optimization
         "--assume-yes-for-downloads",
         "--remove-output",  # Clean build artifacts after success
         # Warning settings
@@ -169,12 +173,28 @@ def build_binary(output_dir: Path, debug: bool = False) -> Path:
     # Make executable
     binary_path.chmod(0o755)
 
-    # Get binary size
-    size_mb = binary_path.stat().st_size / (1024 * 1024)
+    # Get binary size before compression
+    size_before = binary_path.stat().st_size / (1024 * 1024)
+
+    # Compress with UPX if available
+    upx_path = shutil.which("upx")
+    if upx_path:
+        print("\nCompressing with UPX...")
+        try:
+            subprocess.run([upx_path, "--best", str(binary_path)], check=True)
+            size_after = binary_path.stat().st_size / (1024 * 1024)
+            reduction = (1 - size_after / size_before) * 100
+            print(f"  Compressed: {size_before:.1f} MB → {size_after:.1f} MB (-{reduction:.0f}%)")
+        except subprocess.CalledProcessError:
+            print("  UPX compression failed, using uncompressed binary")
+            size_after = size_before
+    else:
+        print("\n⚠ UPX not found, skipping compression (install with: apt install upx-ucl)")
+        size_after = size_before
 
     print("\n✓ Build successful!")
     print(f"  Binary: {binary_path}")
-    print(f"  Size: {size_mb:.1f} MB")
+    print(f"  Size: {size_after:.1f} MB")
 
     return binary_path
 
