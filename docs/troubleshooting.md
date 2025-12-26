@@ -273,15 +273,15 @@ Using default profile (no custom profile found)
 
 **Solutions:**
 
-1. Check profile location:
+1. Check config location:
    ```bash
-   ls -la ~/.config/shannot/profile.json
-   ls -la .shannot/profile.json
+   ls -la ~/.config/shannot/config.toml
+   ls -la .shannot/config.toml
    ```
 
-2. Verify JSON syntax:
+2. View config contents:
    ```bash
-   python3 -m json.tool ~/.config/shannot/profile.json
+   cat ~/.config/shannot/config.toml
    ```
 
 3. Check current profile:

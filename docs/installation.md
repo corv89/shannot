@@ -131,7 +131,7 @@ shannot setup remote test prod
 shannot setup remote list
 ```
 
-Remote targets are stored in `~/.config/shannot/remotes.toml`.
+Remote targets are stored in the `[remotes.*]` sections of `~/.config/shannot/config.toml`.
 
 ## Configuration Paths
 
@@ -148,8 +148,8 @@ Shannot follows XDG Base Directory specification:
 
 Approval profiles are loaded in order of precedence:
 
-1. `.shannot/profile.json` (project-local)
-2. `~/.config/shannot/profile.json` (global)
+1. `.shannot/config.toml` (project-local)
+2. `~/.config/shannot/config.toml` (global)
 3. Built-in default profile
 
 ## Troubleshooting

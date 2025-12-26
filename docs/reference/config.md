@@ -21,34 +21,28 @@ The config module provides path management, version information, and profile/rem
 
 ```
 ~/.config/shannot/
-├── profile.json          # Global approval profile
-└── remotes.toml          # SSH remote targets
+└── config.toml           # Global config (profile, audit, remotes)
 
 ~/.local/share/shannot/
 ├── runtime/              # PyPy sandbox runtime
 │   ├── lib-python/       # Python stdlib
 │   └── lib_pypy/         # PyPy modules
-└── sessions/             # Session data
+├── sessions/             # Session data
+└── audit/                # Audit logs
 ```
 
-## Approval Profiles
+## Configuration File
 
-```json
-{
-  "auto_approve": ["cat", "ls", "df", "free"],
-  "always_deny": ["rm -rf /", "dd if=/dev/zero"]
-}
-```
-
-**Locations (in order of precedence):**
-1. `.shannot/profile.json` (project-local)
-2. `~/.config/shannot/profile.json` (global)
-3. Built-in default
-
-## Remote Targets
+All settings are in `config.toml`:
 
 ```toml
-# ~/.config/shannot/remotes.toml
+[profile]
+auto_approve = ["cat", "ls", "df", "free"]
+always_deny = ["rm -rf /", "dd if=/dev/zero"]
+
+[audit]
+enabled = true
+
 [remotes.prod]
 host = "prod.example.com"
 user = "deploy"
@@ -59,6 +53,11 @@ host = "staging.example.com"
 user = "admin"
 port = 22
 ```
+
+**Locations (in order of precedence):**
+1. `.shannot/config.toml` (project-local)
+2. `~/.config/shannot/config.toml` (global)
+3. Built-in default
 
 ## Environment Variables
 

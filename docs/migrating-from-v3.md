@@ -170,7 +170,7 @@ shannot setup
 
 ### 4. Migrate Profiles
 
-Create new profiles in the v0.4.0+ format.
+Create the new unified `config.toml` format.
 
 **Old profile** (`~/.config/shannot/profile.json`):
 ```json
@@ -182,26 +182,25 @@ Create new profiles in the v0.4.0+ format.
 }
 ```
 
-**New profile** (`~/.config/shannot/profile.json`):
-```json
-{
-  "auto_approve": ["ls", "cat", "df", "free", "uptime", "ps"],
-  "always_deny": ["rm -rf /", "dd if=/dev/zero"]
-}
+**New config** (`~/.config/shannot/config.toml`):
+```toml
+[profile]
+auto_approve = ["ls", "cat", "df", "free", "uptime", "ps"]
+always_deny = ["rm -rf /", "dd if=/dev/zero"]
 ```
 
 ### 5. Migrate Remote Targets
 
 v0.3.x used executor configuration in `config.toml`.
 
-v0.4.0+ uses `remotes.toml`:
+v0.4.0+ uses `[remotes.*]` sections in `config.toml`:
 
 ```bash
 # Add remotes via CLI
 shannot setup remote add prod user@prod.example.com
 shannot setup remote add staging admin@staging.example.com
 
-# Or create ~/.config/shannot/remotes.toml:
+# Or add to ~/.config/shannot/config.toml:
 ```
 
 ```toml
@@ -257,11 +256,11 @@ shannot run /tmp/test.py
 
 | Purpose | v0.3.x | v0.4.0+ |
 |---------|--------|---------|
-| Profile | `~/.config/shannot/profile.json` | Same |
-| Project profile | `.shannot/profile.json` | Same |
-| Remote targets | `~/.config/shannot/config.toml` | `~/.config/shannot/remotes.toml` |
+| Config | `~/.config/shannot/profile.json` | `~/.config/shannot/config.toml` |
+| Project config | `.shannot/profile.json` | `.shannot/config.toml` |
 | Runtime | N/A | `~/.local/share/shannot/runtime/` |
 | Sessions | N/A | `~/.local/share/shannot/sessions/` |
+| Audit logs | N/A | `~/.local/share/shannot/audit/` |
 
 ## Troubleshooting Migration
 

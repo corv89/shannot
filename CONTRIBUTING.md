@@ -117,27 +117,33 @@ shannot/
 Shannot follows XDG Base Directory specification:
 
 **Configuration:**
-- Global profile: `~/.config/shannot/profile.json`
-- Project profile: `.shannot/profile.json`
-- Remote targets: `~/.config/shannot/remotes.toml`
+- Global config: `~/.config/shannot/config.toml`
+- Project config: `.shannot/config.toml`
 
 **Data:**
 - Runtime (PyPy stdlib): `~/.local/share/shannot/runtime/`
 - Sessions: `~/.local/share/shannot/sessions/`
+- Audit logs: `~/.local/share/shannot/audit/`
 - PyPy sandbox binary: `~/.local/share/shannot/runtime/pypy-sandbox` (or from PATH)
 
-**Profile Structure (Command Approval):**
-```json
-{
-  "auto_approve": [
-    "cat", "ls", "find", "grep", "head", "tail", "wc", "du", "df"
-  ],
-  "always_deny": [
+**Config Structure:**
+```toml
+[profile]
+auto_approve = [
+    "cat", "ls", "find", "grep", "head", "tail", "wc", "du", "df",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
-    ":(){ :|:& };:"
-  ]
-}
+    ":(){ :|:& };:",
+]
+
+[audit]
+enabled = true
+
+[remotes.prod]
+host = "example.com"
+user = "deploy"
 ```
 
 ### Zero Dependencies Philosophy
@@ -247,14 +253,13 @@ SSH (stdlib subprocess) --------→  scp session files
 Display results locally
 ```
 
-**Configuration** (`~/.config/shannot/remotes.toml`):
+**Configuration** (`~/.config/shannot/config.toml`):
 ```toml
-[targets.prod]
+[remotes.prod]
 host = "prod.example.com"
 user = "admin"
-profile = "diagnostics"  # Optional: use specific profile on remote
 
-[targets.staging]
+[remotes.staging]
 host = "staging.example.com"
 user = "deploy"
 ```

@@ -77,7 +77,7 @@ shannot setup remote add dev \
 
 ### Remotes Configuration
 
-Remote targets are stored in `~/.config/shannot/remotes.toml`:
+Remote targets are defined in `~/.config/shannot/config.toml` under `[remotes.*]` sections:
 
 ```toml
 [remotes.prod]
@@ -238,7 +238,7 @@ Host staging
     IdentityFile ~/.ssh/shannot_key
 ```
 
-Then in remotes.toml, use the SSH config alias:
+Then in config.toml, use the SSH config alias:
 
 ```toml
 [remotes.prod]

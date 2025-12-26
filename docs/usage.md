@@ -166,23 +166,24 @@ Profiles control which commands execute automatically vs. require approval.
 
 ### Profile Structure
 
-```json
-{
-  "auto_approve": [
-    "cat", "ls", "find", "grep", "head", "tail", "df", "free"
-  ],
-  "always_deny": [
+Profile settings are in the `[profile]` section of `config.toml`:
+
+```toml
+[profile]
+auto_approve = [
+    "cat", "ls", "find", "grep", "head", "tail", "df", "free",
+]
+always_deny = [
     "rm -rf /",
     "dd if=/dev/zero",
-    ":(){ :|:& };:"
-  ]
-}
+    ":(){ :|:& };:",
+]
 ```
 
 ### Profile Locations
 
-1. `.shannot/profile.json` (project-local, highest priority)
-2. `~/.config/shannot/profile.json` (global)
+1. `.shannot/config.toml` (project-local, highest priority)
+2. `~/.config/shannot/config.toml` (global)
 3. Built-in default profile
 
 ### Command Matching

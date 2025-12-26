@@ -614,7 +614,7 @@ class ShannotMCPServer(MCPServer):
     ) -> TextContent:
         """Execute Python script on a remote SSH target.
 
-        Security: Only named remotes from remotes.toml are allowed.
+        Security: Only named remotes from config.toml are allowed.
         Arbitrary user@host:port format is rejected.
 
         Parameters
