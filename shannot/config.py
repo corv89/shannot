@@ -16,6 +16,7 @@ import getpass
 import os
 import tomllib
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Literal
 
@@ -126,6 +127,199 @@ DEFAULT_ALWAYS_DENY = [
     ":(){ :|:& };:",
     "> /dev/sda",
 ]
+
+
+# ============================================================================
+# Command danger classification
+# ============================================================================
+
+
+class DangerLevel(Enum):
+    """Danger classification for command display in TUI."""
+
+    SAFE = "safe"  # Green/dim - matches auto_approve
+    CAUTION = "caution"  # Yellow - state-modifying
+    DANGER = "danger"  # Red - destructive
+    UNKNOWN = "unknown"  # No color - unclassified
+
+
+# Commands that modify system state but are not destructive (yellow in TUI)
+STATE_MODIFYING_COMMANDS = {
+    "chmod",
+    "chown",
+    "chgrp",
+    "crontab",
+    "groupadd",
+    "groupdel",
+    "init",
+    "mount",
+    "passwd",
+    "service",
+    "shutdown",
+    "reboot",
+    "umount",
+    "useradd",
+    "userdel",
+    "usermod",
+}
+
+# Baseline destructive commands (red in TUI, supplements always_deny)
+DESTRUCTIVE_COMMANDS = {
+    "dd",
+    "fdisk",
+    "kill",
+    "killall",
+    "mkfs",
+    "parted",
+    "pkill",
+    "rm",
+    "rmdir",
+    "shred",
+    "truncate",
+    "wipefs",
+}
+
+
+def _normalize_command(cmd: str) -> str:
+    """
+    Strip sudo, doas, and env vars for classification.
+
+    Examples
+    --------
+    >>> _normalize_command("sudo rm -rf /tmp")
+    'rm -rf /tmp'
+    >>> _normalize_command("FOO=bar cat file")
+    'cat file'
+    """
+    cmd = cmd.strip()
+    if not cmd:
+        return ""
+
+    # Strip leading env vars: VAR=val cmd → cmd
+    parts = cmd.split()
+    while parts and "=" in parts[0] and not parts[0].startswith("-"):
+        parts = parts[1:]
+
+    if not parts:
+        return ""
+
+    cmd = " ".join(parts)
+
+    # Strip sudo/doas prefix
+    for prefix in ("sudo ", "doas "):
+        if cmd.startswith(prefix):
+            cmd = cmd[len(prefix) :]
+
+    return cmd
+
+
+def _extract_base_command(cmd: str) -> str:
+    """
+    Get base command name (first word after normalize, strip path).
+
+    Examples
+    --------
+    >>> _extract_base_command("sudo /usr/bin/rm -rf /tmp")
+    'rm'
+    >>> _extract_base_command("cat file | grep foo")
+    'cat'
+    """
+    normalized = _normalize_command(cmd)
+    if not normalized:
+        return ""
+
+    # Take first command in pipeline
+    if "|" in normalized:
+        normalized = normalized.split("|")[0].strip()
+
+    parts = normalized.split()
+    if not parts:
+        return ""
+
+    first = parts[0]
+
+    # Strip path: /usr/bin/cat → cat
+    return first.rsplit("/", 1)[-1]
+
+
+def _matches_deny_pattern(cmd: str, patterns: list[str]) -> bool:
+    """
+    Check if command matches any deny pattern (substring match).
+
+    Examples
+    --------
+    >>> _matches_deny_pattern("rm -rf /", ["rm -rf /"])
+    True
+    >>> _matches_deny_pattern("rm -rf /tmp", ["rm -rf /"])
+    False
+    """
+    normalized = _normalize_command(cmd)
+    for pattern in patterns:
+        if pattern in normalized:
+            return True
+    return False
+
+
+def _matches_prefix(cmd: str, patterns: list[str]) -> bool:
+    """
+    Check if normalized command starts with any pattern.
+
+    Examples
+    --------
+    >>> _matches_prefix("systemctl status nginx", ["systemctl status"])
+    True
+    >>> _matches_prefix("systemctl restart nginx", ["systemctl status"])
+    False
+    """
+    normalized = _normalize_command(cmd)
+    for pattern in patterns:
+        if normalized.startswith(pattern):
+            return True
+    return False
+
+
+def classify_command_danger(cmd: str, profile: ProfileConfig) -> DangerLevel:
+    """
+    Classify a command's danger level for TUI display.
+
+    Classification precedence (first match wins):
+    1. always_deny patterns (substring match) → DANGER
+    2. DESTRUCTIVE_COMMANDS (base command) → DANGER
+    3. STATE_MODIFYING_COMMANDS (base command) → CAUTION
+    4. auto_approve patterns (prefix match) → SAFE
+    5. Everything else → UNKNOWN
+
+    Parameters
+    ----------
+    cmd
+        The full command string to classify
+    profile
+        ProfileConfig with auto_approve and always_deny lists
+
+    Returns
+    -------
+    DangerLevel
+        The danger classification for display coloring
+    """
+    # 1. Check always_deny patterns (substring match)
+    if _matches_deny_pattern(cmd, profile.always_deny):
+        return DangerLevel.DANGER
+
+    base = _extract_base_command(cmd)
+
+    # 2. Check hardcoded destructive commands
+    if base in DESTRUCTIVE_COMMANDS:
+        return DangerLevel.DANGER
+
+    # 3. Check state-modifying commands
+    if base in STATE_MODIFYING_COMMANDS:
+        return DangerLevel.CAUTION
+
+    # 4. Check auto_approve (prefix match for multi-word patterns)
+    if base in profile.auto_approve or _matches_prefix(cmd, profile.auto_approve):
+        return DangerLevel.SAFE
+
+    return DangerLevel.UNKNOWN
 
 
 def _default_audit_events() -> dict[str, bool]:
