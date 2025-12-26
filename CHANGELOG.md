@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Add built-in self-test to `shannot status` and `shannot setup remote test`
+  - Status command runs minimal script through sandbox when runtime is available
+  - Remote test deploys runtime if missing, then verifies sandbox execution
+  - Self-test exercises full sandbox path with `platform.node()` call
+
 ## [0.8.1] - 2025-12-26
 
 ### Features
