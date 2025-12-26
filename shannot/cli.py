@@ -522,6 +522,8 @@ def cmd_remote_list(args: argparse.Namespace) -> int:
 def cmd_remote_test(args: argparse.Namespace) -> int:
     """Handle 'shannot remote test' command."""
     from .config import resolve_target
+    from .deploy import ensure_deployed, is_deployed
+    from .selftest import run_remote_self_test
     from .ssh import SSHConfig, SSHConnection
 
     try:
@@ -531,31 +533,43 @@ def cmd_remote_test(args: argparse.Namespace) -> int:
         return 1
 
     target = f"{user}@{host}"
-    print(f"Testing connection to {target}:{port}...")
+    target_display = f"{target}:{port}" if port != 22 else target
+    print(f"Testing {args.name} ({target_display})...")
 
     # Create SSHConfig with resolved values
     config = SSHConfig(target=target, port=port, connect_timeout=args.timeout)
 
     with SSHConnection(config) as ssh:
+        # Step 1: Test SSH connection
         if not ssh.connect():
-            print(f"FAILED: Could not connect to {target}:{port}")
+            print("  ✗ SSH connection failed")
+            return 1
+        print("  ✓ SSH connection")
+
+        # Step 2: Check/deploy shannot
+        try:
+            if is_deployed(ssh):
+                print("  ✓ Shannot deployed")
+            else:
+                print("  ⟳ Deploying runtime...", end="", flush=True)
+                ensure_deployed(ssh)
+                print(" done")
+        except Exception as e:
+            print(f"\n  ✗ Deployment failed: {e}")
             return 1
 
-        # Run a simple command to verify
-        result = ssh.run("echo OK")
-        if result.returncode == 0 and b"OK" in result.stdout:
-            print(f"SUCCESS: Connected to {target}:{port}")
-            # Get remote hostname for verification
-            hostname_result = ssh.run("hostname")
-            if hostname_result.returncode == 0:
-                hostname = hostname_result.stdout.decode().strip()
-                print(f"  Remote hostname: {hostname}")
-            return 0
+        # Step 3: Run sandbox self-test
+        result = run_remote_self_test(user, host, port, deploy_if_missing=False)
+        if result.success:
+            print(f"  ✓ Sandbox execution ({result.elapsed_ms:.0f}ms)")
+            print(f"    Output: {result.output!r}")
         else:
-            print("FAILED: Connection succeeded but test command failed")
-            if result.stderr:
-                print(f"  Error: {result.stderr.decode()}")
+            print("  ✗ Sandbox execution failed")
+            print(f"    Error: {result.error}")
             return 1
+
+    print(f"\nRemote '{args.name}' is ready.")
+    return 0
 
 
 def cmd_remote_remove(args: argparse.Namespace) -> int:
@@ -692,6 +706,18 @@ def cmd_status(args: argparse.Namespace) -> int:
             print("  ✗ Sandbox binary not found")
             print("    Build pypy-sandbox from PyPy source and add to PATH,")
             print(f"    or place in {RUNTIME_DIR}/pypy-sandbox")
+
+        # Run self-test if both runtime and sandbox are available
+        if is_runtime_installed() and sandbox_path:
+            from .selftest import run_local_self_test
+
+            result = run_local_self_test()
+            if result.success:
+                print(f"  ✓ Self-test: passed ({result.elapsed_ms:.0f}ms)")
+                print(f"    Output: {result.output!r}")
+            else:
+                print("  ✗ Self-test: FAILED")
+                print(f"    Error: {result.error}")
 
         if show_all:
             print()
