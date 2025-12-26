@@ -317,9 +317,13 @@ def get_deployed_version(ssh: SSHConnection) -> str | None:
     deploy_dir = get_remote_deploy_dir()
     result = ssh.run(f"{deploy_dir}/shannot --version 2>/dev/null || echo ''")
     if result.returncode == 0:
-        version = result.stdout.decode().strip()
-        if version:
-            return version
+        output = result.stdout.decode().strip()
+        if output:
+            # Output format is "shannot X.Y.Z" - extract version number
+            parts = output.split()
+            if len(parts) >= 2:
+                return parts[1]  # Return just the version number
+            return output  # Fallback to full output
     return None
 
 
@@ -441,10 +445,11 @@ def deploy_runtime(ssh: SSHConnection, force: bool = False) -> bool:
     # Upload and extract on remote
     # The archive has structure: pypy3.6-v7.3.3-src/{lib-python,lib_pypy}/...
     # We extract lib-python and lib_pypy to deploy_dir
+    # Note: GNU tar requires --wildcards for glob patterns (BSD tar doesn't need it)
     extract_cmd = f"""
 cd {deploy_dir} && \\
 cat > stdlib.tar.bz2 && \\
-tar -xjf stdlib.tar.bz2 --strip-components=1 '*/lib-python' '*/lib_pypy' && \\
+tar -xjf stdlib.tar.bz2 --wildcards --strip-components=1 '*/lib-python' '*/lib_pypy' && \\
 rm stdlib.tar.bz2
 """
     result = ssh.run(
