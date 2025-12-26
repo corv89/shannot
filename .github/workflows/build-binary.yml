@@ -10,14 +10,24 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.arch }}
+    name: Build ${{ matrix.platform }}-${{ matrix.arch }}
     strategy:
       matrix:
         include:
+          # Linux
           - os: ubuntu-latest
             arch: x86_64
+            platform: linux
           - os: ubuntu-24.04-arm
             arch: arm64
+            platform: linux
+          # macOS
+          - os: macos-13
+            arch: x86_64
+            platform: darwin
+          - os: macos-14
+            arch: arm64
+            platform: darwin
 
     runs-on: ${{ matrix.os }}
 
@@ -42,8 +52,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
-          name: shannot-binary-${{ matrix.arch }}
-          path: dist/shannot-linux-${{ matrix.arch }}
+          name: shannot-binary-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/shannot-${{ matrix.platform }}-${{ matrix.arch }}
 
   upload-release:
     name: Upload to GitHub Release
@@ -54,16 +64,28 @@ jobs:
       contents: write
 
     steps:
-      - name: Download x86_64 binary
+      - name: Download Linux x86_64 binary
         uses: actions/download-artifact@v7
         with:
-          name: shannot-binary-x86_64
+          name: shannot-binary-linux-x86_64
           path: dist/
 
-      - name: Download arm64 binary
+      - name: Download Linux arm64 binary
         uses: actions/download-artifact@v7
         with:
-          name: shannot-binary-arm64
+          name: shannot-binary-linux-arm64
+          path: dist/
+
+      - name: Download macOS x86_64 binary
+        uses: actions/download-artifact@v7
+        with:
+          name: shannot-binary-darwin-x86_64
+          path: dist/
+
+      - name: Download macOS arm64 binary
+        uses: actions/download-artifact@v7
+        with:
+          name: shannot-binary-darwin-arm64
           path: dist/
 
       - name: Upload to GitHub Release
