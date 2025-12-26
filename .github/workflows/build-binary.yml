@@ -35,15 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install nuitka ordered-set zstandard
           pip install -e .
-          sudo apt-get install -y upx-ucl
 
       - name: Build binary
         run: python build_binary.py
-
-      - name: Compress with UPX
-        run: |
-          upx --best dist/shannot-linux-${{ matrix.arch }}
-          ls -lh dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v5

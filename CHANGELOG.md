@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.4] - 2025-12-26
+## [0.8.5] - 2025-12-26
+
+### Bug Fixes
+
+- Fix broken binaries caused by UPX compression (SIGSEGV on startup)
+  - UPX is incompatible with Nuitka's `--onefile` mode (double compression)
+  - Keep LTO and module exclusions for size optimization
+
+## [0.8.4] - 2025-12-26 [YANKED]
 
 ### Build
 
