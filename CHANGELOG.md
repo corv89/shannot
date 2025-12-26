@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] - 2025-12-26
+
+### Bug Fixes
+
+- Fix release workflow to create gzip tarballs for remote deployment
+  - Binary releases now use format: `shannot-{version}-linux-{arch}.tar.gz`
+  - Add `--clobber` flag to handle workflow re-runs
+  - Normalize architecture naming to `arm64` consistently
+
 ## [0.8.2] - 2025-12-26
 
 ### Features
