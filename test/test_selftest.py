@@ -45,9 +45,9 @@ class TestSelfTestScript:
         # Should parse without error
         compile(SELF_TEST_SCRIPT, "<selftest>", "exec")
 
-    def test_script_uses_platform(self):
-        """Test that the script uses platform.node()."""
-        assert "platform.node()" in SELF_TEST_SCRIPT
+    def test_script_uses_getpid(self):
+        """Test that the script uses os.getpid()."""
+        assert "os.getpid()" in SELF_TEST_SCRIPT
         assert "print" in SELF_TEST_SCRIPT
 
 
@@ -85,11 +85,7 @@ class TestRunLocalSelfTest:
         with (
             patch("shannot.runtime.get_runtime_path", return_value="/some/path"),
             patch("shannot.runtime.find_pypy_sandbox", return_value="/path/to/pypy-sandbox"),
-            patch("subprocess.run", return_value=mock_result),
-            patch("os.write"),
-            patch("os.close"),
-            patch("os.unlink"),
-            patch("tempfile.mkstemp", return_value=(5, "/tmp/test.py")),
+            patch("subprocess.run", return_value=mock_result) as mock_run,
         ):
             result = run_local_self_test()
 
@@ -97,6 +93,11 @@ class TestRunLocalSelfTest:
         assert result.output == "hello from testhost"
         assert result.error is None
         assert result.elapsed_ms > 0
+
+        # Verify -c flag is used (no temp files)
+        call_args = mock_run.call_args
+        assert "-c" in call_args[0][0]
+        assert SELF_TEST_SCRIPT in call_args[0][0]
 
     def test_subprocess_failure(self):
         """Test failed subprocess execution."""
@@ -109,10 +110,6 @@ class TestRunLocalSelfTest:
             patch("shannot.runtime.get_runtime_path", return_value="/some/path"),
             patch("shannot.runtime.find_pypy_sandbox", return_value="/path/to/pypy-sandbox"),
             patch("subprocess.run", return_value=mock_result),
-            patch("os.write"),
-            patch("os.close"),
-            patch("os.unlink"),
-            patch("tempfile.mkstemp", return_value=(5, "/tmp/test.py")),
         ):
             result = run_local_self_test()
 
@@ -125,10 +122,6 @@ class TestRunLocalSelfTest:
             patch("shannot.runtime.get_runtime_path", return_value="/some/path"),
             patch("shannot.runtime.find_pypy_sandbox", return_value="/path/to/pypy-sandbox"),
             patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="test", timeout=30)),
-            patch("os.write"),
-            patch("os.close"),
-            patch("os.unlink"),
-            patch("tempfile.mkstemp", return_value=(5, "/tmp/test.py")),
         ):
             result = run_local_self_test()
 
@@ -147,10 +140,6 @@ class TestRunLocalSelfTest:
             patch("shannot.runtime.get_runtime_path", return_value="/some/path"),
             patch("shannot.runtime.find_pypy_sandbox", return_value="/path/to/pypy-sandbox"),
             patch("subprocess.run", return_value=mock_result),
-            patch("os.write"),
-            patch("os.close"),
-            patch("os.unlink"),
-            patch("tempfile.mkstemp", return_value=(5, "/tmp/test.py")),
         ):
             result = run_local_self_test()
 

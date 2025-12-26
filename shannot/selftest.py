@@ -7,18 +7,16 @@ by executing a minimal test script.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 
 # Minimal script that exercises basic sandbox functionality
-# Uses platform.node() which is a simple syscall (gethostname)
+# Uses os.getpid() which verifies syscall virtualization (returns virtual PID)
 SELF_TEST_SCRIPT = """\
-import platform
-print("hello from", platform.node())
+import os
+print('sandbox pid:', os.getpid())
 """
 
 
@@ -58,16 +56,11 @@ def run_local_self_test() -> SelfTestResult:
             error="Sandbox binary not found",
         )
 
-    # Create temporary script file
-    fd, script_path = tempfile.mkstemp(suffix=".py", prefix="shannot_selftest_")
     try:
-        os.write(fd, SELF_TEST_SCRIPT.encode())
-        os.close(fd)
-
-        # Run through shannot (exercises full path)
+        # Run with -c flag (no temp files needed)
         start = time.perf_counter()
         result = subprocess.run(
-            [sys.executable, "-m", "shannot", "run", "--nocolor", script_path],
+            [sys.executable, "-m", "shannot", "run", "--nocolor", "-c", SELF_TEST_SCRIPT],
             capture_output=True,
             timeout=30,
         )
@@ -105,11 +98,6 @@ def run_local_self_test() -> SelfTestResult:
             elapsed_ms=0,
             error=str(e),
         )
-    finally:
-        try:
-            os.unlink(script_path)
-        except OSError:
-            pass
 
 
 def run_remote_self_test(
@@ -156,26 +144,18 @@ def run_remote_self_test(
                         error=f"Deployment failed: {e}",
                     )
 
-            # Create temp script on remote
-            script_content = SELF_TEST_SCRIPT.encode()
-            remote_script = "/tmp/shannot_selftest.py"
+            # Run with -c flag (no temp files needed)
+            # Shell-escape the script for remote execution
+            import shlex
 
-            # Write script to remote
-            write_result = ssh.run(f"cat > {remote_script}", input_data=script_content)
-            if write_result.returncode != 0:
-                return SelfTestResult(
-                    success=False,
-                    elapsed_ms=0,
-                    error="Failed to write test script",
-                )
+            from .config import get_remote_deploy_dir
 
-            # Run through shannot on remote
+            deploy_dir = get_remote_deploy_dir()
+            escaped_script = shlex.quote(SELF_TEST_SCRIPT)
+            cmd = f"{deploy_dir}/shannot run --nocolor --code={escaped_script}"
             start = time.perf_counter()
-            result = ssh.run(f"shannot run --nocolor {remote_script}", timeout=30)
+            result = ssh.run(cmd, timeout=30)
             elapsed_ms = (time.perf_counter() - start) * 1000
-
-            # Cleanup
-            ssh.run(f"rm -f {remote_script}")
 
             if result.returncode == 0:
                 stdout = result.stdout.decode().strip()

@@ -272,6 +272,14 @@ def run_mcp_menu() -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Handle 'shannot run' command."""
+    # Validate: need either script or -c
+    if not args.script and not args.code:
+        print("Error: Must specify either a script or -c CODE", file=sys.stderr)
+        return 1
+    if args.script and args.code:
+        print("Error: Cannot specify both script and -c", file=sys.stderr)
+        return 1
+
     # If target specified, use remote execution path
     if args.target:
         return cmd_run_remote(args)
@@ -357,11 +365,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.analysis:
         argv.append(f"--analysis={args.analysis}")
 
-    # Add executable and script with args
+    # Pass --code before executable (getopt stops at first positional)
+    if args.code:
+        argv.append(f"--code={args.code}")
+
+    # Add executable
     argv.append(str(executable))
     argv.append("-S")  # Suppress site module import (not useful in sandbox)
-    argv.append(args.script)
-    argv.extend(args.script_args)
+
+    # Script file: pass path (interact will read and inject into VFS)
+    if not args.code:
+        argv.append(args.script)
+        argv.extend(args.script_args)
 
     # Execute directly
     return interact_main(argv)
@@ -724,8 +739,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     # Targets status
     if show_targets:
-        from .config import load_remotes, resolve_target
-        from .ssh import SSHConfig, SSHConnection
+        from .config import load_remotes
 
         print("Targets:")
         try:
@@ -738,25 +752,10 @@ def cmd_status(args: argparse.Namespace) -> int:
             print("  No remotes configured")
         else:
             for name, remote in sorted(remotes.items()):
-                user, host, port = resolve_target(name)
                 target_str = remote.target_string
                 if remote.port != 22:
                     target_str += f":{remote.port}"
-
-                # Test connection with short timeout
-                config = SSHConfig(target=f"{user}@{host}", port=port, connect_timeout=5)
-                try:
-                    with SSHConnection(config) as ssh:
-                        if ssh.connect():
-                            result = ssh.run("echo OK", timeout=5)
-                            if result.returncode == 0:
-                                print(f"  ✓ {name} ({target_str}) — connected")
-                            else:
-                                print(f"  ✗ {name} ({target_str}) — command failed")
-                        else:
-                            print(f"  ✗ {name} ({target_str}) — connection failed")
-                except Exception as e:
-                    print(f"  ✗ {name} ({target_str}) — {e}")
+                print(f"  {name}: {target_str}")
         if show_all:
             print()
 
@@ -947,7 +946,15 @@ def main() -> int:
     )
     run_parser.add_argument(
         "script",
+        nargs="?",
         help="Python script to execute in the sandbox",
+    )
+    run_parser.add_argument(
+        "-c",
+        "--code",
+        dest="code",
+        metavar="CODE",
+        help="Execute Python code string directly (like python -c)",
     )
     run_parser.add_argument(
         "script_args",
