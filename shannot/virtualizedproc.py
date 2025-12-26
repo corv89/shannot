@@ -1,10 +1,11 @@
 import errno
+import platform
 import sys
 import time
 
 from . import sandboxio
 from .sandboxio import NULL, Ptr, ptr_size
-from .structs import new_timeval, pack_gid_t, pack_time_t, pack_uid_t, struct_to_bytes
+from .structs import new_timeval, new_utsname, pack_gid_t, pack_time_t, pack_uid_t, struct_to_bytes
 
 
 def signature(sig):
@@ -95,6 +96,8 @@ class VirtualizedProc:
     virtual_time = time.mktime((2019, 8, 1, 0, 0, 0, 0, 0, 0))
     # ^^^ Aug 1st, 2019.  Subclasses can overwrite with a property
     # to get the current time dynamically, too
+    virtual_hostname = "sandbox"
+    virtual_machine = platform.machine()  # "x86_64" or "aarch64"
 
     def __init__(self, child_stdin, child_stdout):
         self.sandio = sandboxio.SandboxedIO(child_stdin, child_stdout)
@@ -242,7 +245,31 @@ class VirtualizedProc:
     s_times = sigerror("times(p)i")
     s_ttyname = sigerror("ttyname(i)p", errno.ENOTTY, NULL)
     s_umask = sigerror("umask(i)i")
-    s_uname = sigerror("uname(p)i", errno.ENOSYS, -1)
+
+    @signature("uname(p)i")
+    def s_uname(self, p_utsname):
+        """Fill the utsname structure with virtualized values."""
+        if p_utsname.addr == 0:
+            self.sandio.set_errno(errno.EFAULT)
+            return -1
+
+        hostname = self.virtual_hostname
+        if isinstance(hostname, str):
+            hostname = hostname.encode()
+        machine = self.virtual_machine
+        if isinstance(machine, str):
+            machine = machine.encode()
+
+        utsname = new_utsname(
+            sysname=b"Linux",
+            nodename=hostname,
+            release=b"5.10.0",
+            version=b"#1 SMP",
+            machine=machine,
+        )
+        self.sandio.write_buffer(p_utsname, struct_to_bytes(utsname))
+        return 0
+
     s_unlink = sigerror("unlink(p)i")
     s_unsetenv = sigerror("unsetenv(p)i")
     s_utime = sigerror("utime(pp)i")
