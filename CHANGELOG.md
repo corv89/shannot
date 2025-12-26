@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.6] - 2025-12-26
+
+### Features
+
+- Add macOS binary builds for both Intel (x86_64) and Apple Silicon (arm64)
+  - Binaries: `shannot-darwin-x86_64`, `shannot-darwin-arm64`
+  - Built with Nuitka `--onefile` mode (same as Linux)
+
 ## [0.8.5] - 2025-12-26
 
 ### Bug Fixes
