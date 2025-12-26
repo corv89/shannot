@@ -152,7 +152,13 @@ def run_remote_self_test(
 
             deploy_dir = get_remote_deploy_dir()
             escaped_script = shlex.quote(SELF_TEST_SCRIPT)
-            cmd = f"{deploy_dir}/shannot run --nocolor --code={escaped_script}"
+            # Point to deployed runtime (pypy3-c and lib-python are in deploy_dir)
+            cmd = (
+                f"{deploy_dir}/shannot run --nocolor "
+                f"--lib-path={deploy_dir} "
+                f"--pypy-sandbox={deploy_dir}/pypy3-c "
+                f"--code={escaped_script}"
+            )
             start = time.perf_counter()
             result = ssh.run(cmd, timeout=30)
             elapsed_ms = (time.perf_counter() - start) * 1000
