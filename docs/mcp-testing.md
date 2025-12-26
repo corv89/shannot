@@ -28,7 +28,7 @@ uv pip install -e ".[dev]"
 
 ```bash
 # Download PyPy sandbox
-shannot setup
+shannot setup runtime
 
 # Verify runtime
 shannot status
@@ -188,7 +188,7 @@ Install in Claude Code and test interactively:
 
 ```bash
 # Install for Claude Code
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 
 # Restart Claude Code, then:
 # > /mcp

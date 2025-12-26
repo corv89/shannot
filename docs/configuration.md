@@ -114,22 +114,22 @@ port = 2222
 
 ```bash
 # Add a remote
-shannot remote add prod --host prod.example.com --user deploy
+shannot setup remote add prod --host prod.example.com --user deploy
 
 # Shorthand format
-shannot remote add staging admin@staging.example.com
+shannot setup remote add staging admin@staging.example.com
 
 # With custom port
-shannot remote add dev --host 192.168.1.100 --user developer --port 2222
+shannot setup remote add dev --host 192.168.1.100 --user developer --port 2222
 
 # List configured remotes
-shannot remote list
+shannot setup remote list
 
 # Test connection
-shannot remote test prod
+shannot setup remote test prod
 
 # Remove a remote
-shannot remote remove staging
+shannot setup remote remove staging
 ```
 
 ### Using Remote Targets
@@ -157,9 +157,9 @@ When targeting a remote for the first time:
 Install MCP configuration for Claude Desktop:
 
 ```bash
-shannot mcp install
+shannot setup mcp install
 # or
-shannot mcp install --client claude-desktop
+shannot setup mcp install --client claude-desktop
 ```
 
 This adds to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
@@ -181,7 +181,7 @@ This adds to `~/Library/Application Support/Claude/claude_desktop_config.json` (
 Install for Claude Code:
 
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 Generates `.mcp.json` or updates user config.

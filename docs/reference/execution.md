@@ -33,7 +33,7 @@ Remote execution uses SSH with auto-deployment:
 
 ```bash
 # Add remote target
-shannot remote add prod user@host
+shannot setup remote add prod user@host
 
 # Run on remote
 shannot run script.py --target prod

@@ -189,9 +189,9 @@ With custom profile:
 
 ### Claude Code
 
-Via `shannot mcp install`:
+Via `shannot setup mcp install`:
 ```bash
-shannot mcp install --client claude-code
+shannot setup mcp install --client claude-code
 ```
 
 Generates configuration for Claude Code's user or project scope.
@@ -252,7 +252,7 @@ self.runtime = None
 # Tools return error when called
 {
   "status": "error",
-  "error": "PyPy sandbox runtime not found. Run 'shannot setup' to install."
+  "error": "PyPy sandbox runtime not found. Run 'shannot setup runtime' to install."
 }
 ```
 

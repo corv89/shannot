@@ -11,7 +11,7 @@ Complete installation guide for Shannot on all supported platforms.
 
 ### Sandbox Runtime
 
-- **PyPy sandbox binary** - auto-downloaded on first run via `shannot setup`
+- **PyPy sandbox binary** - auto-downloaded on first run via `shannot setup runtime`
 - Storage: ~50MB in `~/.local/share/shannot/runtime/`
 
 ## Installation
@@ -75,7 +75,7 @@ pip install --user -e .
 After installing shannot, run the setup command to download the PyPy sandbox runtime:
 
 ```bash
-shannot setup
+shannot setup runtime
 ```
 
 This downloads:
@@ -110,10 +110,10 @@ Shannot can execute sandboxed scripts on remote Linux hosts via SSH. Remote targ
 
 ```bash
 # Add a remote server
-shannot remote add prod user@prod.example.com
+shannot setup remote add prod user@prod.example.com
 
 # With explicit options
-shannot remote add staging \
+shannot setup remote add staging \
   --host staging.example.com \
   --user deploy \
   --port 22
@@ -122,13 +122,13 @@ shannot remote add staging \
 ### Test Connection
 
 ```bash
-shannot remote test prod
+shannot setup remote test prod
 ```
 
 ### List Configured Remotes
 
 ```bash
-shannot remote list
+shannot setup remote list
 ```
 
 Remote targets are stored in `~/.config/shannot/remotes.toml`.
@@ -175,10 +175,10 @@ If `shannot status` shows runtime not installed:
 
 ```bash
 # Install the runtime
-shannot setup
+shannot setup runtime
 
 # Force reinstall
-shannot setup --force
+shannot setup runtime --force
 ```
 
 ### Python Version Issues

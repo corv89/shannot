@@ -31,7 +31,7 @@ v0.4.0+ has **zero external dependencies**:
 ```bash
 # v0.4.0+ - Just install and setup
 pip install shannot
-shannot setup   # Downloads PyPy stdlib
+shannot setup runtime   # Downloads PyPy stdlib
 ```
 
 ### Remote Execution Auto-Deploys
@@ -48,7 +48,7 @@ v0.4.0+ auto-deploys on first use:
 
 ```bash
 # v0.4.0+ - Just add the remote
-shannot remote add prod user@host
+shannot setup remote add prod user@host
 shannot run script.py --target prod  # Auto-deploys
 ```
 
@@ -111,7 +111,7 @@ shannot approve
 |--------|---------|-------|
 | `shannot verify` | `shannot status` | Different checks |
 | `shannot run CMD` | `shannot run SCRIPT.py` | Runs Python scripts, not commands |
-| - | `shannot setup` | Downloads PyPy runtime |
+| - | `shannot setup runtime` | Downloads PyPy runtime |
 | - | `shannot approve` | Interactive session approval |
 | - | `shannot execute` | Execute approved sessions |
 
@@ -198,8 +198,8 @@ v0.4.0+ uses `remotes.toml`:
 
 ```bash
 # Add remotes via CLI
-shannot remote add prod user@prod.example.com
-shannot remote add staging admin@staging.example.com
+shannot setup remote add prod user@prod.example.com
+shannot setup remote add staging admin@staging.example.com
 
 # Or create ~/.config/shannot/remotes.toml:
 ```

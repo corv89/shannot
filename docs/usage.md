@@ -6,7 +6,7 @@ Complete guide to using Shannot for safe, sandboxed script execution.
 
 ```bash
 # Install PyPy runtime (one-time)
-shannot setup
+shannot setup runtime
 
 # Run a script in the sandbox
 shannot run script.py
@@ -22,14 +22,17 @@ shannot status
 
 ### shannot setup
 
-Install PyPy stdlib for sandboxing.
+Interactive setup menu or configuration subcommands.
 
 ```bash
-shannot setup              # Install runtime
-shannot setup --force      # Force reinstall
-shannot setup --status     # Check if installed
-shannot setup --remove     # Remove installed runtime
-shannot setup --quiet      # Suppress progress output
+shannot setup                      # Interactive setup menu
+shannot setup runtime              # Install runtime
+shannot setup runtime --force      # Force reinstall
+shannot setup runtime --status     # Check if installed
+shannot setup runtime --remove     # Remove installed runtime
+shannot setup runtime --quiet      # Suppress progress output
+shannot setup remote               # Interactive remote management
+shannot setup mcp                  # Interactive MCP setup
 ```
 
 ### shannot run
@@ -82,32 +85,21 @@ shannot approve history            # Show recent sessions
 | `n` | Deselect all |
 | `q` / `Esc` | Quit / Go back |
 
-### shannot execute
-
-Execute a previously created session directly.
-
-```bash
-shannot execute --session-id SESSION_ID
-shannot execute --session-id SESSION_ID --json-output
-```
-
-This is primarily used by the remote execution protocol.
-
-### shannot remote
+### shannot setup remote
 
 Manage SSH remote targets.
 
 ```bash
-shannot remote add NAME [USER@]HOST    # Add remote target
-shannot remote list                     # List configured targets
-shannot remote test NAME                # Test connection
-shannot remote remove NAME              # Remove target
+shannot setup remote add NAME [USER@]HOST    # Add remote target
+shannot setup remote list                     # List configured targets
+shannot setup remote test NAME                # Test connection
+shannot setup remote remove NAME              # Remove target
 ```
 
 **Add options:**
 
 ```bash
-shannot remote add prod \
+shannot setup remote add prod \
   --host prod.example.com \
   --user deploy \
   --port 22
@@ -212,10 +204,10 @@ Execute sandboxed scripts on remote Linux hosts via SSH.
 
 ```bash
 # Add remote
-shannot remote add prod user@prod.example.com
+shannot setup remote add prod user@prod.example.com
 
 # Test connection
-shannot remote test prod
+shannot setup remote test prod
 ```
 
 ### Run on Remote
