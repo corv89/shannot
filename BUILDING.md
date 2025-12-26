@@ -16,9 +16,9 @@ We provide a `build_binary.py` script that compiles the `shannot` CLI into a sta
 ### Version Management
 
 **Version is managed through pyproject.toml and importlib.metadata:**
-- `pyproject.toml` - `version = "0.4.0"` (source of truth)
+- `pyproject.toml` - Source of truth for version
 - `shannot/config.py` - Reads version via `importlib.metadata.version("shannot")`
-- Fallback to `"0.4.0-dev"` if metadata unavailable
+- Fallback to `"dev"` if metadata unavailable
 
 ⚠️ **When releasing a new version, update pyproject.toml!**
 

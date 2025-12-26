@@ -308,7 +308,7 @@ from importlib.metadata import version
 try:
     VERSION = version("shannot")
 except Exception:
-    VERSION = "0.4.0-dev"  # Fallback for development
+    VERSION = "dev"  # Fallback for development
 ```
 
 **PyPy Sandbox Binary Detection:**
