@@ -32,7 +32,7 @@ def detect_arch(ssh: SSHConnection) -> str:
     if arch in ("x86_64", "amd64"):
         return "x86_64"
     elif arch in ("aarch64", "arm64"):
-        return "aarch64"
+        return "arm64"
     raise RuntimeError(f"Unsupported architecture: {arch}")
 
 

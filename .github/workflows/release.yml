@@ -121,4 +121,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release upload '${{ github.ref_name }}' dist/** --repo '${{ github.repository }}'
+          gh release upload '${{ github.ref_name }}' dist/** --repo '${{ github.repository }}' --clobber

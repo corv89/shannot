@@ -39,11 +39,24 @@ jobs:
       - name: Build binary
         run: python build_binary.py
 
+      - name: Get version
+        id: version
+        run: echo "version=$(python -c 'from shannot.config import VERSION; print(VERSION)')" >> $GITHUB_OUTPUT
+
+      - name: Create tarball
+        run: |
+          cd dist
+          # Rename binary to just 'shannot' for extraction
+          mv shannot-linux-${{ matrix.arch }} shannot
+          chmod +x shannot
+          tar -czvf shannot-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}.tar.gz shannot
+          rm shannot
+
       - name: Upload artifact
         uses: actions/upload-artifact@v5
         with:
           name: shannot-binary-${{ matrix.arch }}
-          path: dist/shannot-linux-${{ matrix.arch }}
+          path: dist/shannot-*.tar.gz
 
   upload-release:
     name: Upload to GitHub Release
@@ -70,4 +83,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          gh release upload '${{ github.ref_name }}' dist/* --repo '${{ github.repository }}'
+          gh release upload '${{ github.ref_name }}' dist/* --repo '${{ github.repository }}' --clobber
