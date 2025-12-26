@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-12-26
+
+### Features
+
+- Add real-time danger highlighting to approval TUI
+  - Safe commands (dim green): matches `auto_approve` patterns
+  - Caution commands (yellow): state-modifying (chmod, mount, service)
+  - Danger commands (red): destructive (rm, kill, dd, mkfs)
+  - Unknown commands: no color
+- Expand default `auto_approve` list (20 → 70+ commands)
+  - Filesystem, file viewing, search, text processing
+  - Process, system, user, network diagnostics
+  - Service status, checksums, help commands
+- Expand default `always_deny` list (5 → 25+ patterns)
+  - Recursive destruction, disk destruction, fork bombs
+  - Remote code execution (curl/wget | sh)
+  - Permission bombs, history destruction, system shutdown
+
 ## [0.8.0] - 2025-12-26
 
 ### Features
