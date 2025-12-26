@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add macOS binary builds for both Intel (x86_64) and Apple Silicon (arm64)
   - Binaries: `shannot-darwin-x86_64`, `shannot-darwin-arm64`
   - Built with Nuitka `--onefile` mode (same as Linux)
+- Auto-download Linux binaries from GitHub releases for remote deployment
+  - No longer requires local binary for `shannot setup remote test`
+  - Binaries cached locally in `~/.local/share/shannot/binaries/`
 
 ## [0.8.5] - 2025-12-26
 

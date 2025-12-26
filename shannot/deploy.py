@@ -4,14 +4,25 @@ from __future__ import annotations
 
 import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import RELEASE_PATH_ENV, VERSION, get_remote_deploy_dir
+from .config import (
+    DATA_DIR,
+    RELEASE_PATH_ENV,
+    SHANNOT_RELEASES_URL,
+    VERSION,
+    get_remote_deploy_dir,
+)
 from .ssh import SSHConnection
 
 if TYPE_CHECKING:
     pass
+
+# Cache directory for downloaded binaries
+BINARY_CACHE_DIR = DATA_DIR / "binaries"
 
 
 def detect_arch(ssh: SSHConnection) -> str:
@@ -54,35 +65,87 @@ def get_deployed_version(ssh: SSHConnection) -> str | None:
     return None
 
 
+def _download_binary(arch: str, dest: Path) -> None:
+    """Download shannot binary from GitHub releases."""
+    # Format: https://github.com/corv89/shannot/releases/download/v0.8.6/shannot-linux-arm64
+    binary_name = f"shannot-linux-{arch}"
+    download_url = f"{SHANNOT_RELEASES_URL}/v{VERSION}/{binary_name}"
+
+    sys.stderr.write(f"[DEPLOY] Downloading shannot v{VERSION} for linux-{arch}...\n")
+    sys.stderr.write(f"[DEPLOY]   URL: {download_url}\n")
+
+    try:
+        request = urllib.request.Request(download_url, headers={"User-Agent": "shannot/1.0"})
+        with urllib.request.urlopen(request) as response:
+            total_size = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as f:
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        pct = downloaded * 100 // total_size
+                        mb_down = downloaded / (1024 * 1024)
+                        mb_total = total_size / (1024 * 1024)
+                        sys.stderr.write(
+                            f"\r[DEPLOY]   Downloading: {mb_down:.1f}/{mb_total:.1f} MB ({pct}%)"
+                        )
+                        sys.stderr.flush()
+
+            sys.stderr.write("\n")
+            dest.chmod(0o755)
+            sys.stderr.write(f"[DEPLOY]   Cached to {dest}\n")
+
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise FileNotFoundError(
+                f"Binary not found at {download_url}\n"
+                f"Make sure v{VERSION} release exists with linux-{arch} binary"
+            ) from e
+        raise
+
+
 def get_release_binary(arch: str) -> Path:
     """
     Get path to release binary for architecture.
 
-    Looks for:
+    Looks for (in order):
     1. $SHANNOT_RELEASE_PATH environment variable
-    2. ./releases/shannot-linux-{arch}
+    2. ./releases/shannot-linux-{arch} (local development)
+    3. ~/.local/share/shannot/binaries/v{VERSION}/shannot-linux-{arch} (cached)
+    4. Downloads from GitHub releases and caches
 
     Raises:
-        FileNotFoundError: If binary not found
+        FileNotFoundError: If binary not found and download fails
     """
-    # Check environment variable first
+    binary_name = f"shannot-linux-{arch}"
+
+    # 1. Check environment variable first
     env_path = os.environ.get(RELEASE_PATH_ENV)
     if env_path:
         path = Path(env_path)
         if path.exists():
             return path
 
-    # Look in releases directory (relative to package)
+    # 2. Look in releases directory (relative to package, for development)
     releases_dir = Path(__file__).parent.parent / "releases"
-    binary = releases_dir / f"shannot-linux-{arch}"
-    if binary.exists():
-        return binary
+    local_binary = releases_dir / binary_name
+    if local_binary.exists():
+        return local_binary
 
-    raise FileNotFoundError(
-        f"Release binary not found for {arch}.\n"
-        f"For development, build first: make build-binary\n"
-        f"Or set {RELEASE_PATH_ENV}=/path/to/binary"
-    )
+    # 3. Check cache
+    cached_binary = BINARY_CACHE_DIR / f"v{VERSION}" / binary_name
+    if cached_binary.exists():
+        return cached_binary
+
+    # 4. Download from GitHub releases
+    _download_binary(arch, cached_binary)
+    return cached_binary
 
 
 def deploy(ssh: SSHConnection, force: bool = False) -> bool:
@@ -108,7 +171,7 @@ def deploy(ssh: SSHConnection, force: bool = False) -> bool:
         sys.stderr.write(f"[ERROR] {e}\n")
         return False
 
-    # Get binary
+    # Get binary (downloads if needed)
     try:
         binary = get_release_binary(arch)
     except FileNotFoundError as e:

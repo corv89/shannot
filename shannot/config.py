@@ -32,6 +32,7 @@ except Exception:
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
 RELEASE_PATH_ENV = "SHANNOT_RELEASE_PATH"
+SHANNOT_RELEASES_URL = "https://github.com/corv89/shannot/releases/download"
 
 
 def get_remote_deploy_dir() -> str:
