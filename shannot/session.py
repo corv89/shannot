@@ -83,17 +83,102 @@ class Session:
         Returns list of results: {path, success, size} or {path, success, error}
         """
         import base64
+        import hashlib
 
         results = []
         for write_data in self.pending_writes:
             path = write_data.get("path", "")
             content_b64 = write_data.get("content_b64", "")
+            original_hash = write_data.get("original_hash")
 
             try:
                 content = base64.b64decode(content_b64)
                 target_path = Path(path)
+
+                # Conflict detection: verify file hasn't changed since dry-run
+                if original_hash is not None and target_path.exists():
+                    current_content = target_path.read_bytes()
+                    current_hash = hashlib.sha256(current_content).hexdigest()
+                    if current_hash != original_hash:
+                        results.append(
+                            {
+                                "path": path,
+                                "success": False,
+                                "error": "conflict: file modified since dry-run",
+                            }
+                        )
+                        continue
+
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 target_path.write_bytes(content)
+                results.append(
+                    {
+                        "path": path,
+                        "success": True,
+                        "size": len(content),
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
+
+    def commit_writes_remote(self, ssh: object) -> list[dict]:
+        """
+        Commit pending writes to remote filesystem via SSH.
+
+        Parameters
+        ----------
+        ssh
+            An SSHConnection instance with run() and write_file() methods.
+
+        Returns
+        -------
+        list[dict]
+            List of results: {path, success, size} or {path, success, error}
+        """
+        import base64
+        import shlex
+
+        results = []
+        for write_data in self.pending_writes:
+            path = write_data.get("path", "")
+            content_b64 = write_data.get("content_b64", "")
+            original_hash = write_data.get("original_hash")
+
+            try:
+                content = base64.b64decode(content_b64)
+
+                # Conflict detection via SSH hash check
+                if original_hash is not None:
+                    result = ssh.run(  # type: ignore[union-attr]
+                        f"sha256sum {shlex.quote(path)} 2>/dev/null || echo NOTFOUND"
+                    )
+                    if "NOTFOUND" not in result.stdout:
+                        current_hash = result.stdout.split()[0]
+                        if current_hash != original_hash:
+                            results.append(
+                                {
+                                    "path": path,
+                                    "success": False,
+                                    "error": "conflict: file modified since dry-run",
+                                }
+                            )
+                            continue
+
+                # Create parent directories
+                parent = str(Path(path).parent)
+                if parent != "/":
+                    ssh.run(f"mkdir -p {shlex.quote(parent)}")  # type: ignore[union-attr]
+
+                # Write via SSH
+                ssh.write_file(path, content)  # type: ignore[union-attr]
                 results.append(
                     {
                         "path": path,

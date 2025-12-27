@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import errno
+import hashlib
 import os
 import stat
 import sys
@@ -13,6 +14,7 @@ from .virtualizedproc import sigerror, signature
 
 MAX_PATH = 256
 MAX_WRITE_CHUNK = 256 * 1024  # 256KB maximum single write/read size
+MAX_WRITE_SIZE = 50 * 1024 * 1024  # 50MB maximum file write size
 UID = 1000
 GID = 1000
 INO_COUNTER = 0
@@ -476,16 +478,29 @@ class MixVFS:
             # Create PendingWrite and queue it
             content = write_buf.getvalue()
             if content or original:  # Only queue if there's actual content
+                # Enforce size limit
+                if len(content) > MAX_WRITE_SIZE:
+                    sys.stderr.write(
+                        f"[BLOCKED] Write exceeds 50MB limit: {path} ({len(content)} bytes)\n"
+                    )
+                    return
+
                 from .pending_write import PendingWrite
 
                 # Check if it's a remote file
                 is_remote = hasattr(node, "remote_path") if node else False
+
+                # Compute hash of original content for conflict detection
+                original_hash = None
+                if original is not None:
+                    original_hash = hashlib.sha256(original).hexdigest()
 
                 pending = PendingWrite(
                     path=path,
                     content=content,
                     original=original,
                     remote=is_remote,
+                    original_hash=original_hash,
                 )
                 self.file_writes_pending.append(pending)
                 sys.stderr.write(f"[QUEUED WRITE] {path} ({len(content)} bytes)\n")

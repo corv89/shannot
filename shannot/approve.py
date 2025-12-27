@@ -276,12 +276,21 @@ class SessionDetailView(View):
 
         # Show pending writes summary
         if s.pending_writes:
+            import base64
+
+            large_file_threshold = 5 * 1024 * 1024  # 5 MB
             print()
             print(f" \033[1mFile Writes ({len(s.pending_writes)}):\033[0m")
             for i, write_data in enumerate(s.pending_writes[:3]):
                 path = write_data.get("path", "?")
                 remote = " \033[33m[remote]\033[0m" if write_data.get("remote") else ""
-                print(f"   {i + 1:>3}. {path}{remote}")
+                # Check size for large file warning
+                try:
+                    size = len(base64.b64decode(write_data.get("content_b64", "")))
+                    warn = " \033[33m⚠ large\033[0m" if size > large_file_threshold else ""
+                except (ValueError, TypeError):
+                    warn = ""
+                print(f"   {i + 1:>3}. {path}{remote}{warn}")
             if len(s.pending_writes) > 3:
                 print(f"       ... ({len(s.pending_writes) - 3} more)")
 
@@ -410,6 +419,8 @@ class PendingWritesListView(View):
         start = max(0, self.cursor - visible_rows // 2)
         visible = self.session.pending_writes[start : start + visible_rows]
 
+        large_file_threshold = 5 * 1024 * 1024  # 5 MB
+
         for i, write_data in enumerate(visible):
             idx = start + i
             pointer = "\033[36m>\033[0m" if idx == self.cursor else " "
@@ -422,15 +433,27 @@ class PendingWritesListView(View):
 
             try:
                 size = len(base64.b64decode(content_b64))
-                size_str = f"{size:,} B" if size < 1024 else f"{size / 1024:.1f} KB"
+                if size >= 1024 * 1024:
+                    size_str = f"{size / (1024 * 1024):.1f} MB"
+                elif size >= 1024:
+                    size_str = f"{size / 1024:.1f} KB"
+                else:
+                    size_str = f"{size:,} B"
             except (ValueError, TypeError):
+                size = 0
                 size_str = "?"  # Invalid base64 data
 
-            display_path = path[: cols - 25]
-            if len(path) > cols - 25:
+            # Large file warning
+            if size > large_file_threshold:
+                warn = "\033[33m⚠\033[0m "
+            else:
+                warn = "  "
+
+            display_path = path[: cols - 30]
+            if len(path) > cols - 30:
                 display_path += "..."
 
-            print(f" {pointer} {remote} {display_path:<50} {size_str:>10}")
+            print(f" {pointer} {warn}{remote} {display_path:<50} {size_str:>10}")
 
         print()
         print(" \033[90m[Up/Down] select  [Enter] view diff  [Esc] back\033[0m")

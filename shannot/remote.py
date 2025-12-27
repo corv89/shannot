@@ -300,6 +300,11 @@ def execute_remote_session(session: Session) -> int:
             session.stderr = result.stderr.decode("utf-8", errors="replace")
             session.exit_code = result.returncode
             session.status = "executed" if result.returncode == 0 else "failed"
+
+            # Commit pending writes to remote filesystem
+            if session.pending_writes:
+                session.completed_writes = session.commit_writes_remote(ssh)
+
             session.save()
             return result.returncode
 
@@ -308,6 +313,11 @@ def execute_remote_session(session: Session) -> int:
         session.stderr = response.get("stderr", "")
         session.exit_code = response.get("exit_code", result.returncode)
         session.status = "executed" if session.exit_code == 0 else "failed"
+
+        # Commit pending writes to remote filesystem
+        if session.pending_writes:
+            session.completed_writes = session.commit_writes_remote(ssh)
+
         session.save()
 
         # Clean up remote workdir
@@ -364,6 +374,11 @@ def run_remote_with_approvals(session: Session, ssh: SSHConnection) -> int:
         session.stderr = result.stderr.decode("utf-8", errors="replace")
         session.exit_code = result.returncode
         session.status = "executed" if result.returncode == 0 else "failed"
+
+        # Commit pending writes to remote filesystem
+        if session.pending_writes:
+            session.completed_writes = session.commit_writes_remote(ssh)
+
         session.save()
 
         return result.returncode
