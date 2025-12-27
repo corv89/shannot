@@ -236,8 +236,8 @@ class MixSubprocess:
             exit_code = self._execute_command(cmd)  # type: ignore[attr-defined]
 
             # Track execution result
-            self._get_executed_commands().append(
-                {  # type: ignore[attr-defined]
+            self._get_executed_commands().append(  # type: ignore[attr-defined]
+                {
                     "cmd": cmd,
                     "exit_code": exit_code,
                 }

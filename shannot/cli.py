@@ -379,7 +379,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         argv.extend(args.script_args)
 
     # Execute directly
-    return interact_main(argv)
+    result = interact_main(argv)
+    if isinstance(result, dict):
+        return result.get("exit_code", 0)
+    return result
 
 
 def cmd_run_remote(args: argparse.Namespace) -> int:
