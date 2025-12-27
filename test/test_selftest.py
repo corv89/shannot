@@ -94,9 +94,9 @@ class TestRunLocalSelfTest:
         assert result.error is None
         assert result.elapsed_ms > 0
 
-        # Verify -c flag is used (no temp files)
+        # Verify --code flag is used (no temp files)
         call_args = mock_run.call_args
-        assert "-c" in call_args[0][0]
+        assert "--code" in call_args[0][0]
         assert SELF_TEST_SCRIPT in call_args[0][0]
 
     def test_subprocess_failure(self):

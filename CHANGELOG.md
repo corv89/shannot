@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2025-12-27
+
+### Bug Fixes
+
+- Fix self-test regression: use `--code` instead of removed `-c` flag
+
 ## [0.9.2] - 2025-12-27
 
 ### Enhancements

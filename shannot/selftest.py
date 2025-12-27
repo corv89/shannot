@@ -57,10 +57,10 @@ def run_local_self_test() -> SelfTestResult:
         )
 
     try:
-        # Run with -c flag (no temp files needed)
+        # Run with --code flag (no temp files needed)
         start = time.perf_counter()
         result = subprocess.run(
-            [sys.executable, "-m", "shannot", "run", "--nocolor", "-c", SELF_TEST_SCRIPT],
+            [sys.executable, "-m", "shannot", "run", "--nocolor", "--code", SELF_TEST_SCRIPT],
             capture_output=True,
             timeout=30,
         )
@@ -144,7 +144,7 @@ def run_remote_self_test(
                         error=f"Deployment failed: {e}",
                     )
 
-            # Run with -c flag (no temp files needed)
+            # Run with --code flag (no temp files needed)
             # Shell-escape the script for remote execution
             import shlex
 
