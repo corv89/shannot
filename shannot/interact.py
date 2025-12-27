@@ -284,10 +284,10 @@ def main(argv):
             # JSON output for remote protocol
             import json as json_module
 
-            from .config import VERSION
+            from .config import get_version
 
             output = {
-                "version": VERSION,
+                "version": get_version(),
                 "status": "pending",
                 "session": {
                     "id": session.id,
