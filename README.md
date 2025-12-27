@@ -1,247 +1,131 @@
-# Shannot Sandbox
+# Shannot
 
 [![Tests](https://github.com/corv89/shannot/actions/workflows/test.yml/badge.svg)](https://github.com/corv89/shannot/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Linux](https://img.shields.io/badge/os-linux-green.svg)](https://www.kernel.org/)
 
-**Shannot** lets LLM agents and automated tools safely explore your Linux systems without risk of modification. Built on [PyPy sandbox](https://doc.pypy.org/en/latest/sandbox.html) architecture, it provides hardened sandboxing for system diagnostics, monitoring, and exploration - perfect for giving Claude or other AI assistants safe access to your systems.
+**Human-in-the-loop execution for LLM agents.**
 
-> Claude __shannot__ do *that!*
+Shannot lets you see what AI agents want to do before they do it. Scripts run in a supervised environment that captures all commands and file writes. You review in a TUI, approve what's safe, and only then do changes apply.
 
-## Features
-
-🔒 **Run Untrusted Code Safely**
-* PyPy sandbox intercepts all system calls
-* Virtual filesystem prevents unauthorized access
-* Network-isolated execution (no socket access)
-* Session-based approval workflow for subprocess execution
-
-🤖 **Perfect for LLM Agents**
-* Let Claude and other AI assistants explore systems safely
-* Command approval profiles control what executes automatically
-* Interactive TUI for reviewing queued operations
-* MCP (Model Context Protocol) integration restored in v0.5.0
-
-🌐 **Control Remote Systems**
-* Run sandboxed scripts on Linux servers from any platform via SSH
-* Zero-dependency SSH implementation using stdlib only
-* Fetch files from remote hosts automatically
-* No Python installation required on remote targets
-
-⚡ **Deploy in Minutes**
-* Zero external dependencies - pure Python stdlib only
-* Auto-setup downloads PyPy runtime on first use
-* No containers, VMs, or complex configuration required
-* Works out of the box on any Linux system
-
-## Requirements
-
-**Host system:**
-- Python 3.11+ (CPython or PyPy)
-- Zero external dependencies!
-
-**Sandboxed code:**
-- Must use Python 3.6 compatible syntax
-- Requires a PyPy sandbox executable (auto-downloaded on first run)
-
-## Installation
-
-- **Host** (any platform): Python 3.11+, zero runtime dependencies!
-- **Sandbox binary**: PyPy sandbox (auto-downloaded on first run via `shannot setup`)
-
-### Install Shannot
-
-```bash
-# Recommended: Install with UV (works on all platforms)
-curl -LsSf https://astral.sh/uv/install.sh | sh  # macOS/Linux
-# Or for Windows: irm https://astral.sh/uv/install.ps1 | iex
-
-uv tool install shannot
-
-# Alternative: pipx (recommended for Ubuntu/Debian with PEP 668)
-pipx install shannot
-
-# Alternative: Traditional pip
-pip install --user shannot
-
-# Development install (contributors only)
-git clone https://github.com/corv89/shannot.git
-cd shannot
-pip install -e .
-```
-
-**Note:** Shannot has **zero runtime dependencies** - pure Python stdlib only! The PyPy sandbox binary will be auto-downloaded when you first run `shannot setup runtime`.
-
-## Quick Start
-
-### 1. Install the runtime
-
-```bash
-shannot setup runtime
-```
-
-This downloads and installs the PyPy 3.6 stdlib to `~/.local/share/shannot/runtime/`. You can also run `shannot setup` for an interactive setup menu.
-
-### 2. Run a script in the sandbox
-
-```bash
-shannot run script.py --tmp=/path/to/tmp
-```
-
-The sandbox binary (`pypy-sandbox`) is auto-detected from PATH or standard locations. The `--tmp` option maps a real directory to the virtual `/tmp` inside the sandbox.
-
-### 3. Review pending sessions
-
-```bash
-shannot approve
-```
-
-Opens an interactive TUI for reviewing and approving queued operations from dry-run sessions.
+No more `--dangerously-skip-permissions`.
 
 ## How It Works
 
-Unlike traditional container-based sandboxes, Shannot operates at the system call level, providing fine-grained control over exactly what sandboxed code can do.
+```mermaid
+flowchart LR
+    A[🤖 Agent writes script] --> B[shannot run]
+    B --> C[📋 Intent captured]
+    C --> D[shannot approve]
+    D --> E[👤 Human reviews]
+    E -->|✓| F[✅ Executes]
+    E -->|✗| G[🚫 Blocked]
+```
 
-Shannot uses PyPy's sandbox mode to create a secure execution environment:
+## Quick Start
 
-1. **System call interception** - All syscalls from sandboxed code are intercepted and virtualized
-2. **Virtual filesystem** - File operations map to controlled paths, preventing unauthorized access
-3. **Subprocess approval workflow** - Commands queue in sessions for human review before execution
-4. **Session-based execution** - Review, approve, or deny operations through an interactive TUI
-5. **Zero persistence** - All changes exist only within the session, nothing touches the real system
+```bash
+# Install
+pip install shannot
 
-This architecture enables LLM agents to explore systems safely while giving humans final control over any potentially risky operations.
+# Run a script (captures what it wants to do)
+shannot run fix-nginx.py
+
+# Review and approve
+shannot approve
+```
+
+That's it. Two commands.
+
+## Features
+
+**Supervised Execution**
+- All system calls intercepted via PyPy sandbox
+- Commands captured during dry-run, executed only after approval
+- File writes captured with full content, committed only after approval
+- Diff preview for every file modification
+
+**Remote Execution**
+- Run scripts on remote Linux servers via SSH
+- Zero dependencies on target — binary deployment
+- Same approval workflow, regardless of where code runs
+
+```bash
+shannot run fix-nginx.py --target admin@prod.example.com
+shannot approve
+```
+
+**Zero Dependencies**
+- Pure Python stdlib — nothing to install beyond Python 3.11+
+- PyPy sandbox runtime auto-downloads on first use
+- Works out of the box on any Linux system
+
+**Danger Classification**
+- Commands color-coded by risk in TUI
+- Auto-approve safe operations (ls, cat, df)
+- Always-deny destructive patterns (rm -rf /)
+- Everything else requires human review
+
+## Installation
+
+```bash
+# Recommended
+pip install shannot
+
+# Or with uv
+uv tool install shannot
+
+# Or with pipx
+pipx install shannot
+```
+
+**Requirements:**
+- Python 3.11+ (host system)
+- Linux (sandbox execution) or macOS (remote execution only)
+
+**Note:** Scripts run in Python 3.6 (the PyPy sandbox version).
 
 ## CLI Reference
 
-### `shannot setup`
-
-Interactive setup menu or configuration subcommands.
-
-```
-Subcommands:
-  setup               Interactive setup menu
-  setup runtime       Install PyPy sandbox runtime
-  setup remote        Manage SSH remote targets
-  setup mcp           MCP server installation
-```
-
-### `shannot setup runtime`
-
-Install PyPy stdlib for sandboxing.
-
-```
-Options:
-  -f, --force    Force reinstall even if already installed
-  -q, --quiet    Suppress progress output
-  -s, --status   Check if runtime is installed
-  --remove       Remove installed runtime
-```
-
-### `shannot run`
-
-Run a script in the sandbox.
-
-```
-Usage: shannot run [options] <script.py> [script_args...]
-
-Options:
-  --pypy-sandbox PATH  Path to pypy-sandbox executable (auto-detected if not specified)
-  --lib-path PATH      Path to lib-python and lib_pypy (auto-detected if not specified)
-  --tmp DIR            Real directory mapped to virtual /tmp
-  --nocolor            Disable ANSI coloring
-  --raw-stdout         Disable output sanitization
-  --debug              Enable debug mode
-  --dry-run            Log commands without executing
-  --script-name NAME   Human-readable session name
-  --analysis DESC      Description of script purpose
-  --target USER@HOST   SSH target for remote execution
-```
-
-### `shannot approve`
-
-Launch interactive TUI for reviewing and approving pending sessions.
-
-### `shannot setup remote`
-
-Manage SSH remote targets for executing sandboxed code on remote hosts.
-
-```
-Subcommands:
-  setup remote add <name>     Add a new remote target
-  setup remote list           List configured remote targets
-  setup remote test <name>    Test connection to a remote target
-  setup remote remove <name>  Remove a remote target
-```
-
-### `shannot status`
-
-Show system health and configuration status.
-
-```
-Options:
-  --runtime  Show only runtime installation status
-  --targets  Show only remote targets status
-```
-
-## Use Cases
-
-**System diagnostics for LLM agents** - Let Claude or other AI assistants safely inspect system state without modification risk
-
-**Safe exploration** - Test unfamiliar code or diagnose issues without worrying about side effects
-
-**Automated monitoring** - Build scripts with guaranteed controlled execution
-
-### Example Workflow
-
 ```bash
-# 1. Write a diagnostic script (Python 3.6 compatible)
-cat > check_system.py <<'EOF'
-import subprocess
-import os
+# Core workflow
+shannot run <script.py>       # Capture intent
+shannot run -c "print(1+1)"   # Inline code
+shannot approve               # Review and execute
 
-# Check disk space
-print("=== Disk Usage ===")
-subprocess.call(['df', '-h'])
+# Execute specific session
+shannot run --session <id>    # Execute approved session
+shannot run --session <id> --json-output  # Machine-friendly
 
-# Check memory
-print("\n=== Memory Info ===")
-with open('/proc/meminfo', 'r') as f:
-    for line in f.readlines()[:5]:
-        print(line.strip())
+# Remote execution
+shannot run <script.py> --target user@host
 
-# List running processes
-print("\n=== Processes ===")
-subprocess.call(['ps', 'aux'])
-EOF
+# Setup
+shannot setup                 # Interactive menu
+shannot setup runtime         # Install PyPy sandbox
+shannot setup remote add prod admin@prod.example.com
+shannot setup remote test prod
+shannot setup mcp install     # Claude Desktop integration
 
-# 2. Run in sandbox (operations queue for approval)
-shannot run check_system.py
-
-# 3. Review and approve subprocess calls
-shannot approve
-
-# With remote execution on production server
-shannot run check_system.py --target prod-server
-
-# Check status
-shannot status
+# Status
+shannot status                # Runtime, config, pending sessions
 ```
 
 ## Configuration
 
-All settings are in a single TOML file:
-
-- **Project-local**: `.shannot/config.toml` (takes precedence)
-- **Global**: `~/.config/shannot/config.toml`
-
-Example config:
+Single TOML file: `~/.config/shannot/config.toml` (or `.shannot/config.toml` per-project)
 
 ```toml
 [profile]
-auto_approve = ["cat", "ls", "find", "grep", "head", "tail"]
-always_deny = ["rm -rf /", "dd if=/dev/zero"]
+auto_approve = [
+  "ls", "cat", "head", "tail", "df", "ps", "grep", "find",
+  "systemctl status", "journalctl",
+]
+always_deny = [
+  "rm -rf /", "rm -rf ~", "dd if=", "mkfs",
+  "curl | sh", "wget | bash",
+]
 
 [audit]
 enabled = true
@@ -251,31 +135,70 @@ max_files = 30
 [remotes.prod]
 host = "prod.example.com"
 user = "admin"
+
+[remotes.staging]
+host = "staging.local"
+user = "deploy"
 ```
 
-## Security Considerations
+## Why Not Just Use a Container?
 
-⚠️ **Important**: Shannot provides strong isolation but **is not a complete security boundary**.
+| Approach | Trade-off |
+|----------|-----------|
+| VM/Container | Agent can't do real work — isolated from your actual system |
+| WASM | Capability-restricted — limited to what you expose |
+| Policy sandbox | Static rules — can't adapt to context |
+| **Shannot** | Agent does real work, with human approval |
 
-**What Shannot provides:**
-- System call interception and virtualization
-- Virtual filesystem isolation
-- Subprocess execution control with approval workflow
-- Zero network access (sockets disabled)
+Shannot is collaborative, not adversarial. The agent helps you. You stay in control.
 
-**Known limitations:**
-- PyPy sandbox interpreter vulnerabilities could allow escape
-- Virtual filesystem still exposes information about mapped paths
-- No built-in CPU/memory resource limits
-- Don't run as root unless necessary
+## Use Cases
 
-**For production use**, combine Shannot with:
+**LLM-assisted sysadmin** — Let Claude diagnose and fix server issues, with you approving each change
+
+**Safe exploration** — Run unfamiliar scripts knowing you'll see exactly what they want to do
+
+**Audited automation** — Every command and file write logged, nothing happens without approval
+
+**Teaching** — Show students what scripts do before execution
+
+## Security Model
+
+Shannot provides **supervised execution**, not absolute isolation.
+
+**What it provides:**
+- System call interception via PyPy sandbox
+- Virtual filesystem — scripts see only what you expose
+- Command and file write approval workflow
+- Conflict detection for file modifications
+- Audit logging
+
+**What it doesn't provide:**
+- Memory/CPU limits (use cgroups separately)
+- Network filtering (sockets are disabled entirely)
+- Protection against PyPy sandbox escapes
+
+For production, combine with:
+- Dedicated service accounts (least privilege)
 - Resource limits (systemd, cgroups)
-- Principle of least privilege (dedicated service accounts)
-- Regular security updates
+- Network segmentation
 
-See [SECURITY.md](SECURITY.md) for detailed security considerations.
+See [SECURITY.md](SECURITY.md) for details.
+
+## MCP Integration
+
+Shannot includes an MCP server for Claude Desktop:
+
+```bash
+shannot setup mcp install
+```
+
+This lets Claude propose scripts directly, which you review and approve through the standard workflow.
 
 ## License
 
-See LICENSE file for details.
+Apache 2.0 — See [LICENSE](LICENSE)
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md)
