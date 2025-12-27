@@ -276,12 +276,21 @@ class SessionDetailView(View):
 
         # Show pending writes summary
         if s.pending_writes:
+            import base64
+
+            large_file_threshold = 5 * 1024 * 1024  # 5 MB
             print()
             print(f" \033[1mFile Writes ({len(s.pending_writes)}):\033[0m")
             for i, write_data in enumerate(s.pending_writes[:3]):
                 path = write_data.get("path", "?")
                 remote = " \033[33m[remote]\033[0m" if write_data.get("remote") else ""
-                print(f"   {i + 1:>3}. {path}{remote}")
+                # Check size for large file warning
+                try:
+                    size = len(base64.b64decode(write_data.get("content_b64", "")))
+                    warn = " \033[33m⚠ large\033[0m" if size > large_file_threshold else ""
+                except (ValueError, TypeError):
+                    warn = ""
+                print(f"   {i + 1:>3}. {path}{remote}{warn}")
             if len(s.pending_writes) > 3:
                 print(f"       ... ({len(s.pending_writes) - 3} more)")
 
@@ -410,6 +419,8 @@ class PendingWritesListView(View):
         start = max(0, self.cursor - visible_rows // 2)
         visible = self.session.pending_writes[start : start + visible_rows]
 
+        large_file_threshold = 5 * 1024 * 1024  # 5 MB
+
         for i, write_data in enumerate(visible):
             idx = start + i
             pointer = "\033[36m>\033[0m" if idx == self.cursor else " "
@@ -422,15 +433,27 @@ class PendingWritesListView(View):
 
             try:
                 size = len(base64.b64decode(content_b64))
-                size_str = f"{size:,} B" if size < 1024 else f"{size / 1024:.1f} KB"
+                if size >= 1024 * 1024:
+                    size_str = f"{size / (1024 * 1024):.1f} MB"
+                elif size >= 1024:
+                    size_str = f"{size / 1024:.1f} KB"
+                else:
+                    size_str = f"{size:,} B"
             except (ValueError, TypeError):
+                size = 0
                 size_str = "?"  # Invalid base64 data
 
-            display_path = path[: cols - 25]
-            if len(path) > cols - 25:
+            # Large file warning
+            if size > large_file_threshold:
+                warn = "\033[33m⚠\033[0m "
+            else:
+                warn = "  "
+
+            display_path = path[: cols - 30]
+            if len(path) > cols - 30:
                 display_path += "..."
 
-            print(f" {pointer} {remote} {display_path:<50} {size_str:>10}")
+            print(f" {pointer} {warn}{remote} {display_path:<50} {size_str:>10}")
 
         print()
         print(" \033[90m[Up/Down] select  [Enter] view diff  [Esc] back\033[0m")
@@ -579,14 +602,32 @@ class ResultView(View):
         for i, (session, code) in enumerate(self.results):
             pointer = "\033[36m>\033[0m" if i == self.cursor else " "
             if code == 0:
-                status = "\033[32m+\033[0m"
+                status = "\033[32m✓\033[0m"
             else:
-                status = "\033[31mx\033[0m"
+                status = "\033[31m✗\033[0m"
             print(f" {pointer} {status} {session.name:<30} exit {code}")
 
         print()
         success = sum(1 for _, c in self.results if c == 0)
         print(f" {success}/{len(self.results)} succeeded")
+
+        # Collect and display write conflicts
+        conflicts = []
+        for session, _ in self.results:
+            if session.completed_writes:
+                for write in session.completed_writes:
+                    if not write.get("success", True):
+                        conflicts.append(write.get("path", "unknown"))
+
+        if conflicts:
+            print()
+            noun = "conflict" if len(conflicts) == 1 else "conflicts"
+            print(f"\033[33m⚠ {len(conflicts)} write {noun} — file changed since dry-run\033[0m")
+            for path in conflicts[:3]:
+                print(f"  {path}")
+            if len(conflicts) > 3:
+                print(f"  ... and {len(conflicts) - 3} more")
+
         print()
         print(" \033[90m[Up/Down] select  [v] view output  [Esc] back  [q] quit\033[0m")
 
@@ -625,6 +666,20 @@ class OutputView(View):
 
     def _build_lines(self) -> list[str]:
         lines = []
+
+        # Show completed writes first (if any)
+        if self.session.completed_writes:
+            lines.append("--- writes ---")
+            for write_info in self.session.completed_writes:
+                path = write_info.get("path", "")
+                if write_info.get("success"):
+                    size = write_info.get("size", 0)
+                    lines.append(f"✓ {path} ({size} bytes)")
+                else:
+                    error = write_info.get("error", "unknown")
+                    lines.append(f"✗ {path} ({error})")
+            lines.append("")
+
         lines.append("--- stdout ---")
         if self.session.stdout:
             lines.extend(self.session.stdout.split("\n"))

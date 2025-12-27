@@ -23,6 +23,7 @@ class PendingWrite:
     content: bytes  # New content to write
     original: bytes | None = None  # Original content (if file existed)
     remote: bool = False  # Whether this is a remote (SSH) write
+    original_hash: str | None = None  # SHA256 of original content (for conflict detection)
 
     def get_diff(self) -> str:
         """
@@ -89,6 +90,7 @@ class PendingWrite:
             "content_b64": base64.b64encode(self.content).decode(),
             "original_b64": base64.b64encode(self.original).decode() if self.original else None,
             "remote": self.remote,
+            "original_hash": self.original_hash,
         }
 
     @classmethod
@@ -101,4 +103,5 @@ class PendingWrite:
             content=base64.b64decode(data["content_b64"]),
             original=base64.b64decode(data["original_b64"]) if data.get("original_b64") else None,
             remote=data.get("remote", False),
+            original_hash=data.get("original_hash"),
         )

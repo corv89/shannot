@@ -179,9 +179,9 @@ def run_remote_dry_run(
             # Upload script
             remote_script = _upload_script(ssh, workdir, script_content)
 
-            # Run in dry-run mode with JSON output
+            # Run script (dry-run is default) with JSON output
             cmd = (
-                f"{deploy_dir}/shannot run --dry-run --json-output "
+                f"{deploy_dir}/shannot run --json-output "
                 f"--tmp={workdir} "
                 f"--lib-path={deploy_dir} "
                 f"--pypy-sandbox={deploy_dir}/pypy3-c "
@@ -287,7 +287,7 @@ def execute_remote_session(session: Session) -> int:
                 return run_remote_with_approvals(session, ssh)
 
         # Execute on remote
-        cmd = f"{deploy_dir}/shannot execute --session-id={remote_session_id} --json-output"
+        cmd = f"{deploy_dir}/shannot run --session={remote_session_id} --json-output"
 
         result = ssh.run(cmd, timeout=600)
 
@@ -300,6 +300,11 @@ def execute_remote_session(session: Session) -> int:
             session.stderr = result.stderr.decode("utf-8", errors="replace")
             session.exit_code = result.returncode
             session.status = "executed" if result.returncode == 0 else "failed"
+
+            # Commit pending writes to remote filesystem
+            if session.pending_writes:
+                session.completed_writes = session.commit_writes_remote(ssh)
+
             session.save()
             return result.returncode
 
@@ -308,6 +313,11 @@ def execute_remote_session(session: Session) -> int:
         session.stderr = response.get("stderr", "")
         session.exit_code = response.get("exit_code", result.returncode)
         session.status = "executed" if session.exit_code == 0 else "failed"
+
+        # Commit pending writes to remote filesystem
+        if session.pending_writes:
+            session.completed_writes = session.commit_writes_remote(ssh)
+
         session.save()
 
         # Clean up remote workdir
@@ -364,6 +374,11 @@ def run_remote_with_approvals(session: Session, ssh: SSHConnection) -> int:
         session.stderr = result.stderr.decode("utf-8", errors="replace")
         session.exit_code = result.returncode
         session.status = "executed" if result.returncode == 0 else "failed"
+
+        # Commit pending writes to remote filesystem
+        if session.pending_writes:
+            session.completed_writes = session.commit_writes_remote(ssh)
+
         session.save()
 
         return result.returncode

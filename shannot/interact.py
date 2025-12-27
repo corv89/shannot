@@ -101,6 +101,8 @@ def main(argv):
             SandboxedProc.vfs_track_writes = True  # Track file writes for approval
         elif option == "--session-id":
             session_id = value
+            # Enable write tracking for session execution (writes committed after)
+            SandboxedProc.vfs_track_writes = True
         elif option == "--script-name":
             SandboxedProc.subprocess_script_name = value  # type: ignore[misc]
             sandbox_args["script_name"] = value
@@ -305,8 +307,22 @@ def main(argv):
         else:
             print("\n*** No commands or writes were queued. ***")
 
-    popen.terminate()
-    popen.wait()
+    # Wait for natural exit first (script finished, sandbox should exit)
+    try:
+        popen.wait(timeout=2.0)
+    except subprocess.TimeoutExpired:
+        # Sandbox hung, force terminate
+        popen.terminate()
+        popen.wait()
+
+    # When executing a session, return execution results
+    if session_id:
+        return {
+            "exit_code": popen.returncode,
+            "executed_commands": virtualizedproc.get_execution_results(),
+        }
+
+    # Dry-run mode returns just exit code
     if popen.returncode == 0:
         return 0
     else:

@@ -48,6 +48,10 @@ class MixSubprocess:
     subprocess_approved = set()  # Commands approved this session
     file_writes_pending = []  # File writes awaiting approval
 
+    # Execution tracking (populated during execution, NOT dry-run)
+    # Note: Use _get_executed_commands() to access - ensures instance-level list
+    _executed_commands: list[dict] | None = None
+
     # Persistence
     subprocess_auto_persist = True  # Auto-save pending when queuing
 
@@ -108,6 +112,16 @@ class MixSubprocess:
     def _get_ssh_connection(self) -> SSHConnection | None:
         """Get SSH connection from MixRemote if available."""
         return getattr(self, "_ssh_connection", None)
+
+    def _get_executed_commands(self) -> list[dict]:
+        """Get executed commands list, creating instance-level list if needed."""
+        if self._executed_commands is None:
+            self._executed_commands = []
+        return self._executed_commands
+
+    def get_execution_results(self) -> list[dict]:
+        """Get list of executed commands with their exit codes."""
+        return self._get_executed_commands()
 
     def _execute_command(self, cmd: str) -> int:
         """
@@ -219,7 +233,17 @@ class MixSubprocess:
                 base_command=base,
                 target=self.remote_target,  # type: ignore[attr-defined]
             )
-            return self._execute_command(cmd)  # type: ignore[attr-defined]
+            exit_code = self._execute_command(cmd)  # type: ignore[attr-defined]
+
+            # Track execution result
+            self._get_executed_commands().append(  # type: ignore[attr-defined]
+                {
+                    "cmd": cmd,
+                    "exit_code": exit_code,
+                }
+            )
+
+            return exit_code
 
         return 127
 

@@ -40,6 +40,10 @@ class Session:
     stderr: str | None = None  # Captured stderr from execution
     sandbox_args: dict = field(default_factory=dict)  # Structured args for re-execution
 
+    # Execution tracking (populated after execution completes)
+    executed_commands: list[dict] = field(default_factory=list)  # {cmd, exit_code}
+    completed_writes: list[dict] = field(default_factory=list)  # {path, success, size/error}
+
     # Remote execution fields
     target: str | None = None  # SSH target (user@host) if remote
     remote_session_id: str | None = None  # Session ID on remote
@@ -71,6 +75,128 @@ class Session:
             return datetime.now() > expiry
         except (ValueError, TypeError):
             return False
+
+    def commit_writes(self) -> list[dict]:
+        """
+        Commit pending writes to real filesystem.
+
+        Returns list of results: {path, success, size} or {path, success, error}
+        """
+        import base64
+        import hashlib
+
+        results = []
+        for write_data in self.pending_writes:
+            path = write_data.get("path", "")
+            content_b64 = write_data.get("content_b64", "")
+            original_hash = write_data.get("original_hash")
+
+            try:
+                content = base64.b64decode(content_b64)
+                target_path = Path(path)
+
+                # Conflict detection: verify file hasn't changed since dry-run
+                if original_hash is not None and target_path.exists():
+                    current_content = target_path.read_bytes()
+                    current_hash = hashlib.sha256(current_content).hexdigest()
+                    if current_hash != original_hash:
+                        results.append(
+                            {
+                                "path": path,
+                                "success": False,
+                                "error": "conflict: file modified since dry-run",
+                            }
+                        )
+                        continue
+
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_bytes(content)
+                results.append(
+                    {
+                        "path": path,
+                        "success": True,
+                        "size": len(content),
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
+
+    def commit_writes_remote(self, ssh: object) -> list[dict]:
+        """
+        Commit pending writes to remote filesystem via SSH.
+
+        Parameters
+        ----------
+        ssh
+            An SSHConnection instance with run() and write_file() methods.
+
+        Returns
+        -------
+        list[dict]
+            List of results: {path, success, size} or {path, success, error}
+        """
+        import base64
+        import shlex
+
+        results = []
+        for write_data in self.pending_writes:
+            path = write_data.get("path", "")
+            content_b64 = write_data.get("content_b64", "")
+            original_hash = write_data.get("original_hash")
+
+            try:
+                content = base64.b64decode(content_b64)
+
+                # Conflict detection via SSH hash check
+                if original_hash is not None:
+                    result = ssh.run(  # type: ignore[union-attr]
+                        f"sha256sum {shlex.quote(path)} 2>/dev/null || echo NOTFOUND"
+                    )
+                    stdout_str = result.stdout.decode("utf-8", errors="replace")
+                    if "NOTFOUND" not in stdout_str:
+                        current_hash = stdout_str.split()[0]
+                        if current_hash != original_hash:
+                            results.append(
+                                {
+                                    "path": path,
+                                    "success": False,
+                                    "error": "conflict: file modified since dry-run",
+                                }
+                            )
+                            continue
+
+                # Create parent directories
+                parent = str(Path(path).parent)
+                if parent != "/":
+                    ssh.run(f"mkdir -p {shlex.quote(parent)}")  # type: ignore[union-attr]
+
+                # Write via SSH
+                ssh.write_file(path, content)  # type: ignore[union-attr]
+                results.append(
+                    {
+                        "path": path,
+                        "success": True,
+                        "size": len(content),
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
 
     @property
     def session_dir(self) -> Path:
@@ -247,9 +373,6 @@ def execute_session(session: Session) -> int:
 
     Returns the exit code.
     """
-    import subprocess
-    import sys
-
     if session.status not in ("approved", "pending"):
         raise ValueError(f"Cannot execute session with status: {session.status}")
 
@@ -261,18 +384,12 @@ def execute_session(session: Session) -> int:
 
         return execute_remote_session(session)
 
-    # Local execution
+    # Local execution - call run_session directly (subprocess doesn't work with Nuitka)
     try:
-        # Delegate to run_session module
-        result = subprocess.run(
-            [sys.executable, "-m", "shannot.run_session", session.id],
-            capture_output=True,
-            text=True,
-        )
-        # run_session updates session status, but we capture output here too
-        # in case run_session fails to do so
-        session = Session.load(session.id, audit=False)  # Reload to get updates
-        return session.exit_code or result.returncode
+        from .run_session import execute_session_direct
+
+        exit_code = execute_session_direct(session)
+        return exit_code
     except Exception as e:
         session.status = "failed"
         session.error = str(e)
