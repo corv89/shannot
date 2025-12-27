@@ -14,8 +14,6 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .config import VERSION
-
 
 def cmd_setup_runtime(args: argparse.Namespace) -> int:
     """Handle 'shannot setup runtime' command."""
@@ -453,7 +451,7 @@ def cmd_run_session(args: argparse.Namespace) -> int:
     """Handle 'shannot run --session' - execute an approved session."""
     import json
 
-    from .config import VERSION
+    from .config import get_version
     from .session import Session, execute_session
 
     session_id = args.session
@@ -478,7 +476,7 @@ def cmd_run_session(args: argparse.Namespace) -> int:
 
     if args.json_output:
         output = {
-            "version": VERSION,
+            "version": get_version(),
             "status": session.status,
             "exit_code": session.exit_code,
             "stdout": session.stdout or "",
@@ -810,6 +808,15 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+class _LazyVersion:
+    """Lazy version string that defers importlib.metadata lookup until accessed."""
+
+    def __str__(self) -> str:
+        from .config import get_version
+
+        return f"shannot {get_version()}"
+
+
 def main() -> int:
     import textwrap
 
@@ -829,7 +836,7 @@ def main() -> int:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"shannot {VERSION}",
+        version=_LazyVersion(),  # type: ignore[arg-type]  # Lazy: loads metadata only when used
     )
     subparsers = parser.add_subparsers(
         dest="command",

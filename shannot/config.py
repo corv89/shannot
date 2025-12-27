@@ -20,14 +20,23 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-# Version - read from package metadata (pyproject.toml is source of truth)
-try:
-    from importlib.metadata import version
+# Version - lazy loaded from package metadata (pyproject.toml is source of truth)
+# This avoids ~88ms importlib.metadata overhead on every CLI invocation
+_version_cache: str | None = None
 
-    VERSION = version("shannot")
-except Exception:
-    # Fallback for development/edge cases
-    VERSION = "dev"
+
+def get_version() -> str:
+    """Get shannot version string, lazy-loaded from package metadata."""
+    global _version_cache
+    if _version_cache is None:
+        try:
+            from importlib.metadata import version
+
+            _version_cache = version("shannot")
+        except Exception:
+            # Fallback for development/edge cases
+            _version_cache = "dev"
+    return _version_cache
 
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
@@ -37,7 +46,7 @@ SHANNOT_RELEASES_URL = "https://github.com/corv89/shannot/releases/download"
 
 def get_remote_deploy_dir() -> str:
     """Get remote deployment directory path with version filled in."""
-    return REMOTE_DEPLOY_DIR.format(version=VERSION)
+    return REMOTE_DEPLOY_DIR.format(version=get_version())
 
 
 def _xdg_data_home() -> Path:

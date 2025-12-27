@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .config import VERSION, get_remote_deploy_dir, resolve_target
+from .config import get_remote_deploy_dir, get_version, resolve_target
 from .deploy import ensure_deployed
 from .session import Session, create_session
 from .ssh import SSHConfig, SSHConnection
@@ -203,9 +203,10 @@ def run_remote_dry_run(
 
             # Check version compatibility
             remote_version = response.get("version", "unknown")
-            if remote_version != VERSION:
+            local_version = get_version()
+            if remote_version != local_version:
                 sys.stderr.write(
-                    f"[WARN] Version mismatch: local={VERSION}, remote={remote_version}\n"
+                    f"[WARN] Version mismatch: local={local_version}, remote={remote_version}\n"
                 )
 
             # Extract session data
