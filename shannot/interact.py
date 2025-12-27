@@ -307,6 +307,15 @@ def main(argv):
 
     popen.terminate()
     popen.wait()
+
+    # When executing a session, return execution results
+    if session_id:
+        return {
+            "exit_code": popen.returncode,
+            "executed_commands": virtualizedproc.get_execution_results(),
+        }
+
+    # Dry-run mode returns just exit code
     if popen.returncode == 0:
         return 0
     else:

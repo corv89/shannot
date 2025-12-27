@@ -17,6 +17,78 @@ import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .session import Session
+
+# ANSI color codes
+GREEN = "\033[32m"
+RED = "\033[31m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+def format_execution_summary(session: Session, *, use_color: bool = True) -> str:
+    """
+    Generate human-readable execution summary.
+
+    Shows what commands executed and what files were written.
+    """
+    lines = []
+
+    # Commands executed
+    if session.executed_commands:
+        lines.append(f"Executed {len(session.executed_commands)} command(s):")
+        for cmd_info in session.executed_commands:
+            cmd = cmd_info.get("cmd", "")
+            exit_code = cmd_info.get("exit_code", 0)
+            ok = exit_code == 0
+
+            if use_color:
+                mark = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+                code_str = f"{DIM}exit {exit_code}{RESET}"
+            else:
+                mark = "✓" if ok else "✗"
+                code_str = f"exit {exit_code}"
+
+            # Truncate long commands
+            display_cmd = cmd[:50] + "..." if len(cmd) > 50 else cmd
+            lines.append(f"  {mark} {display_cmd:<54} {code_str}")
+
+    # Files written
+    if session.completed_writes:
+        if lines:
+            lines.append("")
+        lines.append(f"Wrote {len(session.completed_writes)} file(s):")
+        for write_info in session.completed_writes:
+            path = write_info.get("path", "")
+            success = write_info.get("success", False)
+
+            if use_color:
+                mark = f"{GREEN}✓{RESET}" if success else f"{RED}✗{RESET}"
+            else:
+                mark = "✓" if success else "✗"
+
+            if success:
+                size = write_info.get("size", 0)
+                size_str = _format_size(size)
+                lines.append(f"  {mark} {path} ({size_str})")
+            else:
+                error = write_info.get("error", "unknown error")
+                lines.append(f"  {mark} {path} ({error})")
+
+    return "\n".join(lines)
+
+
+def _format_size(size: int) -> str:
+    """Format size in bytes to human-readable string."""
+    if size < 1024:
+        return f"{size} bytes"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    else:
+        return f"{size / (1024 * 1024):.1f} MB"
 
 
 def main():
@@ -90,9 +162,9 @@ def main():
 
     try:
         with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            exit_code = interact_main(argv) or 0
+            result = interact_main(argv)
     except Exception as e:
-        exit_code = 1
+        result = {"exit_code": 1, "executed_commands": []}
         stderr_capture.write(str(e))
     finally:
         # Clean up temp script
@@ -105,19 +177,38 @@ def main():
     stdout = stdout_capture.getvalue()
     stderr = stderr_capture.getvalue()
 
+    # Extract exit code and executed commands from result
+    if isinstance(result, dict):
+        exit_code = result.get("exit_code", 0)
+        executed_commands = result.get("executed_commands", [])
+    else:
+        exit_code = result or 0
+        executed_commands = []
+
+    # Commit pending writes to filesystem
+    completed_writes = session.commit_writes()
+
     # Update session with results
     session.stdout = stdout
     session.stderr = stderr
     session.exit_code = exit_code
     session.executed_at = datetime.now().isoformat()
     session.status = "executed" if exit_code == 0 else "failed"
+    session.executed_commands = executed_commands
+    session.completed_writes = completed_writes
     session.save()
 
-    # Print output for debugging (will be captured by execute_session)
+    # Print output
     if stdout:
         sys.stdout.write(stdout)
     if stderr:
         sys.stderr.write(stderr)
+
+    # Print execution summary
+    use_color = not session.sandbox_args.get("nocolor", False)
+    summary = format_execution_summary(session, use_color=use_color)
+    if summary:
+        sys.stderr.write("\n" + summary + "\n")
 
     sys.exit(exit_code)
 

@@ -40,6 +40,10 @@ class Session:
     stderr: str | None = None  # Captured stderr from execution
     sandbox_args: dict = field(default_factory=dict)  # Structured args for re-execution
 
+    # Execution tracking (populated after execution completes)
+    executed_commands: list[dict] = field(default_factory=list)  # {cmd, exit_code}
+    completed_writes: list[dict] = field(default_factory=list)  # {path, success, size/error}
+
     # Remote execution fields
     target: str | None = None  # SSH target (user@host) if remote
     remote_session_id: str | None = None  # Session ID on remote
@@ -71,6 +75,42 @@ class Session:
             return datetime.now() > expiry
         except (ValueError, TypeError):
             return False
+
+    def commit_writes(self) -> list[dict]:
+        """
+        Commit pending writes to real filesystem.
+
+        Returns list of results: {path, success, size} or {path, success, error}
+        """
+        import base64
+
+        results = []
+        for write_data in self.pending_writes:
+            path = write_data.get("path", "")
+            content_b64 = write_data.get("content_b64", "")
+
+            try:
+                content = base64.b64decode(content_b64)
+                target_path = Path(path)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_bytes(content)
+                results.append(
+                    {
+                        "path": path,
+                        "success": True,
+                        "size": len(content),
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
 
     @property
     def session_dir(self) -> Path:
