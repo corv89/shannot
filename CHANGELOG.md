@@ -17,9 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Conflict detection**: SHA256 hash of original file content is stored; commits fail if file was modified between dry-run and execution
 - **Large file handling**: 50MB hard limit blocks excessive writes at capture time; 5MB threshold shows ⚠ warning in approval TUI
 - **Remote SSH file writes**: `commit_writes_remote()` writes approved files to remote filesystem via SSH with conflict detection
+- **Conflict warnings in TUI**: Show write conflicts prominently on Results view after execution
+
+### Changed
+
+- **Consolidated CLI commands**: Merged `shannot execute` into `shannot run --session=ID`
+- `shannot run script.py` now always uses dry-run mode (removed explicit `--dry-run` flag)
 
 ### Bug Fixes
 
+- Fix session execution for Nuitka binary by calling directly instead of subprocess
+- Fix sandbox exit code by waiting for natural process exit before terminating
+- Fix bytes/str type mismatch in remote conflict detection
+- Fix `fstat64` handling for write-mode files in VFS
 - Fix basedpyright type errors in cli.py and mix_subprocess.py
 
 ## [0.8.7] - 2025-12-26
