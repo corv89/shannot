@@ -31,55 +31,13 @@ echo -e "${BOLD}Verifying installation...${NC}"
 uv run shannot status
 echo ""
 
-# Add venv activation to shell rc so shannot is available directly
-echo 'source /workspaces/shannot/.venv/bin/activate' >> ~/.bashrc
-echo 'source /workspaces/shannot/.venv/bin/activate' >> ~/.zshrc
+# Add venv activation and welcome message to shell rc
+{
+  echo 'source /workspaces/shannot/.venv/bin/activate'
+  echo 'echo -e "\033[1mShannot dev environment ready.\033[0m Run \033[0;34mshannot --help\033[0m for commands."'
+} >> ~/.bashrc
 
-# Create welcome script that displays on first terminal open
-cat > ~/.shannot-welcome.sh << 'WELCOME'
-#!/bin/bash
-# One-time welcome message for Shannot devcontainer
-if [ ! -f ~/.shannot-welcomed ]; then
-    BOLD='\033[1m'
-    GREEN='\033[0;32m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
-
-    echo -e "${BOLD}${GREEN}Shannot development environment ready!${NC}\n"
-
-    echo -e "${BOLD}What is Shannot?${NC}"
-    echo -e "  Shannot runs Python scripts in a secure sandbox. Scripts can request"
-    echo -e "  shell commands and file writes, but nothing executes until you approve."
-    echo ""
-
-    echo -e "${BOLD}Try it out:${NC}"
-    echo -e "  1. Create a test script:"
-    echo -e "     ${BLUE}echo 'import os; os.system(\"echo Hello from sandbox\")' > test.py${NC}"
-    echo ""
-    echo -e "  2. Run it in the sandbox:"
-    echo -e "     ${BLUE}shannot run test.py${NC}"
-    echo ""
-    echo -e "  3. Review and approve the queued command:"
-    echo -e "     ${BLUE}shannot approve${NC}"
-    echo ""
-
-    echo -e "${BOLD}Other commands:${NC}"
-    echo -e "  ${BLUE}shannot status${NC}     Check runtime status"
-    echo -e "  ${BLUE}shannot --help${NC}     Show all commands"
-    echo ""
-
-    echo -e "${BOLD}Development:${NC}"
-    echo -e "  ${BLUE}make test${NC}          Run all tests"
-    echo -e "  ${BLUE}make lint${NC}          Check code style"
-    echo -e "  ${BLUE}make format${NC}        Auto-format code"
-    echo ""
-
-    echo -e "See README.md for full documentation. Happy coding!\n"
-
-    touch ~/.shannot-welcomed
-fi
-WELCOME
-
-# Source welcome script on terminal open
-echo 'source ~/.shannot-welcome.sh 2>/dev/null' >> ~/.bashrc
-echo 'source ~/.shannot-welcome.sh 2>/dev/null' >> ~/.zshrc
+{
+  echo 'source /workspaces/shannot/.venv/bin/activate'
+  echo 'echo -e "\033[1mShannot dev environment ready.\033[0m Run \033[0;34mshannot --help\033[0m for commands."'
+} >> ~/.zshrc
