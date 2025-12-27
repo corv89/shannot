@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-12-27
+
+### Bug Fixes
+
+- Use absolute path for shannot-mcp in Claude Desktop config (fixes PATH resolution issues)
+
+### Enhancements
+
+- Improve devcontainer post-create experience
+  - Use explicit `shannot setup runtime` command
+  - Add `shannot status` verification step
+  - Auto-activate venv in shell rc files for direct `shannot` access
+  - Replace generic welcome with step-by-step "Try it out" tutorial
+
 ## [0.9.0] - 2025-12-27
 
 ### Features
