@@ -272,9 +272,18 @@ def run_mcp_menu() -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Handle 'shannot run' command."""
-    # Validate: need either script or -c
+    # Validate: --session is mutually exclusive with script/-c
+    if args.session and (args.script or args.code):
+        print("Error: --session cannot be used with script or -c", file=sys.stderr)
+        return 1
+
+    # Session execution mode
+    if args.session:
+        return cmd_run_session(args)
+
+    # Script mode: validate we have script or -c
     if not args.script and not args.code:
-        print("Error: Must specify either a script or -c CODE", file=sys.stderr)
+        print("Error: Provide script, -c CODE, or --session ID", file=sys.stderr)
         return 1
     if args.script and args.code:
         print("Error: Cannot specify both script and -c", file=sys.stderr)
@@ -358,12 +367,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         argv.append("--raw-stdout")
     if args.debug:
         argv.append("--debug")
-    if args.dry_run:
-        argv.append("--dry-run")
+    # run script.py is always dry-run (capture commands/writes for approval)
+    # use --session to execute an approved session
+    argv.append("--dry-run")
     if args.script_name:
         argv.append(f"--script-name={args.script_name}")
     if args.analysis:
         argv.append(f"--analysis={args.analysis}")
+    if args.json_output:
+        argv.append("--json-output")
 
     # Pass --code before executable (getopt stops at first positional)
     if args.code:
@@ -389,13 +401,11 @@ def cmd_run_remote(args: argparse.Namespace) -> int:
     """Handle 'shannot run --target' for remote execution."""
     from .remote import RemoteExecutionError, run_remote_dry_run
 
-    # Get script path from args - look for .py files in script_args
-    script_args = [a for a in args.script_args if a.endswith(".py")]
-    if not script_args:
-        print("Error: No .py script specified in arguments", file=sys.stderr)
+    # Get script path from args.script (not script_args which are passed to script)
+    script_path = args.script
+    if not script_path:
+        print("Error: No script specified", file=sys.stderr)
         return 1
-
-    script_path = script_args[0]
 
     # Read script content
     try:
@@ -439,20 +449,22 @@ def cmd_approve(args: argparse.Namespace) -> int:
     return approve_main()
 
 
-def cmd_execute(args: argparse.Namespace) -> int:
-    """Handle 'shannot execute' - execute a session directly."""
+def cmd_run_session(args: argparse.Namespace) -> int:
+    """Handle 'shannot run --session' - execute an approved session."""
     import json
 
     from .config import VERSION
     from .session import Session, execute_session
 
+    session_id = args.session
+
     try:
-        session = Session.load(args.session_id)
+        session = Session.load(session_id)
     except FileNotFoundError:
         if args.json_output:
-            print(json.dumps({"error": f"Session not found: {args.session_id}"}))
+            print(json.dumps({"error": f"Session not found: {session_id}"}))
         else:
-            print(f"Error: Session not found: {args.session_id}", file=sys.stderr)
+            print(f"Error: Session not found: {session_id}", file=sys.stderr)
         return 1
 
     # Mark as approved and execute
@@ -462,7 +474,7 @@ def cmd_execute(args: argparse.Namespace) -> int:
     exit_code = execute_session(session)
 
     # Reload to get updated fields
-    session = Session.load(args.session_id)
+    session = Session.load(session_id)
 
     if args.json_output:
         output = {
@@ -471,6 +483,7 @@ def cmd_execute(args: argparse.Namespace) -> int:
             "exit_code": session.exit_code,
             "stdout": session.stdout or "",
             "stderr": session.stderr or "",
+            "completed_writes": session.completed_writes or [],
         }
         print(json.dumps(output))
     else:
@@ -993,11 +1006,6 @@ def main() -> int:
         help="Enable debug mode",
     )
     run_parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Log commands without executing",
-    )
-    run_parser.add_argument(
         "--script-name",
         help="Human-readable session name",
     )
@@ -1008,6 +1016,17 @@ def main() -> int:
     run_parser.add_argument(
         "--target",
         help="SSH target for remote execution (user@host)",
+    )
+    run_parser.add_argument(
+        "--session",
+        metavar="ID",
+        help="Execute an approved session instead of dry-running a script",
+    )
+    run_parser.add_argument(
+        "--json-output",
+        action="store_true",
+        dest="json_output",
+        help="Output results as JSON (for automation)",
     )
     run_parser.set_defaults(func=cmd_run)
 
@@ -1023,26 +1042,6 @@ def main() -> int:
         help="Arguments passed to approval system",
     )
     approve_parser.set_defaults(func=cmd_approve)
-
-    # ===== execute subcommand (hidden - used by remote protocol) =====
-    execute_parser = subparsers.add_parser(
-        "execute",
-        help=argparse.SUPPRESS,
-        description="Execute an approved session without TUI (used by remote protocol)",
-    )
-    execute_parser.add_argument(
-        "--session-id",
-        required=True,
-        help="Session ID to execute",
-    )
-    execute_parser.add_argument(
-        "--json-output",
-        action="store_true",
-        help="Output results as JSON",
-    )
-    execute_parser.set_defaults(func=cmd_execute)
-    # Remove from help listing (keeps command functional but hidden)
-    subparsers._choices_actions = [a for a in subparsers._choices_actions if a.dest != "execute"]
 
     # ===== status subcommand =====
     status_parser = subparsers.add_parser(

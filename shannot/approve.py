@@ -602,14 +602,32 @@ class ResultView(View):
         for i, (session, code) in enumerate(self.results):
             pointer = "\033[36m>\033[0m" if i == self.cursor else " "
             if code == 0:
-                status = "\033[32m+\033[0m"
+                status = "\033[32m✓\033[0m"
             else:
-                status = "\033[31mx\033[0m"
+                status = "\033[31m✗\033[0m"
             print(f" {pointer} {status} {session.name:<30} exit {code}")
 
         print()
         success = sum(1 for _, c in self.results if c == 0)
         print(f" {success}/{len(self.results)} succeeded")
+
+        # Collect and display write conflicts
+        conflicts = []
+        for session, _ in self.results:
+            if session.completed_writes:
+                for write in session.completed_writes:
+                    if not write.get("success", True):
+                        conflicts.append(write.get("path", "unknown"))
+
+        if conflicts:
+            print()
+            noun = "conflict" if len(conflicts) == 1 else "conflicts"
+            print(f"\033[33m⚠ {len(conflicts)} write {noun} — file changed since dry-run\033[0m")
+            for path in conflicts[:3]:
+                print(f"  {path}")
+            if len(conflicts) > 3:
+                print(f"  ... and {len(conflicts) - 3} more")
+
         print()
         print(" \033[90m[Up/Down] select  [v] view output  [Esc] back  [q] quit\033[0m")
 
@@ -648,6 +666,20 @@ class OutputView(View):
 
     def _build_lines(self) -> list[str]:
         lines = []
+
+        # Show completed writes first (if any)
+        if self.session.completed_writes:
+            lines.append("--- writes ---")
+            for write_info in self.session.completed_writes:
+                path = write_info.get("path", "")
+                if write_info.get("success"):
+                    size = write_info.get("size", 0)
+                    lines.append(f"✓ {path} ({size} bytes)")
+                else:
+                    error = write_info.get("error", "unknown")
+                    lines.append(f"✗ {path} ({error})")
+            lines.append("")
+
         lines.append("--- stdout ---")
         if self.session.stdout:
             lines.extend(self.session.stdout.split("\n"))

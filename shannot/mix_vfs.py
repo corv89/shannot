@@ -6,6 +6,7 @@ import os
 import stat
 import sys
 from io import BytesIO
+from pathlib import Path
 from typing import BinaryIO
 
 from .sandboxio import NULL
@@ -404,15 +405,38 @@ class MixVFS:
         node = self.vfs_getnode(p_pathname)
         self.vfs_write_stat(p_statbuf, node)
 
+    def vfs_stat_for_new_file(self, p_statbuf, size=0):
+        """Write stat for a newly created file (node is None)."""
+        stat_struct = new_stat(
+            st_ino=200,
+            st_dev=12,
+            st_nlink=1,
+            st_mode=stat.S_IFREG | stat.S_IRUSR | stat.S_IWUSR,
+            st_uid=UID,
+            st_gid=GID,
+            st_size=size,
+        )
+        bytes_data = struct_to_bytes(stat_struct)
+        self.sandio.write_buffer(p_statbuf, bytes_data)  # type: ignore[attr-defined]
+
     @vfs_signature("fstat64(ip)i")
     def s_fstat64(self, fd, p_statbuf):
         try:
             f, node = self.vfs_open_fds[fd]
         except KeyError:
+            # Check write buffers for write-mode files
+            if fd in self.vfs_write_buffers:
+                path, write_buf, original, node = self.vfs_write_buffers[fd]
+                if node is None:
+                    # New file being created - use synthetic stat
+                    self.vfs_stat_for_new_file(p_statbuf, write_buf.tell())
+                else:
+                    self.vfs_write_stat(p_statbuf, node)
+                return
             if fd in (0, 1, 2):
                 self.vfs_stat_for_pipe(p_statbuf)
                 return
-            return super().s_fstat64(fd, p_statbuf)  # type: ignore[misc]
+            raise OSError(errno.EBADF, "bad file descriptor") from None
         self.vfs_write_stat(p_statbuf, node)
 
     @vfs_signature("access(pi)i", filearg=0)
@@ -491,9 +515,19 @@ class MixVFS:
                 is_remote = hasattr(node, "remote_path") if node else False
 
                 # Compute hash of original content for conflict detection
+                # First check VFS original, then fall back to real filesystem
                 original_hash = None
                 if original is not None:
                     original_hash = hashlib.sha256(original).hexdigest()
+                elif not is_remote:
+                    # VFS didn't have file, check if real file exists
+                    # This handles case where /tmp is virtual but real file exists
+                    try:
+                        real_path = Path(path)
+                        if real_path.exists():
+                            original_hash = hashlib.sha256(real_path.read_bytes()).hexdigest()
+                    except (OSError, PermissionError):
+                        pass  # Can't read real file, no conflict detection
 
                 pending = PendingWrite(
                     path=path,
@@ -503,7 +537,9 @@ class MixVFS:
                     original_hash=original_hash,
                 )
                 self.file_writes_pending.append(pending)
-                sys.stderr.write(f"[QUEUED WRITE] {path} ({len(content)} bytes)\n")
+                # Only show message during dry-run (execution summary shows writes)
+                if getattr(self, "subprocess_dry_run", False):
+                    sys.stderr.write(f"[DRY-RUN] {path} ({len(content)} bytes)\n")
 
                 # Audit log file write queueing
                 from .audit import log_file_write_queued

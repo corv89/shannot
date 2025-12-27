@@ -91,21 +91,15 @@ def _format_size(size: int) -> str:
         return f"{size / (1024 * 1024):.1f} MB"
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python -m shannot.run_session <session_id>", file=sys.stderr)
-        sys.exit(1)
+def execute_session_direct(session) -> int:
+    """
+    Execute a session directly (called from execute_session).
 
-    session_id = sys.argv[1]
+    This is the main execution logic, extracted to work with both
+    subprocess invocation and direct function calls (needed for Nuitka).
 
-    from .session import Session
-
-    try:
-        session = Session.load(session_id)
-    except FileNotFoundError:
-        print(f"Session not found: {session_id}", file=sys.stderr)
-        sys.exit(1)
-
+    Returns the exit code.
+    """
     # Build argv for interact.main() from structured sandbox_args
     args = session.sandbox_args
     argv = []
@@ -210,6 +204,26 @@ def main():
     if summary:
         sys.stderr.write("\n" + summary + "\n")
 
+    return exit_code
+
+
+def main():
+    """Command-line entry point for running as a module."""
+    if len(sys.argv) < 2:
+        print("Usage: python -m shannot.run_session <session_id>", file=sys.stderr)
+        sys.exit(1)
+
+    session_id = sys.argv[1]
+
+    from .session import Session
+
+    try:
+        session = Session.load(session_id)
+    except FileNotFoundError:
+        print(f"Session not found: {session_id}", file=sys.stderr)
+        sys.exit(1)
+
+    exit_code = execute_session_direct(session)
     sys.exit(exit_code)
 
 

@@ -179,9 +179,9 @@ def run_remote_dry_run(
             # Upload script
             remote_script = _upload_script(ssh, workdir, script_content)
 
-            # Run in dry-run mode with JSON output
+            # Run script (dry-run is default) with JSON output
             cmd = (
-                f"{deploy_dir}/shannot run --dry-run --json-output "
+                f"{deploy_dir}/shannot run --json-output "
                 f"--tmp={workdir} "
                 f"--lib-path={deploy_dir} "
                 f"--pypy-sandbox={deploy_dir}/pypy3-c "
@@ -287,7 +287,7 @@ def execute_remote_session(session: Session) -> int:
                 return run_remote_with_approvals(session, ssh)
 
         # Execute on remote
-        cmd = f"{deploy_dir}/shannot execute --session-id={remote_session_id} --json-output"
+        cmd = f"{deploy_dir}/shannot run --session={remote_session_id} --json-output"
 
         result = ssh.run(cmd, timeout=600)
 

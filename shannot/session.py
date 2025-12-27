@@ -160,8 +160,9 @@ class Session:
                     result = ssh.run(  # type: ignore[union-attr]
                         f"sha256sum {shlex.quote(path)} 2>/dev/null || echo NOTFOUND"
                     )
-                    if "NOTFOUND" not in result.stdout:
-                        current_hash = result.stdout.split()[0]
+                    stdout_str = result.stdout.decode("utf-8", errors="replace")
+                    if "NOTFOUND" not in stdout_str:
+                        current_hash = stdout_str.split()[0]
                         if current_hash != original_hash:
                             results.append(
                                 {
@@ -372,9 +373,6 @@ def execute_session(session: Session) -> int:
 
     Returns the exit code.
     """
-    import subprocess
-    import sys
-
     if session.status not in ("approved", "pending"):
         raise ValueError(f"Cannot execute session with status: {session.status}")
 
@@ -386,18 +384,12 @@ def execute_session(session: Session) -> int:
 
         return execute_remote_session(session)
 
-    # Local execution
+    # Local execution - call run_session directly (subprocess doesn't work with Nuitka)
     try:
-        # Delegate to run_session module
-        result = subprocess.run(
-            [sys.executable, "-m", "shannot.run_session", session.id],
-            capture_output=True,
-            text=True,
-        )
-        # run_session updates session status, but we capture output here too
-        # in case run_session fails to do so
-        session = Session.load(session.id, audit=False)  # Reload to get updates
-        return session.exit_code or result.returncode
+        from .run_session import execute_session_direct
+
+        exit_code = execute_session_direct(session)
+        return exit_code
     except Exception as e:
         session.status = "failed"
         session.error = str(e)
