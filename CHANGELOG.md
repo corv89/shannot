@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2025-12-27
+
+### Enhancements
+
+- Improve CLI help with quick start guide and clearer description
+- Remove `-c` alias for `--code` flag (avoids Nuitka conflict, more self-documenting)
+
 ## [0.9.1] - 2025-12-27
 
 ### Bug Fixes

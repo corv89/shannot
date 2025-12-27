@@ -811,9 +811,20 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
+    import textwrap
+
     parser = argparse.ArgumentParser(
         prog="shannot",
-        description="Sandbox control for PyPy sandboxed processes",
+        description="Run Python in a sandbox. Commands execute only after your approval.",
+        epilog=textwrap.dedent("""\
+            Quick start:
+              shannot run script.py                Run script, queue commands for review
+              shannot run --code "print('hi')"     Run inline code
+              shannot approve                      Review and execute queued commands
+
+            See 'shannot <command> --help' for more details.
+        """),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -823,7 +834,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(
         dest="command",
         help="Commands",
-        metavar="{setup,run,approve,status}",
+        metavar="{run,approve,status,setup}",
     )
 
     # ===== setup subcommand (with sub-subcommands) =====
@@ -973,11 +984,10 @@ def main() -> int:
         help="Python script to execute in the sandbox",
     )
     run_parser.add_argument(
-        "-c",
         "--code",
         dest="code",
         metavar="CODE",
-        help="Execute Python code string directly (like python -c)",
+        help="Execute inline Python code",
     )
     run_parser.add_argument(
         "script_args",
