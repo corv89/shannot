@@ -619,6 +619,7 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
     """Handle 'shannot mcp install' command."""
     import json
     import os
+    import shutil
     from pathlib import Path
 
     client = args.client
@@ -642,6 +643,14 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
             )
             return 1
 
+        # Find the full path to shannot-mcp executable
+        # Claude Desktop doesn't inherit shell PATH, so we need the absolute path
+        mcp_command = shutil.which("shannot-mcp")
+        if not mcp_command:
+            print("Error: shannot-mcp not found in PATH", file=sys.stderr)
+            print("Make sure shannot is installed: pip install shannot", file=sys.stderr)
+            return 1
+
         # Load existing config or create new
         if config_path.exists():
             with open(config_path) as f:
@@ -653,9 +662,9 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
         if "mcpServers" not in config:
             config["mcpServers"] = {}
 
-        # Add shannot-mcp server
+        # Add shannot-mcp server with absolute path
         config["mcpServers"]["shannot"] = {
-            "command": "shannot-mcp",
+            "command": mcp_command,
             "args": [],
             "env": {},
         }
@@ -671,9 +680,7 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
         print("Restart Claude Desktop to see Shannot MCP server.")
 
     elif client == "claude-code":
-        import shutil
         import subprocess
-        from pathlib import Path
 
         # Find claude CLI - check PATH first, then common install location
         claude_path = shutil.which("claude")
