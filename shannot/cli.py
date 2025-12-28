@@ -14,8 +14,6 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .config import VERSION
-
 
 def cmd_setup_runtime(args: argparse.Namespace) -> int:
     """Handle 'shannot setup runtime' command."""
@@ -453,7 +451,7 @@ def cmd_run_session(args: argparse.Namespace) -> int:
     """Handle 'shannot run --session' - execute an approved session."""
     import json
 
-    from .config import VERSION
+    from .config import get_version
     from .session import Session, execute_session
 
     session_id = args.session
@@ -478,7 +476,7 @@ def cmd_run_session(args: argparse.Namespace) -> int:
 
     if args.json_output:
         output = {
-            "version": VERSION,
+            "version": get_version(),
             "status": session.status,
             "exit_code": session.exit_code,
             "stdout": session.stdout or "",
@@ -810,6 +808,27 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+class _VersionAction(argparse.Action):
+    """Lazy version action that defers importlib.metadata lookup until --version is used."""
+
+    def __init__(
+        self,
+        option_strings,
+        dest=argparse.SUPPRESS,
+        default=argparse.SUPPRESS,
+        help="show program's version number and exit",
+    ):
+        super().__init__(
+            option_strings=option_strings, dest=dest, default=default, nargs=0, help=help
+        )
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from .config import get_version
+
+        parser._print_message(f"shannot {get_version()}\n", sys.stdout)
+        parser.exit()
+
+
 def main() -> int:
     import textwrap
 
@@ -828,8 +847,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--version",
-        action="version",
-        version=f"shannot {VERSION}",
+        action=_VersionAction,
     )
     subparsers = parser.add_subparsers(
         dest="command",

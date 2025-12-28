@@ -20,8 +20,8 @@ from .config import (
     SANDBOX_RELEASES_URL,
     SANDBOX_VERSION,
     SHANNOT_RELEASES_URL,
-    VERSION,
     get_remote_deploy_dir,
+    get_version,
 )
 from .ssh import SSHConnection
 
@@ -151,13 +151,14 @@ def _get_cli_binary(arch: str) -> Path:
         return local_binary
 
     # 3. Check cache
-    cached = CACHE_DIR / "shannot" / f"v{VERSION}" / binary_name
+    version = get_version()
+    cached = CACHE_DIR / "shannot" / f"v{version}" / binary_name
     if cached.exists():
         return cached
 
     # 4. Download from GitHub releases
-    url = f"{SHANNOT_RELEASES_URL}/v{VERSION}/{binary_name}"
-    _download_file(url, cached, f"Downloading shannot v{VERSION} for linux-{arch}")
+    url = f"{SHANNOT_RELEASES_URL}/v{version}/{binary_name}"
+    _download_file(url, cached, f"Downloading shannot v{version} for linux-{arch}")
     cached.chmod(0o755)
     sys.stderr.write(f"[DEPLOY]   Cached: {cached}\n")
     return cached
@@ -335,14 +336,15 @@ def get_deployed_version(ssh: SSHConnection) -> str | None:
 def deploy_cli(ssh: SSHConnection, force: bool = False) -> bool:
     """Deploy shannot CLI binary to remote."""
     deploy_dir = get_remote_deploy_dir()
+    version = get_version()
 
     if not force and is_cli_deployed(ssh):
         # Check version
         deployed_ver = get_deployed_version(ssh)
-        if deployed_ver == VERSION:
-            sys.stderr.write(f"[DEPLOY] CLI v{VERSION} already deployed\n")
+        if deployed_ver == version:
+            sys.stderr.write(f"[DEPLOY] CLI v{version} already deployed\n")
             return True
-        sys.stderr.write(f"[DEPLOY] Upgrading CLI: {deployed_ver} → {VERSION}\n")
+        sys.stderr.write(f"[DEPLOY] Upgrading CLI: {deployed_ver} → {version}\n")
 
     try:
         arch = detect_arch(ssh)

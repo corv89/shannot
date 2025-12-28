@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..config import VERSION, load_remotes
+from ..config import get_version, load_remotes
 from ..deploy import ensure_deployed
 from ..execute import execute_script
 from ..remote import run_remote_dry_run
@@ -102,7 +102,7 @@ class ShannotMCPServer(MCPServer):
             self.runtime = None
 
         # Initialize base server
-        super().__init__(name="shannot", version=VERSION)
+        super().__init__(name="shannot", version=get_version())
 
     def _load_profiles(self, profile_paths: list[Path] | None) -> dict[str, dict[str, Any]]:
         """Load approval profiles from paths or defaults.
@@ -981,7 +981,7 @@ class ShannotMCPServer(MCPServer):
     def _handle_status(self) -> str:
         """Resource handler: get runtime status."""
         status = {
-            "version": VERSION,
+            "version": get_version(),
             "runtime_available": self.runtime is not None,
             "profiles": list(self.profiles.keys()),
         }
