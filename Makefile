@@ -1,4 +1,4 @@
-.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check clean build build-binary changelog changelog-full
+.PHONY: help docs docs-serve docs-clean ensure-venv sync sync-dev install install-dev pre-commit-install test test-unit test-integration test-coverage lint format type-check clean build build-binary
 
 UV ?= uv
 VENV ?= .venv
@@ -35,10 +35,7 @@ help:
 	@echo "Building & Distribution:"
 	@echo "  make clean             - Remove build artifacts, __pycache__, *.pyc"
 	@echo "  make build             - Build distribution packages (wheel + sdist)"
-	@echo "  make build-binary      - Build standalone Nuitka binary (Linux recommended)"
-	@echo ""
-	@echo "Release Management:"
-	@echo "  make changelog         - Update CHANGELOG.md from git history (requires git-cliff)"
+	@echo "  make build-binary      - Build standalone Nuitka binary"
 	@echo ""
 	@echo "Low-level targets:"
 	@echo "  make ensure-venv       - Create .venv if it doesn't exist"
@@ -110,26 +107,7 @@ build: sync-dev
 	@echo "Built packages in dist/"
 
 build-binary:
+	# TODO: Install nuitka, handle python3
 	@echo "Building standalone binary with Nuitka..."
 	@python build_binary.py
 	@echo "Binary in dist/"
-
-changelog:
-	@echo "Updating CHANGELOG.md from git history..."
-	@if ! command -v git-cliff &> /dev/null; then \
-		echo "Error: git-cliff is not installed"; \
-		echo "Install it with: brew install git-cliff (macOS) or visit https://github.com/orhun/git-cliff"; \
-		exit 1; \
-	fi
-	@git-cliff --config cliff.toml --latest --prepend CHANGELOG.md
-	@echo "✅ CHANGELOG.md updated successfully"
-	@echo "Remember to commit the updated CHANGELOG.md"
-
-changelog-full:
-	@echo "Regenerating full CHANGELOG.md from git history..."
-	@if ! command -v git-cliff &> /dev/null; then \
-		echo "Error: git-cliff is not installed"; \
-		exit 1; \
-	fi
-	@git-cliff --config cliff.toml -o CHANGELOG.md
-	@echo "✅ CHANGELOG.md regenerated"
