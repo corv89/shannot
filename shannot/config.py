@@ -38,6 +38,7 @@ def get_version() -> str:
             _version_cache = "dev"
     return _version_cache
 
+
 # Remote deployment
 REMOTE_DEPLOY_DIR = "/tmp/shannot-v{version}"
 RELEASE_PATH_ENV = "SHANNOT_RELEASE_PATH"

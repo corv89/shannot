@@ -808,13 +808,25 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-class _LazyVersion:
-    """Lazy version string that defers importlib.metadata lookup until accessed."""
+class _VersionAction(argparse.Action):
+    """Lazy version action that defers importlib.metadata lookup until --version is used."""
 
-    def __str__(self) -> str:
+    def __init__(
+        self,
+        option_strings,
+        dest=argparse.SUPPRESS,
+        default=argparse.SUPPRESS,
+        help="show program's version number and exit",
+    ):
+        super().__init__(
+            option_strings=option_strings, dest=dest, default=default, nargs=0, help=help
+        )
+
+    def __call__(self, parser, namespace, values, option_string=None):
         from .config import get_version
 
-        return f"shannot {get_version()}"
+        parser._print_message(f"shannot {get_version()}\n", sys.stdout)
+        parser.exit()
 
 
 def main() -> int:
@@ -835,8 +847,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--version",
-        action="version",
-        version=_LazyVersion(),  # type: ignore[arg-type]  # Lazy: loads metadata only when used
+        action=_VersionAction,
     )
     subparsers = parser.add_subparsers(
         dest="command",
