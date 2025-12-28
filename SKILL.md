@@ -1,3 +1,8 @@
+---
+name: shannot
+description: Run diagnostic scripts in sandbox with human approval (MCP tool)
+---
+
 # Shannot - Sandboxed System Diagnostics
 
 Run diagnostic scripts in a sandbox with human approval.
