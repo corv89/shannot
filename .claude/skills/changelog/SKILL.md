@@ -1,3 +1,8 @@
+---
+name: changelog
+description: Generate a Keep a Changelog entry from git commits
+---
+
 # /changelog - Generate Changelog Entry
 
 ## Purpose

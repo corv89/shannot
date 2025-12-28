@@ -1,3 +1,8 @@
+---
+name: pr
+description: Commit changes, bump version, update changelog, and open a PR
+---
+
 # /pr - Prepare and Submit Changes
 
 ## Purpose

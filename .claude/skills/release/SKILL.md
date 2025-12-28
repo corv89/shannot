@@ -1,3 +1,8 @@
+---
+name: release
+description: Merge PR, tag release, and create GitHub release with changelog notes
+---
+
 # /release - Tag and Publish Release
 
 ## Purpose
