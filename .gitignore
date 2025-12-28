@@ -32,7 +32,7 @@ env/
 # IDEs
 .vscode/
 .idea/
-.claude/
+.claude/settings.local.json
 *.swp
 *.swo
 *~
@@ -69,6 +69,3 @@ docs/_build/
 # Local development
 .env
 .local/
-
-# Local planning
-plans
