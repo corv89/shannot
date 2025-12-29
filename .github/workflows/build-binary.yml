@@ -50,7 +50,7 @@ jobs:
         run: python build_binary.py
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: shannot-binary-${{ matrix.platform }}-${{ matrix.arch }}
           path: dist/shannot-${{ matrix.platform }}-${{ matrix.arch }}
