@@ -72,10 +72,11 @@ elif IS_MACOS:
     class Dirent(Structure):
         _fields_ = [
             ("d_ino", c_ulong),  # 8 bytes
+            ("d_seekoff", c_ulong),  # 8 bytes (macOS-specific)
             ("d_reclen", c_ushort),  # 2 bytes
+            ("d_namlen", c_ushort),  # 2 bytes
             ("d_type", c_ubyte),  # 1 byte
-            ("d_namlen", c_ubyte),  # 1 byte
-            ("d_name", c_char * 256),  # 256 bytes
+            ("d_name", c_char * 1024),  # 1024 bytes (macOS uses larger buffer)
         ]
 
     # macOS stat64 structure
@@ -179,10 +180,37 @@ class Timeval(Structure):
     ]
 
 
+# struct tm for gmtime/localtime/mktime/strftime
+class StructTm(Structure):
+    _fields_ = [
+        ("tm_sec", c_int),  # seconds [0-60]
+        ("tm_min", c_int),  # minutes [0-59]
+        ("tm_hour", c_int),  # hours [0-23]
+        ("tm_mday", c_int),  # day of month [1-31]
+        ("tm_mon", c_int),  # month [0-11]
+        ("tm_year", c_int),  # years since 1900
+        ("tm_wday", c_int),  # day of week [0-6], Sunday=0
+        ("tm_yday", c_int),  # day of year [0-365]
+        ("tm_isdst", c_int),  # daylight saving flag
+        ("tm_gmtoff", c_long),  # seconds east of UTC
+        ("tm_zone", c_ulong),  # timezone name pointer (unused, store 0)
+    ]
+
+
+# struct mach_timebase_info (macOS)
+class MachTimebaseInfo(Structure):
+    _fields_ = [
+        ("numer", c_uint),
+        ("denom", c_uint),
+    ]
+
+
 # Size constants
 SIZEOF_DIRENT = sizeof(Dirent)
 SIZEOF_STAT = sizeof(Stat)
 SIZEOF_TIMEVAL = sizeof(Timeval)
+SIZEOF_STRUCT_TM = sizeof(StructTm)
+SIZEOF_MACH_TIMEBASE_INFO = sizeof(MachTimebaseInfo)
 
 
 def new_stat(**kwargs) -> Stat:
@@ -201,6 +229,11 @@ def new_dirent() -> Dirent:
 def new_timeval(sec: int, usec: int) -> Timeval:
     """Create a Timeval struct."""
     return Timeval(tv_sec=sec, tv_usec=usec)
+
+
+def new_struct_tm(**kwargs) -> StructTm:
+    """Create a StructTm with given fields."""
+    return StructTm(**kwargs)
 
 
 # struct utsname (from sys/utsname.h)

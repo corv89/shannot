@@ -1,11 +1,22 @@
 import errno
 import platform
+import struct
 import sys
 import time
 
 from . import sandboxio
 from .sandboxio import NULL, Ptr, ptr_size
-from .structs import new_timeval, new_utsname, pack_gid_t, pack_time_t, pack_uid_t, struct_to_bytes
+from .structs import (
+    SIZEOF_STRUCT_TM,
+    MachTimebaseInfo,
+    new_struct_tm,
+    new_timeval,
+    new_utsname,
+    pack_gid_t,
+    pack_time_t,
+    pack_uid_t,
+    struct_to_bytes,
+)
 
 
 def signature(sig):
@@ -348,6 +359,195 @@ class VirtualizedProc:
             raise Exception("subprocess called gettimeofday() with a non-null second argument (tz)")
         return 0
 
+    @signature("tzset()v")
+    def s_tzset(self):
+        """Initialize timezone - no-op in sandbox."""
+        return None
+
+    @signature("localtime(p)p")
+    def s_localtime(self, p_time):
+        """Convert time_t to struct tm (local time)."""
+        if p_time.addr != 0:
+            time_bytes = self.sandio.read_buffer(p_time, 8)
+            t = int.from_bytes(time_bytes, sys.byteorder, signed=True)
+        else:
+            t = int(self.virtual_time)
+
+        try:
+            tm = time.localtime(t)
+        except (OSError, OverflowError):
+            self.sandio.set_errno(errno.EINVAL)
+            return NULL
+
+        # Allocate timezone string (tm_zone must point to valid string, not NULL)
+        if not hasattr(self, "_tz_local_str"):
+            self._tz_local_str = self.sandio.malloc(b"UTC\x00")
+
+        result = new_struct_tm(
+            tm_sec=tm.tm_sec,
+            tm_min=tm.tm_min,
+            tm_hour=tm.tm_hour,
+            tm_mday=tm.tm_mday,
+            tm_mon=tm.tm_mon - 1,  # C is 0-11, Python is 1-12
+            tm_year=tm.tm_year - 1900,  # C is years since 1900
+            tm_wday=(tm.tm_wday + 1) % 7,  # Python: Mon=0, C: Sun=0
+            tm_yday=tm.tm_yday - 1,  # C is 0-365, Python is 1-366
+            tm_isdst=tm.tm_isdst,
+            tm_gmtoff=0,
+            tm_zone=self._tz_local_str.addr,
+        )
+
+        if not hasattr(self, "_localtime_buf"):
+            self._localtime_buf = self.sandio.malloc(b"\x00" * SIZEOF_STRUCT_TM)
+        self.sandio.write_buffer(self._localtime_buf, struct_to_bytes(result))
+        return self._localtime_buf
+
+    @signature("gmtime(p)p")
+    def s_gmtime(self, p_time):
+        """Convert time_t to struct tm (UTC)."""
+        if p_time.addr != 0:
+            time_bytes = self.sandio.read_buffer(p_time, 8)
+            t = int.from_bytes(time_bytes, sys.byteorder, signed=True)
+        else:
+            t = int(self.virtual_time)
+
+        try:
+            tm = time.gmtime(t)
+        except (OSError, OverflowError):
+            self.sandio.set_errno(errno.EINVAL)
+            return NULL
+
+        # Allocate timezone string (tm_zone must point to valid string, not NULL)
+        if not hasattr(self, "_tz_utc_str"):
+            self._tz_utc_str = self.sandio.malloc(b"UTC\x00")
+
+        result = new_struct_tm(
+            tm_sec=tm.tm_sec,
+            tm_min=tm.tm_min,
+            tm_hour=tm.tm_hour,
+            tm_mday=tm.tm_mday,
+            tm_mon=tm.tm_mon - 1,  # C is 0-11, Python is 1-12
+            tm_year=tm.tm_year - 1900,  # C is years since 1900
+            tm_wday=(tm.tm_wday + 1) % 7,  # Python: Mon=0, C: Sun=0
+            tm_yday=tm.tm_yday - 1,  # C is 0-365, Python is 1-366
+            tm_isdst=tm.tm_isdst,
+            tm_gmtoff=0,  # UTC has no offset
+            tm_zone=self._tz_utc_str.addr,
+        )
+
+        if not hasattr(self, "_gmtime_buf"):
+            self._gmtime_buf = self.sandio.malloc(b"\x00" * SIZEOF_STRUCT_TM)
+        self.sandio.write_buffer(self._gmtime_buf, struct_to_bytes(result))
+        return self._gmtime_buf
+
+    @signature("mktime(p)i")
+    def s_mktime(self, p_tm):
+        """Convert struct tm to time_t."""
+        import calendar
+
+        tm_bytes = self.sandio.read_buffer(p_tm, SIZEOF_STRUCT_TM)
+        # Unpack: 9 ints (36 bytes)
+        ints = struct.unpack("9i", tm_bytes[:36])
+
+        try:
+            t = calendar.timegm(
+                (
+                    ints[5] + 1900,  # tm_year -> year
+                    ints[4] + 1,  # tm_mon -> month (C 0-11 to Python 1-12)
+                    ints[3],  # tm_mday
+                    ints[2],  # tm_hour
+                    ints[1],  # tm_min
+                    ints[0],  # tm_sec
+                    0,
+                    0,
+                    ints[8],  # tm_isdst
+                )
+            )
+        except (ValueError, OverflowError):
+            self.sandio.set_errno(errno.EOVERFLOW)
+            return -1
+        return t
+
+    @signature("strftime(pipp)i")
+    def s_strftime(self, p_buf, maxsize, p_format, p_tm):
+        """Format time to string."""
+        fmt = self.sandio.read_charp(p_format, 256).decode("utf-8", errors="replace")
+        tm_bytes = self.sandio.read_buffer(p_tm, SIZEOF_STRUCT_TM)
+        # Unpack: 9 ints (36 bytes)
+        ints = struct.unpack("9i", tm_bytes[:36])
+
+        tm_tuple = time.struct_time(
+            (
+                ints[5] + 1900,  # tm_year -> year
+                ints[4] + 1,  # tm_mon -> month (C 0-11 to Python 1-12)
+                ints[3],  # tm_mday
+                ints[2],  # tm_hour
+                ints[1],  # tm_min
+                ints[0],  # tm_sec
+                (ints[6] - 1) % 7,  # tm_wday: C Sun=0 to Python Mon=0
+                ints[7] + 1,  # tm_yday: C 0-365 to Python 1-366
+                ints[8],  # tm_isdst
+            )
+        )
+
+        try:
+            result = time.strftime(fmt, tm_tuple)
+        except (ValueError, OverflowError):
+            return 0
+
+        result_bytes = result.encode("utf-8")
+        if len(result_bytes) >= maxsize:
+            return 0
+        self.sandio.write_buffer(p_buf, result_bytes + b"\x00")
+        return len(result_bytes)
+
+    @signature("mach_absolute_time()l")
+    def s_mach_absolute_time(self):
+        """Return high-resolution time (nanoseconds as 64-bit long)."""
+        return int(self.virtual_time * 1_000_000_000) & 0x7FFFFFFFFFFFFFFF
+
+    @signature("mach_timebase_info(p)v")
+    def s_mach_timebase_info(self, p_info):
+        """Fill mach_timebase_info: numer=1, denom=1 (nanoseconds)."""
+        info = MachTimebaseInfo(numer=1, denom=1)
+        self.sandio.write_buffer(p_info, struct_to_bytes(info))
+        return None
+
+    @signature("strerror(i)p")
+    def s_strerror(self, errnum):
+        """Return error string for errno."""
+        import os
+
+        if not hasattr(self, "_strerror_cache"):
+            self._strerror_cache = {}
+        if errnum not in self._strerror_cache:
+            msg = os.strerror(errnum).encode("utf-8") + b"\x00"
+            self._strerror_cache[errnum] = self.sandio.malloc(msg)
+        return self._strerror_cache[errnum]
+
+    @signature("major(i)i")
+    def s_major(self, dev):
+        """Extract major device number (macOS format)."""
+        return (dev >> 24) & 0xFF
+
+    @signature("minor(i)i")
+    def s_minor(self, dev):
+        """Extract minor device number (macOS format)."""
+        return dev & 0xFFFFFF
+
+    @signature("makedev(ii)i")
+    def s_makedev(self, major, minor):
+        """Create device number from major/minor (macOS format)."""
+        return ((major & 0xFF) << 24) | (minor & 0xFFFFFF)
+
+    s_getgrouplist = sigerror("getgrouplist(pipp)i", errno.EPERM, -1)
+    s_ftime = sigerror("ftime(p)i", errno.ENOSYS, -1)
+
+    @signature("pypy_debug_catch_fatal_exception()v")
+    def s_pypy_debug_catch_fatal_exception(self):
+        """PyPy internal - no-op."""
+        return None
+
     @signature("get_environ()p")
     def s_get_environ(self):
         """Default implementation: the 'environ' variable points to a NULL
@@ -355,6 +555,14 @@ class VirtualizedProc:
         if not hasattr(self, "_alloc_null_environ"):
             self._alloc_null_environ = self.sandio.malloc(b"\x00" * ptr_size)
         return self._alloc_null_environ
+
+    @signature("_NSGetEnviron()p")
+    def s__NSGetEnviron(self):  # noqa: N802 - matches syscall name
+        """macOS-specific: return pointer to environ array.
+
+        Reuses the existing environ allocation from get_environ().
+        """
+        return self.s_get_environ()
 
     @signature("getenv(p)p")
     def s_getenv(self, p_name):

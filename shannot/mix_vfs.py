@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from .sandboxio import NULL
-from .structs import DT_DIR, DT_REG, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
+from .structs import DT_DIR, DT_REG, IS_MACOS, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
 from .virtualizedproc import sigerror, signature
 
 MAX_PATH = 256
@@ -405,6 +405,19 @@ class MixVFS:
         node = self.vfs_getnode(p_pathname)
         self.vfs_write_stat(p_statbuf, node)
 
+    # macOS aliases - stat/lstat/fstat use same structs as *64 versions
+    @vfs_signature("stat(pp)i", filearg=0)
+    def s_stat(self, p_pathname, p_statbuf):
+        return self.s_stat64(p_pathname, p_statbuf)
+
+    @vfs_signature("lstat(pp)i", filearg=0)
+    def s_lstat(self, p_pathname, p_statbuf):
+        return self.s_lstat64(p_pathname, p_statbuf)
+
+    @vfs_signature("fstat(ip)i")
+    def s_fstat(self, fd, p_statbuf):
+        return self.s_fstat64(fd, p_statbuf)
+
     def vfs_stat_for_new_file(self, p_statbuf, size=0):
         """Write stat for a newly created file (node is None)."""
         stat_struct = new_stat(
@@ -437,6 +450,18 @@ class MixVFS:
                 self.vfs_stat_for_pipe(p_statbuf)
                 return
             raise OSError(errno.EBADF, "bad file descriptor") from None
+        self.vfs_write_stat(p_statbuf, node)
+
+    @vfs_signature("fstatat(ippi)i", filearg=1)
+    def s_fstatat(self, dirfd, p_pathname, p_statbuf, flags):
+        """Stat relative to directory fd.
+
+        For sandbox, we ignore dirfd (treat as AT_FDCWD) and resolve
+        paths from VFS root.
+
+        TODO: Handle AT_SYMLINK_NOFOLLOW (0x20) flag when VFS supports symlinks.
+        """
+        node = self.vfs_getnode(p_pathname)
         self.vfs_write_stat(p_statbuf, node)
 
     @vfs_signature("access(pi)i", filearg=0)
@@ -603,14 +628,46 @@ class MixVFS:
         if fd in (0, 1, 2):
             raise OSError(errno.ESPIPE, "seeking on stdin/stdout/stderr")
 
+        # PyPy's rzipfile.py uses lseek(-22, SEEK_END) to detect ZIP files.
+        # When this succeeds on files >= 22 bytes, PyPy calls readall() which
+        # tries to pre-allocate a read buffer internally. After ~900 syscalls,
+        # PyPy's internal heap is exhausted, causing MemoryError BEFORE any
+        # read syscall is issued. Return EINVAL to skip ZIP detection safely.
+        # This is correct behavior: files small enough that -22 from end lands
+        # at position 0 cannot be valid ZIP files anyway.
+        if whence == 2 and offset == -22:  # SEEK_END with -22
+            raise OSError(errno.EINVAL, "lseek(-22, SEEK_END) rejected to skip ZIP detection")
+
         # Check if this is a write buffer
         if fd in self.vfs_write_buffers:
             path, write_buf, original, node = self.vfs_write_buffers[fd]
-            write_buf.seek(offset, whence)
+            # Calculate target position to check for EINVAL
+            if whence == 0:  # SEEK_SET
+                new_pos = offset
+            elif whence == 1:  # SEEK_CUR
+                new_pos = write_buf.tell() + offset
+            else:  # whence == 2, SEEK_END
+                write_buf.seek(0, 2)  # Go to end
+                end_pos = write_buf.tell()
+                new_pos = end_pos + offset
+            if new_pos < 0:
+                raise OSError(errno.EINVAL, "lseek would result in negative position")
+            write_buf.seek(new_pos, 0)
             return write_buf.tell()
 
         f = self.vfs_get_file(fd)
-        f.seek(offset, whence)
+        # Calculate target position to check for EINVAL
+        if whence == 0:  # SEEK_SET
+            new_pos = offset
+        elif whence == 1:  # SEEK_CUR
+            new_pos = f.tell() + offset
+        else:  # whence == 2, SEEK_END
+            f.seek(0, 2)  # Go to end
+            end_pos = f.tell()
+            new_pos = end_pos + offset
+        if new_pos < 0:
+            raise OSError(errno.EINVAL, "lseek would result in negative position")
+        f.seek(new_pos, 0)
         return f.tell()
 
     @vfs_signature("opendir(p)p", filearg=0)
@@ -646,8 +703,11 @@ class MixVFS:
         dirent.d_reclen = SIZEOF_DIRENT
         dirent.d_type = DT_DIR if subnode.is_dir() else DT_REG
         name = name.encode("utf-8")
-        if len(name) > 255:  # d_name is 256 bytes including null terminator
+        max_name_len = 1023 if IS_MACOS else 255  # macOS: 1024, Linux: 256
+        if len(name) > max_name_len:
             raise OSError(errno.EOVERFLOW, subnode)
+        if IS_MACOS:
+            dirent.d_namlen = len(name)
         dirent.d_name = name
         bytes_data = struct_to_bytes(dirent)
         self.sandio.write_buffer(p_dir, bytes_data)  # type: ignore[attr-defined]
