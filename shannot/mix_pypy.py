@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class MixPyPy:
     @signature("_pypy_init_home()p")
     def s__pypy_init_home(self: HasSandio):
-        return self.sandio.malloc(b"/pypy\x00")
+        return self.sandio.malloc(b"/lib\x00")  # was "/pypy"
 
     @signature("_pypy_init_free(p)v")
     def s__pypy_init_free(self: HasSandio, ptr):
