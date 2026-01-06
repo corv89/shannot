@@ -221,6 +221,16 @@ def main(argv):
     )
     SandboxedProc.vfs_root.entries["sys"] = build_sys()
 
+    # Mount home directory read-only
+    home_path = os.path.expanduser("~")
+    home_parts = home_path.strip("/").split("/")
+    if len(home_parts) >= 2:
+        parent_dir = home_parts[0]  # "Users" or "home"
+        user_dir = home_parts[1]
+        SandboxedProc.vfs_root.entries[parent_dir] = Dir(
+            {user_dir: RealDir(home_path, show_dotfiles=True, follow_links=True)}
+        )
+
     if SandboxedProc.debug_errors:
         popen1 = subprocess.Popen(
             arguments[:1],
