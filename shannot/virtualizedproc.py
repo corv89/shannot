@@ -1,4 +1,5 @@
 import errno
+import os
 import platform
 import struct
 import sys
@@ -109,6 +110,8 @@ class VirtualizedProc:
     # to get the current time dynamically, too
     virtual_hostname = "sandbox"
     virtual_machine = platform.machine()  # "x86_64" or "aarch64"
+    virtual_home = os.path.expanduser("~")  # Real user's home directory
+    virtual_user = os.environ.get("USER", "user")  # Real username
 
     def __init__(self, child_stdin, child_stdout):
         self.sandio = sandboxio.SandboxedIO(child_stdin, child_stdout)
@@ -550,24 +553,52 @@ class VirtualizedProc:
 
     @signature("get_environ()p")
     def s_get_environ(self):
-        """Default implementation: the 'environ' variable points to a NULL
-        pointer, i.e. the environment is empty."""
-        if not hasattr(self, "_alloc_null_environ"):
-            self._alloc_null_environ = self.sandio.malloc(b"\x00" * ptr_size)
-        return self._alloc_null_environ
+        """Return environ array (char **) with HOME and USER variables."""
+        if not hasattr(self, "_alloc_environ_array"):
+            # Build environ array: array of pointers to "KEY=VALUE\0" strings
+            env_vars = [
+                f"HOME={self.virtual_home}",
+                f"USER={self.virtual_user}",
+            ]
+            # Allocate each string and collect pointers
+            ptrs = []
+            for var in env_vars:
+                ptr = self.sandio.malloc(var.encode("utf-8") + b"\x00")
+                ptrs.append(ptr)
+            # Build array of pointers, NULL-terminated
+            array_data = b"".join(p.addr.to_bytes(ptr_size, sys.byteorder) for p in ptrs) + (
+                b"\x00" * ptr_size
+            )
+            self._alloc_environ_array = self.sandio.malloc(array_data)
+        return self._alloc_environ_array
 
     @signature("_NSGetEnviron()p")
     def s__NSGetEnviron(self):  # noqa: N802 - matches syscall name
-        """macOS-specific: return pointer to environ array.
+        """macOS-specific: return pointer to pointer to environ array (char ***).
 
-        Reuses the existing environ allocation from get_environ().
+        _NSGetEnviron returns &environ, so we need another level of indirection.
         """
-        return self.s_get_environ()
+        if not hasattr(self, "_alloc_environ_ptr"):
+            environ_array = self.s_get_environ()
+            # Allocate a pointer to the environ array
+            ptr_data = environ_array.addr.to_bytes(ptr_size, sys.byteorder)
+            self._alloc_environ_ptr = self.sandio.malloc(ptr_data)
+        return self._alloc_environ_ptr
 
     @signature("getenv(p)p")
     def s_getenv(self, p_name):
-        """Default implementation: getenv() returns NULL."""
-        return NULL
+        """Return environment variable value, or NULL if not set."""
+        name = self.sandio.read_charp(p_name, 256).decode("utf-8", errors="replace")
+        env_vars = {
+            "HOME": self.virtual_home,
+            "USER": self.virtual_user,
+        }
+        value = env_vars.get(name)
+        if value is None:
+            return NULL
+        # Allocate string in sandbox memory
+        value_bytes = value.encode("utf-8") + b"\x00"
+        return self.sandio.malloc(value_bytes)
 
     @signature("getcwd(pi)p")
     def s_getcwd(self, p_buf, size):

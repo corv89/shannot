@@ -14,5 +14,6 @@ def get_stubs() -> dict[str, bytes]:
     """Return all stubs as {filename: content}."""
     return {
         "_signal.py": load_stub("_signal.py"),
+        "pwd.py": load_stub("pwd.py"),
         "subprocess.py": load_stub("subprocess.py"),
     }
