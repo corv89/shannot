@@ -692,7 +692,7 @@ class VirtualizedProc:
         raise Exception("subprocess calls the unsupported RPython get_stdout() helper")
 
     @signature("rewinddir(p)v")
-    def s_rewinddir(self, *args):
+    def s_rewinddir(self, p_dir: Ptr) -> None:
         raise Exception("subprocess calls the unsupported rewinddir() function")
 
     @signature("rpy_cpu_count()i")

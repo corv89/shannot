@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
-from .sandboxio import NULL
+from .sandboxio import NULL, Ptr
 from .structs import DT_DIR, DT_REG, IS_MACOS, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
 from .virtualizedproc import sigerror, signature
 
@@ -345,6 +345,12 @@ class MixVFS:
     vfs_track_deletions = False  # When True, queue deletions for approval
     file_deletions_pending = []  # List of PendingDeletion objects
 
+    # Attributes expected from composed class (VirtualizedProc, MixRemote, etc.)
+    # These are declared here for type checking but overridden by mixins
+    debug_errors: bool = False
+    virtual_cwd: str = "/"
+    remote_target: str | None = None
+
     def __init__(self, *args, **kwds):
         try:
             self.vfs_root = kwds.pop("vfs_root")
@@ -395,7 +401,7 @@ class MixVFS:
         # Queue the deletion for approval
         from .pending_deletion import PendingDeletion
 
-        is_remote = hasattr(self, "remote_target") and self.remote_target is not None
+        is_remote = self.remote_target is not None
 
         pending = PendingDeletion(
             path=path,
@@ -434,7 +440,7 @@ class MixVFS:
         # Queue the deletion for approval
         from .pending_deletion import PendingDeletion
 
-        is_remote = hasattr(self, "remote_target") and self.remote_target is not None
+        is_remote = self.remote_target is not None
 
         pending = PendingDeletion(
             path=path,
@@ -493,7 +499,7 @@ class MixVFS:
 
         from .pending_deletion import PendingDeletion
 
-        is_remote = hasattr(self, "remote_target") and self.remote_target is not None
+        is_remote = self.remote_target is not None
 
         if is_directory:
             pending = PendingDeletion(
@@ -1047,7 +1053,7 @@ class MixVFS:
         return 0
 
     @signature("rewinddir(p)v")
-    def s_rewinddir(self, p_dir):
+    def s_rewinddir(self, p_dir: Ptr) -> None:
         """Reset directory stream to beginning.
 
         Used by os.listdir(fd) after fdopendir.
