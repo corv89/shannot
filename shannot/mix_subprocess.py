@@ -47,6 +47,7 @@ class MixSubprocess:
     subprocess_pending = []  # Commands awaiting approval
     subprocess_approved = set()  # Commands approved this session
     file_writes_pending = []  # File writes awaiting approval
+    file_deletions_pending = []  # File/dir deletions awaiting approval
 
     # Execution tracking (populated during execution, NOT dry-run)
     # Note: Use _get_executed_commands() to access - ensures instance-level list
@@ -277,14 +278,18 @@ class MixSubprocess:
 
     def finalize_session(self):
         """
-        Create a Session from queued commands and writes after script completes.
+        Create a Session from queued commands, writes, and deletions.
 
         Call this at the end of a dry-run execution to bundle all
-        queued commands and file writes into a reviewable session.
+        queued operations into a reviewable session.
 
         Returns the created Session, or None if nothing was queued.
         """
-        if not self.subprocess_pending and not self.file_writes_pending:
+        if (
+            not self.subprocess_pending
+            and not self.file_writes_pending
+            and not self.file_deletions_pending
+        ):
             return None
 
         from .session import create_session
@@ -297,6 +302,14 @@ class MixSubprocess:
             elif isinstance(write, dict):
                 pending_write_dicts.append(write)
 
+        # Convert PendingDeletion objects to dicts for serialization
+        pending_deletion_dicts = []
+        for deletion in self.file_deletions_pending:
+            if hasattr(deletion, "to_dict"):
+                pending_deletion_dicts.append(deletion.to_dict())
+            elif isinstance(deletion, dict):
+                pending_deletion_dicts.append(deletion)
+
         session = create_session(
             script_path=self.subprocess_script_path or "<unknown>",
             commands=list(self.subprocess_pending),
@@ -305,10 +318,12 @@ class MixSubprocess:
             analysis=self.subprocess_analysis or "",
             sandbox_args=self.subprocess_sandbox_args,
             pending_writes=pending_write_dicts,
+            pending_deletions=pending_deletion_dicts,
         )
 
         self.subprocess_pending.clear()
         self.file_writes_pending.clear()
+        self.file_deletions_pending.clear()
         return session
 
     def load_session_commands(self, session):

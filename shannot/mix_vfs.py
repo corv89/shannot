@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
-from .sandboxio import NULL
+from .sandboxio import NULL, Ptr
 from .structs import DT_DIR, DT_REG, IS_MACOS, SIZEOF_DIRENT, new_dirent, new_stat, struct_to_bytes
 from .virtualizedproc import sigerror, signature
 
@@ -19,6 +19,18 @@ MAX_WRITE_SIZE = 50 * 1024 * 1024  # 50MB maximum file write size
 UID = 1000
 GID = 1000
 INO_COUNTER = 0
+
+# O_DIRECTORY flag for opening directories (platform-specific)
+if sys.platform == "darwin":
+    O_DIRECTORY = 0x100000
+else:
+    O_DIRECTORY = 0x10000  # Linux
+
+# AT_FDCWD constant for *at syscalls (use cwd instead of dirfd)
+AT_FDCWD = -100
+
+# AT_REMOVEDIR flag for unlinkat()
+AT_REMOVEDIR = 0x200
 
 
 class FSObject:
@@ -164,6 +176,28 @@ class RealDir(Dir):
             # don't allow access to symlinks and other special files
             raise OSError(errno.EACCES, path)
 
+    def stat(self):
+        """Return stat using real filesystem inode for samestat compatibility."""
+        # Get real stat for inode/dev (needed for samestat to work)
+        if self.follow_links:
+            real_st = os.stat(self.path)
+        else:
+            real_st = os.lstat(self.path)
+
+        # Build synthetic stat with real inode
+        st_mode = self.kind
+        st_mode |= stat.S_IWUSR | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
+        st_mode |= stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH  # Directories are executable
+        return new_stat(
+            st_ino=real_st.st_ino,
+            st_dev=real_st.st_dev,
+            st_nlink=1,
+            st_size=0,
+            st_mode=st_mode,
+            st_uid=0,  # Read-only
+            st_gid=0,
+        )
+
 
 class OverlayDir(RealDir):
     """RealDir with virtual file overrides.
@@ -224,12 +258,30 @@ class RealFile(File):
         except OSError as e:
             raise OSError(e.errno, "open failed") from e
 
+    def stat(self):
+        """Return stat using real filesystem inode for samestat compatibility."""
+        real_st = os.stat(self.path)
+
+        # Build synthetic stat with real inode
+        st_mode = self.kind
+        st_mode |= stat.S_IWUSR | stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
+        return new_stat(
+            st_ino=real_st.st_ino,
+            st_dev=real_st.st_dev,
+            st_nlink=1,
+            st_size=real_st.st_size,
+            st_mode=st_mode,
+            st_uid=0,  # Read-only
+            st_gid=0,
+        )
+
 
 class OpenDir:
     """Iterator state for an open directory (used by opendir/readdir)."""
 
-    def __init__(self, node):
+    def __init__(self, node, fd=-1):
         self.node = node
+        self.fd = fd  # fd from fdopendir(), or -1 for opendir()
         self.iter_names = iter(node.keys())
 
     def readdir(self):
@@ -278,16 +330,26 @@ class MixVFS:
 
     # The allowed 'fd' to return.  You might increase the range if your
     # subprocess needs more fd's.
-    virtual_fd_range = range(3, 50)
+    virtual_fd_range = range(3, 512)  # Support deep recursive rmtree
 
     # This is the number of simultaneous open directories.  The value of 0
     # prevents opendir() from working at all, which is fine in some situations
     # (notably with pypy2-sandbox, but not with pypy3-sandbox).
-    virtual_fd_directories = 20
+    virtual_fd_directories = 100  # Support deep recursive rmtree
 
     # Write tracking
     vfs_track_writes = False  # When True, queue writes for approval
     file_writes_pending = []  # List of PendingWrite objects
+
+    # Deletion tracking
+    vfs_track_deletions = False  # When True, queue deletions for approval
+    file_deletions_pending = []  # List of PendingDeletion objects
+
+    # Attributes expected from composed class (VirtualizedProc, MixRemote, etc.)
+    # These are declared here for type checking but overridden by mixins
+    debug_errors: bool = False
+    virtual_cwd: str = "/"
+    remote_target: str | None = None
 
     def __init__(self, *args, **kwds):
         try:
@@ -305,7 +367,167 @@ class MixVFS:
 
     s_mkdir = sigerror("mkdir(pi)i", errno.EPERM, -1)
     s_fcntl = sigerror("fcntl(iii)i", errno.ENOSYS, -1)
-    s_unlink = sigerror("unlink(p)i", errno.EPERM, -1)
+
+    @vfs_signature("unlink(p)i", filearg=0)
+    def s_unlink(self, p_pathname):
+        """Handle file deletion request."""
+        path = self.vfs_fetch_path(p_pathname)
+
+        # If tracking is disabled, deny the operation
+        if not self.vfs_track_deletions:
+            raise OSError(errno.EPERM, "unlink not permitted")
+
+        # Verify it's a file (not a directory)
+        try:
+            node = self.vfs_getnode(p_pathname)
+            if node.is_dir():
+                raise OSError(errno.EISDIR, "is a directory")
+        except OSError as e:
+            if e.errno == errno.ENOENT:
+                # File might exist on real filesystem (e.g., home dir)
+                pass
+            else:
+                raise
+
+        # Get file size from real filesystem if possible (optional metadata)
+        size = 0
+        try:
+            real_path = Path(path)
+            if real_path.exists() and real_path.is_file():
+                size = real_path.stat().st_size
+        except (OSError, PermissionError):
+            pass  # Size is optional; use 0 if we can't stat the file
+
+        # Queue the deletion for approval
+        from .pending_deletion import PendingDeletion
+
+        pending = PendingDeletion(
+            path=path,
+            target_type="file",
+            size=size,
+            remote=self.remote_target is not None,
+        )
+        self.file_deletions_pending.append(pending)
+
+        if self.debug_errors:
+            sys.stderr.write(f"[DRY-RUN] DELETE {path}\n")
+
+        return 0  # Pretend success (deferred)
+
+    @vfs_signature("rmdir(p)i", filearg=0)
+    def s_rmdir(self, p_pathname):
+        """Handle directory deletion request."""
+        path = self.vfs_fetch_path(p_pathname)
+
+        # If tracking is disabled, deny the operation
+        if not self.vfs_track_deletions:
+            raise OSError(errno.EPERM, "rmdir not permitted")
+
+        # Verify it's a directory
+        try:
+            node = self.vfs_getnode(p_pathname)
+            if not node.is_dir():
+                raise OSError(errno.ENOTDIR, "not a directory")
+        except OSError as e:
+            if e.errno == errno.ENOENT:
+                # Directory might exist on real filesystem
+                pass
+            else:
+                raise
+
+        # Queue the deletion for approval
+        from .pending_deletion import PendingDeletion
+
+        is_remote = self.remote_target is not None
+
+        pending = PendingDeletion(
+            path=path,
+            target_type="directory",
+            size=0,
+            remote=is_remote,
+        )
+        self.file_deletions_pending.append(pending)
+
+        if self.debug_errors:
+            sys.stderr.write(f"[DRY-RUN] RMDIR {path}\n")
+
+        return 0  # Pretend success (deferred)
+
+    @vfs_signature("unlinkat(ipi)i", filearg=1)
+    def s_unlinkat(self, dirfd, p_pathname, flags):
+        """Delete file/directory relative to directory fd.
+
+        Used by shutil.rmtree with dir_fd parameter.
+        flags can be AT_REMOVEDIR (0x200) to remove directory instead of file.
+        """
+        path = self.vfs_fetch_path(p_pathname)
+
+        # Build full path for deletion tracking
+        if path.startswith("/"):
+            full_path = path
+        elif dirfd == AT_FDCWD:
+            full_path = os.path.join(self.virtual_cwd, path)
+        else:
+            # Get the directory node's real path
+            try:
+                f, node = self.vfs_open_fds[dirfd]
+            except KeyError:
+                raise OSError(errno.EBADF, "bad file descriptor") from None
+
+            if not node.is_dir():
+                raise OSError(errno.ENOTDIR, "not a directory")
+
+            # For RealDir nodes, get the real path
+            if hasattr(node, "path"):
+                full_path = os.path.join(node.path, path)
+            else:
+                # Virtual directory - construct path
+                raise OSError(errno.EPERM, "unlinkat on virtual directory not supported")
+
+        # Determine target type from flags and actual filesystem
+        # AT_REMOVEDIR flag indicates directory, but we also check filesystem
+        # to handle cases where sandboxed code misidentifies the target
+        real_path = Path(full_path)
+        is_directory = (flags & AT_REMOVEDIR) != 0
+        if real_path.exists():
+            is_directory = real_path.is_dir()
+
+        if not self.vfs_track_deletions:
+            raise OSError(errno.EPERM, "deletion not permitted")
+
+        from .pending_deletion import PendingDeletion
+
+        is_remote = self.remote_target is not None
+
+        if is_directory:
+            pending = PendingDeletion(
+                path=full_path,
+                target_type="directory",
+                size=0,
+                remote=is_remote,
+            )
+            if self.debug_errors:
+                sys.stderr.write(f"[DRY-RUN] RMDIR {full_path}\n")
+        else:
+            size = 0
+            try:
+                if real_path.exists() and real_path.is_file():
+                    size = real_path.stat().st_size
+            except (OSError, PermissionError):
+                pass  # Size is optional; use 0 if we can't stat the file
+
+            pending = PendingDeletion(
+                path=full_path,
+                target_type="file",
+                size=size,
+                remote=is_remote,
+            )
+            if self.debug_errors:
+                sys.stderr.write(f"[DRY-RUN] DELETE {full_path}\n")
+
+        self.file_deletions_pending.append(pending)
+
+        return 0  # Pretend success (deferred)
 
     @staticmethod
     def vfs_pypy_lib_directory(library_path, exclude=None):
@@ -367,14 +589,16 @@ class MixVFS:
         self.sandio.write_buffer(p_statbuf, bytes_data)  # type: ignore[attr-defined]
 
     def vfs_allocate_fd(self, f, node):
-        if node.is_dir():
-            raise ValueError("cannot allocate fd for directory")
+        """Allocate fd for an open file or directory.
+
+        For regular files, f is an open file object.
+        For directories, f is None (directory fds are used with fdopendir/unlinkat).
+        """
         for fd in self.virtual_fd_range:
-            if fd not in self.vfs_open_fds:
+            if fd not in self.vfs_open_fds and fd not in self.vfs_write_buffers:
                 self.vfs_open_fds[fd] = (f, node)
                 return fd
-        else:
-            raise OSError(errno.EMFILE, "trying to open too many files")
+        raise OSError(errno.EMFILE, "trying to open too many files")
 
     def vfs_get_file(self, fd):
         """Return the open file for file descriptor `fd`."""
@@ -452,17 +676,83 @@ class MixVFS:
             raise OSError(errno.EBADF, "bad file descriptor") from None
         self.vfs_write_stat(p_statbuf, node)
 
+    def vfs_resolve_at(self, dirfd, p_pathname):
+        """Resolve a path relative to a directory fd.
+
+        If dirfd is AT_FDCWD or path is absolute, resolves from VFS root.
+        Otherwise, resolves relative to the directory represented by dirfd.
+
+        Returns the resolved VFS node.
+        """
+        path = self.vfs_fetch_path(p_pathname)
+
+        # Absolute path - ignore dirfd
+        if path.startswith("/"):
+            return self.vfs_getnode(p_pathname)
+
+        # AT_FDCWD - use virtual_cwd
+        if dirfd == AT_FDCWD:
+            return self.vfs_getnode(p_pathname)
+
+        # Relative to dirfd
+        try:
+            f, node = self.vfs_open_fds[dirfd]
+        except KeyError:
+            raise OSError(errno.EBADF, "bad file descriptor") from None
+
+        if not node.is_dir():
+            raise OSError(errno.ENOTDIR, "not a directory")
+
+        # Navigate from the directory node
+        for name in path.split("/"):
+            if name and name != ".":
+                node = node.join(name)
+
+        return node
+
     @vfs_signature("fstatat(ippi)i", filearg=1)
     def s_fstatat(self, dirfd, p_pathname, p_statbuf, flags):
         """Stat relative to directory fd.
 
-        For sandbox, we ignore dirfd (treat as AT_FDCWD) and resolve
-        paths from VFS root.
-
         TODO: Handle AT_SYMLINK_NOFOLLOW (0x20) flag when VFS supports symlinks.
         """
-        node = self.vfs_getnode(p_pathname)
+        node = self.vfs_resolve_at(dirfd, p_pathname)
         self.vfs_write_stat(p_statbuf, node)
+
+    # macOS uses fstatat64 as an alias
+    @vfs_signature("fstatat64(ippi)i", filearg=1)
+    def s_fstatat64(self, dirfd, p_pathname, p_statbuf, flags):
+        return self.s_fstatat(dirfd, p_pathname, p_statbuf, flags)
+
+    @vfs_signature("openat(ipii)i", filearg=1)
+    def s_openat(self, dirfd, p_pathname, flags, mode):
+        """Open file relative to directory fd.
+
+        Used by shutil.rmtree for fd-based operations.
+        """
+        path = self.vfs_fetch_path(p_pathname)
+
+        # For absolute paths or AT_FDCWD, delegate to s_open
+        if path.startswith("/") or dirfd == AT_FDCWD:
+            return self.s_open(p_pathname, flags, mode)
+
+        # Resolve relative to dirfd
+        node = self.vfs_resolve_at(dirfd, p_pathname)
+
+        write_mode = flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) != os.O_RDONLY
+
+        if write_mode:
+            # Write mode not supported via openat
+            raise OSError(errno.EPERM, "write via openat not supported")
+
+        # Handle directory opening
+        if node.is_dir():
+            return self.vfs_allocate_fd(None, node)
+
+        if not node.access(os.R_OK):
+            raise OSError(errno.EACCES, node)
+        f = node.open()
+        return self.vfs_allocate_fd(f, node)
 
     @vfs_signature("access(pi)i", filearg=0)
     def s_access(self, p_pathname, mode):
@@ -475,6 +765,7 @@ class MixVFS:
         path = self.vfs_fetch_path(p_pathname)
         write_mode = flags & (os.O_RDONLY | os.O_WRONLY | os.O_RDWR) != os.O_RDONLY
         create_mode = flags & os.O_CREAT
+        directory_mode = flags & O_DIRECTORY
 
         # Handle write mode with tracking
         if write_mode:
@@ -485,13 +776,14 @@ class MixVFS:
             original = None
             try:
                 node = self.vfs_getnode(p_pathname)
-                if not node.is_dir():
-                    try:
-                        f = node.open()
-                        original = f.read()
-                        f.close()
-                    except OSError:
-                        pass
+                if node.is_dir():
+                    raise OSError(errno.EISDIR, "Is a directory")
+                try:
+                    f = node.open()
+                    original = f.read()
+                    f.close()
+                except OSError:
+                    pass  # File exists but can't be read; treat as new file
             except OSError:
                 if not create_mode:
                     raise
@@ -504,6 +796,18 @@ class MixVFS:
 
         # Read-only mode
         node = self.vfs_getnode(p_pathname)
+
+        # Handle directory opening (for shutil.rmtree fd-based operations)
+        if node.is_dir():
+            if not node.access(os.R_OK):
+                raise OSError(errno.EACCES, node)
+            # Return fd for directory (file object is None)
+            return self.vfs_allocate_fd(None, node)
+
+        # O_DIRECTORY flag but path is not a directory
+        if directory_mode:
+            raise OSError(errno.ENOTDIR, "Not a directory")
+
         if not node.access(os.R_OK):
             raise OSError(errno.EACCES, node)
         f = node.open()
@@ -580,10 +884,34 @@ class MixVFS:
                 )
             return
 
-        # Regular file close
-        f = self.vfs_get_file(fd)
+        # Regular file/directory close
+        try:
+            f, node = self.vfs_open_fds[fd]
+        except KeyError:
+            raise OSError(errno.EBADF, "bad file descriptor") from None
         del self.vfs_open_fds[fd]
-        f.close()
+        # For directory fds, f is None (no file object to close)
+        if f is not None:
+            f.close()
+
+    @vfs_signature("dup(i)i")
+    def s_dup(self, oldfd):
+        """Duplicate a file descriptor."""
+        try:
+            f, node = self.vfs_open_fds[oldfd]
+        except KeyError:
+            raise OSError(errno.EBADF, "bad file descriptor") from None
+
+        # Allocate new fd pointing to same file/node
+        return self.vfs_allocate_fd(f, node)
+
+    @signature("rpy_dup_noninheritable(i)i")
+    def s_rpy_dup_noninheritable(self, oldfd):
+        """PyPy's dup with close-on-exec flag - same as dup for sandbox.
+
+        Used by os.listdir(fd) and os.scandir(fd).
+        """
+        return self.s_dup(oldfd)
 
     @vfs_signature("write(ipi)i")
     def s_write(self, fd, p_buf, count):
@@ -715,11 +1043,60 @@ class MixVFS:
 
     @vfs_signature("closedir(p)i")
     def s_closedir(self, p_dir):
-        del self.vfs_open_dirs[p_dir.addr]
+        fdir = self.vfs_open_dirs.pop(p_dir.addr, None)
+        # Per POSIX, closedir after fdopendir must close the underlying fd
+        if fdir is not None and fdir.fd >= 0:
+            self.vfs_open_fds.pop(fdir.fd, None)
         self.sandio.free(p_dir)  # type: ignore[attr-defined]
         return 0
 
+    @signature("rewinddir(p)v")
+    def s_rewinddir(self, p_dir: Ptr) -> None:
+        """Reset directory stream to beginning.
+
+        Used by os.listdir(fd) after fdopendir.
+        """
+        try:
+            fdir = self.vfs_open_dirs[p_dir.addr]
+        except KeyError:
+            return  # Invalid DIR* - just ignore
+        # Reset the iterator
+        fdir.index = 0
+
+    @vfs_signature("fdopendir(i)p")
+    def s_fdopendir(self, fd):
+        """Open a directory stream from a file descriptor.
+
+        Used by os.listdir(fd) and os.scandir(fd) in shutil.rmtree.
+        """
+        # Check concurrent directory limit
+        if len(self.vfs_open_dirs) >= self.virtual_fd_directories:
+            if self.virtual_fd_directories == 0:
+                raise OSError(errno.EPERM, "fdopendir() not allowed")
+            raise OSError(errno.EMFILE, "trying to open too many directories")
+
+        # Get the node from the fd
+        try:
+            f, node = self.vfs_open_fds[fd]
+        except KeyError:
+            raise OSError(errno.EBADF, "bad file descriptor") from None
+
+        if not node.is_dir():
+            raise OSError(errno.ENOTDIR, "not a directory")
+
+        # Create directory iterator, storing the fd for dirfd()
+        fdir = OpenDir(node, fd=fd)
+        p = self.sandio.malloc(b"\x00" * SIZEOF_DIRENT)  # type: ignore[attr-defined]
+        self.vfs_open_dirs[p.addr] = fdir
+        return p
+
     @vfs_signature("dirfd(p)i")
     def s_dirfd(self, p_dir):
-        """Return fd for directory stream - not supported, return error."""
-        raise OSError(errno.ENOTSUP, "dirfd not supported")
+        """Return fd for directory stream opened via fdopendir()."""
+        try:
+            fdir = self.vfs_open_dirs[p_dir.addr]
+        except KeyError:
+            raise OSError(errno.EBADF, "bad directory stream") from None
+        if fdir.fd < 0:
+            raise OSError(errno.ENOTSUP, "dirfd not supported for opendir streams")
+        return fdir.fd

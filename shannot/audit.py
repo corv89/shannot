@@ -43,6 +43,8 @@ EventType = Literal[
     "command_decision",
     "file_write_queued",
     "file_write_executed",
+    "file_deletion_queued",
+    "file_deletion_executed",
     "approval_decision",
     "execution_started",
     "execution_completed",
@@ -224,6 +226,7 @@ def log_session_created(session: Session) -> None:
             "script_path": session.script_path,
             "commands_count": len(session.commands),
             "writes_count": len(session.pending_writes),
+            "deletions_count": len(session.pending_deletions),
         },
         target=session.target,
     )
@@ -238,6 +241,7 @@ def log_session_loaded(session: Session) -> None:
             "status": session.status,
             "commands_count": len(session.commands),
             "writes_count": len(session.pending_writes),
+            "deletions_count": len(session.pending_deletions),
         },
         target=session.target,
     )
@@ -300,6 +304,28 @@ def log_file_write_queued(
     )
 
 
+def log_file_deletion_queued(
+    session_id: str | None,
+    path: str,
+    target_type: str,
+    size_bytes: int,
+    remote: bool,
+    target: str | None = None,
+) -> None:
+    """Log file/directory deletion queueing event."""
+    get_logger().log(
+        "file_deletion_queued",
+        session_id,
+        {
+            "path": path,
+            "target_type": target_type,
+            "size_bytes": size_bytes,
+            "remote": remote,
+        },
+        target=target,
+    )
+
+
 def log_approval_decision(
     sessions: list[Session],
     action: Literal["approved", "rejected"],
@@ -326,6 +352,7 @@ def log_execution_started(session: Session) -> None:
         {
             "commands_to_execute": len(session.commands),
             "writes_to_execute": len(session.pending_writes),
+            "deletions_to_execute": len(session.pending_deletions),
         },
         target=session.target,
     )

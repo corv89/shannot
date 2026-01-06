@@ -570,6 +570,7 @@ class VirtualizedProc:
             env_vars = [
                 f"HOME={self.virtual_home}",
                 f"USER={self.virtual_user}",
+                "SHANNOT_SANDBOX=1",
             ]
             # Allocate each string and collect pointers
             ptrs = []
@@ -603,6 +604,7 @@ class VirtualizedProc:
         env_vars = {
             "HOME": self.virtual_home,
             "USER": self.virtual_user,
+            "SHANNOT_SANDBOX": "1",
         }
         value = env_vars.get(name)
         if value is None:
@@ -690,7 +692,7 @@ class VirtualizedProc:
         raise Exception("subprocess calls the unsupported RPython get_stdout() helper")
 
     @signature("rewinddir(p)v")
-    def s_rewinddir(self, *args):
+    def s_rewinddir(self, p_dir: Ptr) -> None:
         raise Exception("subprocess calls the unsupported rewinddir() function")
 
     @signature("rpy_cpu_count()i")
