@@ -334,7 +334,7 @@ class VirtualizedProc:
     s_rpy_set_status_flags = sigerror("rpy_set_status_flags(ii)i")
     s_sched_get_priority_max = sigerror("sched_get_priority_max(i)i")
     s_sched_get_priority_min = sigerror("sched_get_priority_min(i)i")
-    s_sendfile = sigerror("sendfile(iipi)i")
+    s_sendfile = sigerror("sendfile(iiippi)i")
     s_setpriority = sigerror("setpriority(iii)i")
     s_setxattr = sigerror("setxattr(pppii)i")
     s_symlinkat = sigerror("symlinkat(pip)i")
@@ -504,9 +504,9 @@ class VirtualizedProc:
         self.sandio.write_buffer(p_buf, result_bytes + b"\x00")
         return len(result_bytes)
 
-    @signature("mach_absolute_time()l")
+    @signature("mach_absolute_time()i")
     def s_mach_absolute_time(self):
-        """Return high-resolution time (nanoseconds as 64-bit long)."""
+        """Return high-resolution time (nanoseconds as 64-bit int)."""
         return int(self.virtual_time * 1_000_000_000) & 0x7FFFFFFFFFFFFFFF
 
     @signature("mach_timebase_info(p)v")
@@ -544,7 +544,18 @@ class VirtualizedProc:
         return ((major & 0xFF) << 24) | (minor & 0xFFFFFF)
 
     s_getgrouplist = sigerror("getgrouplist(pipp)i", errno.EPERM, -1)
-    s_ftime = sigerror("ftime(p)i", errno.ENOSYS, -1)
+    s_ftime = sigerror("ftime(p)v", errno.ENOSYS, None)
+
+    # Wait status inspection macros (used by shutil, os.wait*, etc.)
+    # Return 0 since sandbox doesn't spawn real child processes
+    s_WCOREDUMP = sigerror("WCOREDUMP(i)i", 0, 0)
+    s_WEXITSTATUS = sigerror("WEXITSTATUS(i)i", 0, 0)
+    s_WIFCONTINUED = sigerror("WIFCONTINUED(i)i", 0, 0)
+    s_WIFEXITED = sigerror("WIFEXITED(i)i", 0, 0)
+    s_WIFSIGNALED = sigerror("WIFSIGNALED(i)i", 0, 0)
+    s_WIFSTOPPED = sigerror("WIFSTOPPED(i)i", 0, 0)
+    s_WSTOPSIG = sigerror("WSTOPSIG(i)i", 0, 0)
+    s_WTERMSIG = sigerror("WTERMSIG(i)i", 0, 0)
 
     @signature("pypy_debug_catch_fatal_exception()v")
     def s_pypy_debug_catch_fatal_exception(self):

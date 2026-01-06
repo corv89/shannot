@@ -717,3 +717,9 @@ class MixVFS:
     def s_closedir(self, p_dir):
         del self.vfs_open_dirs[p_dir.addr]
         self.sandio.free(p_dir)  # type: ignore[attr-defined]
+        return 0
+
+    @vfs_signature("dirfd(p)i")
+    def s_dirfd(self, p_dir):
+        """Return fd for directory stream - not supported, return error."""
+        raise OSError(errno.ENOTSUP, "dirfd not supported")
