@@ -79,10 +79,12 @@ def execute_script(
     if not runtime_path:
         raise RuntimeError("PyPy runtime not installed. Run 'shannot setup'")
 
-    # Write script to temp file
+    # Write script to temp file with bootstrap imports
+    # _bootlocale must be imported early for text I/O encoding to work correctly
+    bootstrap = "import _bootlocale\n"
     temp_dir = tmp_dir or Path(tempfile.gettempdir())
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, dir=temp_dir) as f:
-        f.write(script)
+        f.write(bootstrap + script)
         script_path = Path(f.name)
 
     try:

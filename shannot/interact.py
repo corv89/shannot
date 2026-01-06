@@ -163,6 +163,12 @@ def main(argv):
         if script_content is not None and script_arg_idx is not None:
             arguments[script_arg_idx] = "/script.py"
 
+    # Prepend bootstrap imports for correct module initialization
+    # _bootlocale must be imported early for text I/O encoding to work correctly
+    if script_content is not None:
+        bootstrap = b"import _bootlocale\n"
+        script_content = bootstrap + script_content
+
     # Auto-detect runtime if --lib-path not specified
     if not lib_path_specified:
         from shannot.runtime import get_runtime_path

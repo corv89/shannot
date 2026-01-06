@@ -11,8 +11,12 @@ def load_stub(name: str) -> bytes:
 
 
 def get_stubs() -> dict[str, bytes]:
-    """Return all stubs as {filename: content}."""
+    """Return all stubs as {filename: content}.
+
+    Stubs are overlaid on lib_pypy which is searched before lib-python/3.
+    """
     return {
+        "_bootlocale.py": load_stub("_bootlocale.py"),
         "_signal.py": load_stub("_signal.py"),
         "pwd.py": load_stub("pwd.py"),
         "subprocess.py": load_stub("subprocess.py"),
