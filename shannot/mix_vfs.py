@@ -389,25 +389,23 @@ class MixVFS:
             else:
                 raise
 
-        # Get file size from real filesystem if possible
+        # Get file size from real filesystem if possible (optional metadata)
         size = 0
         try:
             real_path = Path(path)
             if real_path.exists() and real_path.is_file():
                 size = real_path.stat().st_size
         except (OSError, PermissionError):
-            pass
+            pass  # Size is optional; use 0 if we can't stat the file
 
         # Queue the deletion for approval
         from .pending_deletion import PendingDeletion
-
-        is_remote = self.remote_target is not None
 
         pending = PendingDeletion(
             path=path,
             target_type="file",
             size=size,
-            remote=is_remote,
+            remote=self.remote_target is not None,
         )
         self.file_deletions_pending.append(pending)
 
@@ -516,7 +514,7 @@ class MixVFS:
                 if real_path.exists() and real_path.is_file():
                     size = real_path.stat().st_size
             except (OSError, PermissionError):
-                pass
+                pass  # Size is optional; use 0 if we can't stat the file
 
             pending = PendingDeletion(
                 path=full_path,
@@ -785,7 +783,7 @@ class MixVFS:
                     original = f.read()
                     f.close()
                 except OSError:
-                    pass
+                    pass  # File exists but can't be read; treat as new file
             except OSError:
                 if not create_mode:
                     raise
