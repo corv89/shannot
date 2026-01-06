@@ -5,16 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] - 2026-01-06
 
 ### Features
 
+- **Deletion tracking**: `shutil.rmtree()` and file deletions are now queued for approval
+  - Full support for fd-based directory operations (fdopendir, dirfd, unlinkat)
+  - Deletions displayed in approve TUI with file/directory counts
+  - Audit logging for deletion events
 - Add PyPy sandbox support for macOS ARM64
 - Add slash commands for changelog, pr, and release skills
 - Mount home directory read-only in sandbox VFS
 
 ### Enhancements
 
+- Add `SHANNOT_SANDBOX=1` environment variable for sandbox detection by scripts
 - Add darwin/arm64 struct sizes to validation
 - Add `check_output` to subprocess stub for `platform.node()` support
 - Add `pwd` stub and populate environ with HOME/USER for `expanduser()` support
