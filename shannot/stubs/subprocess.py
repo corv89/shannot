@@ -70,6 +70,12 @@ def run(
     return result
 
 
+def check_output(args, *, stdin=None, stderr=None, shell=False, cwd=None, timeout=None, **kwargs):
+    """Run command and return output, raising CalledProcessError on failure."""
+    result = run(args, capture_output=True, shell=shell, cwd=cwd, timeout=timeout, check=True)
+    return result.stdout
+
+
 class CalledProcessError(Exception):
     def __init__(self, returncode, cmd, stdout=None, stderr=None):
         self.returncode = returncode
