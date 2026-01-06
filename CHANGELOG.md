@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Add PyPy sandbox support for macOS ARM64
+- Add slash commands for changelog, pr, and release skills
+- Mount home directory read-only in sandbox VFS
+
+### Enhancements
+
+- Add darwin/arm64 struct sizes to validation
+- Add `check_output` to subprocess stub for `platform.node()` support
+- Add `pwd` stub and populate environ with HOME/USER for `expanduser()` support
+- Add `_bootlocale` stub for text I/O encoding support
+- Add missing syscall signatures (W* macros, dirfd, sendfile, mach_absolute_time, ftime)
+
+### Bug Fixes
+
+- Fix misleading sandbox binary path in status message
+- Fix Unicode output handling - preserve UTF-8 characters in sandbox output
+
 ## [0.9.4] - 2025-12-28
 
 ### Enhancements
