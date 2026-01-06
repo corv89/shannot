@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 
 class MixDumpOutput:
     """Sanitize and dump all output, sent to stdout or stderr, to the
-    real stdout and stderr.  For now replaces any non-ASCII character with
-    '?'.  It may also output ANSI color codes to make it obvious that it's
-    coming from the sandboxed process."""
+    real stdout and stderr.  Replaces control characters (except newline,
+    tab, carriage return) with '?'.  Unicode characters are preserved.
+    May output ANSI color codes to distinguish sandbox output."""
 
     dump_stdout_fmt = "{0}"
     dump_stderr_fmt = "{0}"
@@ -27,12 +27,15 @@ class MixDumpOutput:
         return f"\x1b[{color_number}m{{0}}\x1b[0m"
 
     def dump_sanitize(self, data):
-        data = data.decode("latin1")  # string => unicode, on top of python 3
+        # Decode as UTF-8, replacing invalid sequences
+        data = data.decode("utf-8", errors="replace")
+        # Filter out control characters except newline, tab, carriage return
         lst = []
         for c in data:
-            if not (" " <= c < "\x7f" or c == "\n"):
-                c = "?"
-            lst.append(c)
+            if c >= " " or c in "\n\t\r":
+                lst.append(c)
+            else:
+                lst.append("?")
         return "".join(lst)
 
     @signature("write(ipi)i")
