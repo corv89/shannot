@@ -78,6 +78,36 @@ def format_execution_summary(session: Session, *, use_color: bool = True) -> str
                 error = write_info.get("error", "unknown error")
                 lines.append(f"  {mark} {path} ({error})")
 
+    # Files/directories deleted
+    if session.completed_deletions:
+        if lines:
+            lines.append("")
+        # Count actual deletions (not skipped)
+        actual = [d for d in session.completed_deletions if not d.get("skipped")]
+        skipped = len(session.completed_deletions) - len(actual)
+        skip_note = f" ({skipped} already removed)" if skipped else ""
+        lines.append(f"Deleted {len(actual)} item(s){skip_note}:")
+        for del_info in session.completed_deletions:
+            path = del_info.get("path", "")
+            success = del_info.get("success", False)
+            skipped_item = del_info.get("skipped", False)
+            target_type = del_info.get("target_type", "file")
+
+            if skipped_item:
+                continue  # Don't show skipped items
+
+            if use_color:
+                mark = f"{GREEN}✓{RESET}" if success else f"{RED}✗{RESET}"
+            else:
+                mark = "✓" if success else "✗"
+
+            type_label = " [dir]" if target_type == "directory" else ""
+            if success:
+                lines.append(f"  {mark} {path}{type_label}")
+            else:
+                error = del_info.get("error", "unknown error")
+                lines.append(f"  {mark} {path} ({error})")
+
     return "\n".join(lines)
 
 
@@ -182,6 +212,9 @@ def execute_session_direct(session) -> int:
     # Commit pending writes to filesystem
     completed_writes = session.commit_writes()
 
+    # Commit pending deletions to filesystem
+    completed_deletions = session.commit_deletions()
+
     # Update session with results
     session.stdout = stdout
     session.stderr = stderr
@@ -190,6 +223,7 @@ def execute_session_direct(session) -> int:
     session.status = "executed" if exit_code == 0 else "failed"
     session.executed_commands = executed_commands
     session.completed_writes = completed_writes
+    session.completed_deletions = completed_deletions
     session.save()
 
     # Print output

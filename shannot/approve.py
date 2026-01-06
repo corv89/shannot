@@ -154,6 +154,7 @@ class SessionListView(View):
 
             cmd_count = len(session.commands)
             write_count = len(session.pending_writes)
+            delete_count = len(session.pending_deletions)
             date = session.created_at[:10]
             name = session.name[:30]
 
@@ -161,6 +162,8 @@ class SessionListView(View):
             counts = f"{cmd_count:>2} cmds"
             if write_count:
                 counts += f", {write_count} writes"
+            if delete_count:
+                counts += f", {delete_count} deletes"
 
             # Show remote target if present
             remote_tag = ""
@@ -294,10 +297,41 @@ class SessionDetailView(View):
             if len(s.pending_writes) > 3:
                 print(f"       ... ({len(s.pending_writes) - 3} more)")
 
+        # Show pending deletions summary (collapsed by directory)
+        if s.pending_deletions:
+            from .pending_deletion import format_size, summarize_deletions
+
+            print()
+            total_size = sum(d.get("size", 0) for d in s.pending_deletions)
+            count = len(s.pending_deletions)
+            print(f" \033[1mDeletions ({count} items, {format_size(total_size)}):\033[0m")
+
+            # Group by root directory
+            summaries = summarize_deletions(s.pending_deletions)
+            for i, summary in enumerate(summaries[:3]):
+                root = summary["root"]
+                file_count = summary["file_count"]
+                dir_count = summary["dir_count"]
+                size = summary["total_size"]
+
+                parts = []
+                if file_count:
+                    parts.append(f"{file_count} files")
+                if dir_count:
+                    parts.append(f"{dir_count} dirs")
+                detail = ", ".join(parts)
+
+                size_str = format_size(size)
+                print(f"   {i + 1:>3}. \033[31mDELETE\033[0m {root} ({detail}, {size_str})")
+            if len(summaries) > 3:
+                print(f"       ... ({len(summaries) - 3} more directories)")
+
         print()
         help_text = " \033[90m[Up/Down] scroll  [v] view script"
         if s.pending_writes:
             help_text += "  [w] view writes"
+        if s.pending_deletions:
+            help_text += "  [d] view deletes"
         help_text += "  [x] execute  [r] reject  [Esc] back\033[0m"
         print(help_text)
 
@@ -320,6 +354,9 @@ class SessionDetailView(View):
 
         elif key == "w" and self.session.pending_writes:
             return PendingWritesListView(self.session)
+
+        elif key == "d" and self.session.pending_deletions:
+            return PendingDeletionsListView(self.session)
 
         elif key == "x":
             return Action("execute", [self.session])
@@ -480,6 +517,84 @@ class PendingWritesListView(View):
 
 
 # ==============================================================================
+# Pending Deletions List View
+# ==============================================================================
+
+
+class PendingDeletionsListView(View):
+    """List of pending file/directory deletions for a session."""
+
+    def __init__(self, session: Session):
+        self.session = session
+        self.cursor = 0
+
+    def render(self) -> None:
+        clear_screen()
+        rows, cols = get_terminal_size()
+
+        from .pending_deletion import format_size
+
+        total_size = sum(d.get("size", 0) for d in self.session.pending_deletions)
+        print(f"\033[1m Pending Deletions: {self.session.name} ({format_size(total_size)}) \033[0m")
+        print()
+
+        if not self.session.pending_deletions:
+            print(" No pending deletions.")
+            print()
+            print(" \033[90m[Esc] back\033[0m")
+            return
+
+        visible_rows = rows - 8
+        if visible_rows < 3:
+            visible_rows = 3
+
+        start = max(0, self.cursor - visible_rows // 2)
+        visible = self.session.pending_deletions[start : start + visible_rows]
+
+        for i, del_data in enumerate(visible):
+            idx = start + i
+            pointer = "\033[36m>\033[0m" if idx == self.cursor else " "
+            path = del_data.get("path", "?")
+            target_type = del_data.get("target_type", "file")
+            size = del_data.get("size", 0)
+            remote = "\033[33m[R]\033[0m" if del_data.get("remote") else "   "
+
+            type_icon = "DIR" if target_type == "directory" else "   "
+            size_str = format_size(size) if size > 0 else ""
+
+            display_path = path[: cols - 35]
+            if len(path) > cols - 35:
+                display_path += "..."
+
+            line = f" {pointer} \033[31mDEL\033[0m {type_icon} {remote} {display_path:<50}"
+            print(f"{line} {size_str:>10}")
+
+        print()
+        remaining = len(self.session.pending_deletions) - start - len(visible)
+        if remaining > 0:
+            print(f" ... and {remaining} more")
+        print()
+        print(" \033[90m[Up/Down] scroll  [Esc] back\033[0m")
+
+    def handle_key(self, key: str) -> Action | View | None:
+        if not self.session.pending_deletions:
+            if key in ("b", "\x1b"):
+                return Action("back")
+            return None
+
+        if key in ("b", "\x1b"):
+            return Action("back")
+
+        elif key in ("j", "\x1b[B"):
+            self.cursor = min(self.cursor + 1, len(self.session.pending_deletions) - 1)
+
+        elif key in ("k", "\x1b[A"):
+            self.cursor = max(self.cursor - 1, 0)
+
+        return None
+
+
+# ==============================================================================
 # Pending Write Diff View
 # ==============================================================================
 
@@ -569,6 +684,8 @@ class ConfirmView(View):
             counts = f"{len(s.commands)} commands"
             if s.pending_writes:
                 counts += f", {len(s.pending_writes)} writes"
+            if s.pending_deletions:
+                counts += f", {len(s.pending_deletions)} deletes"
             print(f"   - {s.name} ({counts})")
 
         print()
@@ -677,6 +794,22 @@ class OutputView(View):
                     lines.append(f"✓ {path} ({size} bytes)")
                 else:
                     error = write_info.get("error", "unknown")
+                    lines.append(f"✗ {path} ({error})")
+            lines.append("")
+
+        # Show completed deletions (if any)
+        if self.session.completed_deletions:
+            lines.append("--- deletions ---")
+            for del_info in self.session.completed_deletions:
+                path = del_info.get("path", "")
+                if del_info.get("skipped"):
+                    continue  # Don't show skipped items
+                if del_info.get("success"):
+                    target_type = del_info.get("target_type", "file")
+                    type_label = " [dir]" if target_type == "directory" else ""
+                    lines.append(f"✓ {path}{type_label}")
+                else:
+                    error = del_info.get("error", "unknown")
                     lines.append(f"✗ {path} ({error})")
             lines.append("")
 

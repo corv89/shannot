@@ -427,6 +427,7 @@ def cmd_run_remote(args: argparse.Namespace) -> int:
             print(f"    Target: {args.target}")
             print(f"    Commands queued: {len(session.commands)}")
             print(f"    File writes queued: {len(session.pending_writes)}")
+            print(f"    Deletions queued: {len(session.pending_deletions)}")
             print("    Run 'shannot approve' to review and execute.")
             return 0
         else:

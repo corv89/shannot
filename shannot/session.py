@@ -29,6 +29,7 @@ class Session:
     script_path: str  # Original script path
     commands: list[str] = field(default_factory=list)  # Queued commands
     pending_writes: list[dict] = field(default_factory=list)  # Queued file writes
+    pending_deletions: list[dict] = field(default_factory=list)  # Queued file/dir deletions
     analysis: str = ""  # Description of what script does
     status: SessionStatus = "pending"
     created_at: str = ""  # ISO timestamp
@@ -43,6 +44,7 @@ class Session:
     # Execution tracking (populated after execution completes)
     executed_commands: list[dict] = field(default_factory=list)  # {cmd, exit_code}
     completed_writes: list[dict] = field(default_factory=list)  # {path, success, size/error}
+    completed_deletions: list[dict] = field(default_factory=list)  # {path, success, target_type}
 
     # Remote execution fields
     target: str | None = None  # SSH target (user@host) if remote
@@ -118,6 +120,113 @@ class Session:
                         "size": len(content),
                     }
                 )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
+
+    def commit_deletions(self) -> list[dict]:
+        """
+        Commit pending deletions to real filesystem.
+
+        Deletions are processed in order (files before parent directories,
+        as captured by rmtree). Already-deleted items are skipped.
+
+        Returns list of results: {path, success, target_type} or {path, success, error}
+        """
+        results = []
+        for del_data in self.pending_deletions:
+            path = del_data.get("path", "")
+            target_type = del_data.get("target_type", "file")
+
+            try:
+                target_path = Path(path)
+
+                if not target_path.exists():
+                    # Already deleted (e.g., parent rmtree already removed it)
+                    results.append(
+                        {
+                            "path": path,
+                            "success": True,
+                            "target_type": target_type,
+                            "skipped": True,
+                        }
+                    )
+                    continue
+
+                if target_type == "directory":
+                    target_path.rmdir()
+                else:
+                    target_path.unlink()
+
+                results.append(
+                    {
+                        "path": path,
+                        "success": True,
+                        "target_type": target_type,
+                    }
+                )
+            except Exception as e:
+                results.append(
+                    {
+                        "path": path,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
+
+    def commit_deletions_remote(self, ssh: object) -> list[dict]:
+        """
+        Commit pending deletions to remote filesystem via SSH.
+
+        Parameters
+        ----------
+        ssh
+            An SSHConnection instance with run() method.
+
+        Returns
+        -------
+        list[dict]
+            List of results: {path, success, target_type} or {path, success, error}
+        """
+        import shlex
+
+        results = []
+        for del_data in self.pending_deletions:
+            path = del_data.get("path", "")
+            target_type = del_data.get("target_type", "file")
+
+            try:
+                if target_type == "directory":
+                    result = ssh.run(f"rmdir {shlex.quote(path)} 2>/dev/null || true")  # type: ignore[union-attr]
+                else:
+                    result = ssh.run(f"rm -f {shlex.quote(path)}")  # type: ignore[union-attr]
+
+                if result.returncode == 0:
+                    results.append(
+                        {
+                            "path": path,
+                            "success": True,
+                            "target_type": target_type,
+                        }
+                    )
+                else:
+                    stderr = result.stderr.decode("utf-8", errors="replace").strip()
+                    results.append(
+                        {
+                            "path": path,
+                            "success": False,
+                            "error": stderr or "deletion failed",
+                        }
+                    )
             except Exception as e:
                 results.append(
                     {
@@ -336,6 +445,7 @@ def create_session(
     analysis: str = "",
     sandbox_args: dict | None = None,
     pending_writes: list[dict] | None = None,
+    pending_deletions: list[dict] | None = None,
 ) -> Session:
     """Create a new session from a dry-run execution."""
     if name is None:
@@ -347,6 +457,7 @@ def create_session(
         script_path=script_path,
         commands=commands,
         pending_writes=pending_writes or [],
+        pending_deletions=pending_deletions or [],
         analysis=analysis,
         sandbox_args=sandbox_args or {},
     )

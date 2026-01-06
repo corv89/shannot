@@ -99,10 +99,12 @@ def main(argv):
         elif option == "--dry-run":
             SandboxedProc.subprocess_dry_run = True
             SandboxedProc.vfs_track_writes = True  # Track file writes for approval
+            SandboxedProc.vfs_track_deletions = True  # Track file deletions for approval
         elif option == "--session-id":
             session_id = value
-            # Enable write tracking for session execution (writes committed after)
+            # Enable tracking for session execution (writes/deletions committed after)
             SandboxedProc.vfs_track_writes = True
+            SandboxedProc.vfs_track_deletions = True
         elif option == "--script-name":
             SandboxedProc.subprocess_script_name = value  # type: ignore[misc]
             sandbox_args["script_name"] = value
@@ -319,6 +321,7 @@ def main(argv):
             print(f"\n*** Session created: {session.id} ***")
             print(f"    Commands queued: {len(session.commands)}")
             print(f"    File writes queued: {len(session.pending_writes)}")
+            print(f"    Deletions queued: {len(session.pending_deletions)}")
             print("    Run 'shannot approve' to review and execute.")
         else:
             print("\n*** No commands or writes were queued. ***")
