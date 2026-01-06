@@ -295,7 +295,7 @@ def pack_gid_t(gid: int) -> bytes:
 _EXPECTED_SIZES = {
     ("linux", "aarch64"): {"stat": 128, "dirent": 280, "timeval": 16},
     ("linux", "x86_64"): {"stat": 144, "dirent": 280, "timeval": 16},
-    # macOS sizes TBD
+    ("darwin", "arm64"): {"stat": 144, "dirent": 1048, "timeval": 16},
 }
 
 
