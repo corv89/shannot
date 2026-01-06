@@ -102,7 +102,7 @@ markers = [
 [tool.basedpyright]
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
-exclude = [".venv/", "site/"]
+exclude = [".venv/", "site/", "build/"]
 reportDeprecated = false
 reportUnnecessaryIsInstance = false
 reportUnusedCallResult = "warning"

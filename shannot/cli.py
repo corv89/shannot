@@ -740,8 +740,8 @@ def cmd_status(args: argparse.Namespace) -> int:
             print(f"  ✓ Sandbox binary: {sandbox_path}")
         else:
             print("  ✗ Sandbox binary not found")
-            print("    Build pypy-sandbox from PyPy source and add to PATH,")
-            print(f"    or place in {RUNTIME_DIR}/pypy-sandbox")
+            print("    Build pypy-sandbox from PyPy source and add pypy3-c to PATH,")
+            print(f"    or place pypy3-c binary in {RUNTIME_DIR}/")
 
         # Run self-test if both runtime and sandbox are available
         if is_runtime_installed() and sandbox_path:
