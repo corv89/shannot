@@ -14,19 +14,15 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .config import (
-    PYPY_DOWNLOAD_URL,
-    PYPY_SHA256,
-    PYPY_VERSION,
     RUNTIME_DIR,
     RUNTIME_LIB_PYPY,
     RUNTIME_LIB_PYTHON,
     SANDBOX_BINARY_NAME,
     SANDBOX_BINARY_PATH,
-    SANDBOX_CHECKSUMS,
+    SANDBOX_CONFIG,
     SANDBOX_LIB_NAME,
     SANDBOX_LIB_PATH,
-    SANDBOX_RELEASES_URL,
-    SANDBOX_VERSION,
+    get_pypy_config,
 )
 
 
@@ -67,8 +63,8 @@ def get_platform_tag() -> str | None:
 
     if system == "linux":
         return f"linux-{arch}"
-    # elif system == "darwin":
-    #     return f"darwin-{arch}"  # Future
+    elif system == "darwin":
+        return f"darwin-{arch}"
 
     return None
 
@@ -185,8 +181,8 @@ def extract_runtime(
 def setup_runtime(
     force: bool = False,
     verbose: bool = True,
-    download_url: str = PYPY_DOWNLOAD_URL,
-    expected_sha256: str = PYPY_SHA256,
+    download_url: str | None = None,
+    expected_sha256: str | None = None,
 ) -> bool:
     """
     Download and install PyPy runtime.
@@ -194,12 +190,19 @@ def setup_runtime(
     Args:
         force: Reinstall even if already present
         verbose: Print progress to stdout
-        download_url: URL to download from
-        expected_sha256: Expected SHA256 checksum
+        download_url: URL to download from (uses platform-specific default)
+        expected_sha256: Expected SHA256 checksum (uses platform-specific default)
 
     Returns:
         True if installation succeeded
     """
+    # Get platform-specific config
+    pypy_config = get_pypy_config()
+    if download_url is None:
+        download_url = pypy_config["url"]
+    if expected_sha256 is None:
+        expected_sha256 = pypy_config["sha256"]
+
     # Check if already installed
     if is_runtime_installed() and not force:
         if verbose:
@@ -215,7 +218,7 @@ def setup_runtime(
 
     # Download
     if verbose:
-        print(f"Downloading PyPy {PYPY_VERSION} stdlib from pypy.org...")
+        print(f"Downloading PyPy {pypy_config['version']} stdlib from pypy.org...")
         print(f"  URL: {download_url}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -301,7 +304,6 @@ def remove_runtime(verbose: bool = True) -> bool:
 def download_sandbox(
     force: bool = False,
     verbose: bool = True,
-    version: str = SANDBOX_VERSION,
 ) -> bool:
     """
     Download pre-built PyPy sandbox binary from GitHub releases.
@@ -309,7 +311,6 @@ def download_sandbox(
     Args:
         force: Reinstall even if already present
         verbose: Print progress to stdout
-        version: Release version/tag to download
 
     Returns:
         True if installation succeeded
@@ -329,22 +330,22 @@ def download_sandbox(
     if not platform_tag:
         raise SetupError(
             f"Unsupported platform: {platform.system()} {platform.machine()}\n"
-            "Supported: Linux x86_64, Linux aarch64\n"
+            "Supported: Linux x86_64, Linux aarch64, macOS x86_64, macOS arm64\n"
             "You can build from source: https://github.com/corv89/pypy"
         )
 
-    # Check if we have a checksum for this platform
-    expected_sha256 = SANDBOX_CHECKSUMS.get(platform_tag, "")
-    if not expected_sha256:
+    # Get platform-specific config
+    sandbox_config = SANDBOX_CONFIG.get(platform_tag)
+    if not sandbox_config or not sandbox_config.get("sha256"):
         raise SetupError(
             f"No pre-built binary available for {platform_tag}\n"
             "You can build from source: https://github.com/corv89/pypy"
         )
 
-    # Construct download URL
-    # Format: https://github.com/corv89/pypy/releases/download/pypy3-sandbox-7.3.6/pypy3-sandbox-linux-amd64.tar.gz
-    archive_name = f"pypy3-sandbox-{platform_tag}.tar.gz"
-    download_url = f"{SANDBOX_RELEASES_URL}/{version}/{archive_name}"
+    version = sandbox_config["version"]
+    download_url = sandbox_config["url"]
+    expected_sha256 = sandbox_config["sha256"]
+    archive_name = download_url.rsplit("/", 1)[-1]  # Extract filename from URL
 
     if verbose:
         print(f"Downloading PyPy sandbox ({version}) for {platform_tag}...")
