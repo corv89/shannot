@@ -20,6 +20,7 @@ from .config import (
     get_remote_deploy_dir,
     get_version,
 )
+from .runtime import get_ssl_context
 from .ssh import SSHConnection
 
 if TYPE_CHECKING:
@@ -77,7 +78,8 @@ def _download_file(url: str, dest: Path, desc: str = "Downloading") -> None:
 
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "shannot/1.0"})
-        with urllib.request.urlopen(request) as response:
+        ssl_context = get_ssl_context()
+        with urllib.request.urlopen(request, context=ssl_context) as response:
             total_size = int(response.headers.get("Content-Length", 0))
             downloaded = 0
 

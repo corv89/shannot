@@ -82,9 +82,9 @@ PYPY_CONFIG: dict[str, dict[str, str]] = {
         "sha256": "a23d21ca0de0f613732af4b4abb0b0db1cc56134b5bf0e33614eca87ab8805af",
     },
     "darwin": {
-        "version": "7.3.17",  # PyPy 3.8
-        "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.17-src.tar.bz2",
-        "sha256": "7491a669e3abc3420aca0cfb58cc69f8e0defda4469f503fd6cb415ec93d6b13",
+        "version": "7.3.11",  # PyPy 3.8
+        "url": "https://downloads.python.org/pypy/pypy3.8-v7.3.11-src.tar.bz2",
+        "sha256": "4d6769bfca73734e8666fd70503b7ceb06a6e259110e617331bb3899ca4e6058",
     },
 }
 
