@@ -13,12 +13,9 @@ from typing import TYPE_CHECKING
 
 from .config import (
     DATA_DIR,
-    PYPY_DOWNLOAD_URL,
-    PYPY_SHA256,
+    PYPY_CONFIG,
     RELEASE_PATH_ENV,
-    SANDBOX_CHECKSUMS,
-    SANDBOX_RELEASES_URL,
-    SANDBOX_VERSION,
+    SANDBOX_CONFIG,
     SHANNOT_RELEASES_URL,
     get_remote_deploy_dir,
     get_version,
@@ -176,20 +173,21 @@ def _get_sandbox_binary(arch: str) -> Path:
     Downloads from corv89/pypy releases.
     """
     platform_tag = _arch_to_platform_tag(arch)
-    archive_name = f"pypy3-sandbox-{platform_tag}.tar.gz"
 
-    # Check cache
-    cached_binary = CACHE_DIR / "pypy" / SANDBOX_VERSION / f"pypy3-c-{arch}"
-    if cached_binary.exists():
-        return cached_binary
-
-    # Check for checksum
-    expected_sha256 = SANDBOX_CHECKSUMS.get(platform_tag, "")
-    if not expected_sha256:
+    # Get platform-specific config
+    sandbox_config = SANDBOX_CONFIG.get(platform_tag)
+    if not sandbox_config or not sandbox_config.get("sha256"):
         raise FileNotFoundError(f"No pre-built sandbox for {platform_tag}")
 
-    # Download archive
-    url = f"{SANDBOX_RELEASES_URL}/{SANDBOX_VERSION}/{archive_name}"
+    version = sandbox_config["version"]
+    url = sandbox_config["url"]
+    expected_sha256 = sandbox_config["sha256"]
+    archive_name = url.rsplit("/", 1)[-1]
+
+    # Check cache
+    cached_binary = CACHE_DIR / "pypy" / version / f"pypy3-c-{arch}"
+    if cached_binary.exists():
+        return cached_binary
     with tempfile.TemporaryDirectory() as tmpdir:
         archive_path = Path(tmpdir) / archive_name
         _download_file(url, archive_path, f"Downloading pypy3-sandbox for {platform_tag}")
@@ -229,20 +227,20 @@ def _get_sandbox_lib(arch: str) -> Path | None:
     Returns None if not present in archive (statically linked).
     """
     platform_tag = _arch_to_platform_tag(arch)
-    archive_name = f"pypy3-sandbox-{platform_tag}.tar.gz"
 
-    # Check cache
-    cached_lib = CACHE_DIR / "pypy" / SANDBOX_VERSION / f"libpypy3-c-{arch}.so"
-    if cached_lib.exists():
-        return cached_lib
-
-    # The library should have been extracted when we got the binary
-    # If not cached, try to extract from archive
-    expected_sha256 = SANDBOX_CHECKSUMS.get(platform_tag, "")
-    if not expected_sha256:
+    # Get platform-specific config
+    sandbox_config = SANDBOX_CONFIG.get(platform_tag)
+    if not sandbox_config or not sandbox_config.get("sha256"):
         return None
 
-    url = f"{SANDBOX_RELEASES_URL}/{SANDBOX_VERSION}/{archive_name}"
+    version = sandbox_config["version"]
+    url = sandbox_config["url"]
+    archive_name = url.rsplit("/", 1)[-1]
+
+    # Check cache
+    cached_lib = CACHE_DIR / "pypy" / version / f"libpypy3-c-{arch}.so"
+    if cached_lib.exists():
+        return cached_lib
     with tempfile.TemporaryDirectory() as tmpdir:
         archive_path = Path(tmpdir) / archive_name
         _download_file(url, archive_path, f"Downloading sandbox lib for {platform_tag}")
@@ -273,18 +271,25 @@ def _get_stdlib_archive() -> Path:
     Get PyPy stdlib archive, downloading if needed.
 
     Downloads from official PyPy downloads (python.org).
+    For remote deployment, always use Linux config.
     """
+    # Get Linux PyPy config (remote deployment is always Linux)
+    pypy_config = PYPY_CONFIG["linux"]
+    url = pypy_config["url"]
+    expected_sha256 = pypy_config["sha256"]
+    archive_name = url.rsplit("/", 1)[-1]
+
     # Cache the source archive
-    cached = CACHE_DIR / "pypy" / "pypy3.6-v7.3.3-src.tar.bz2"
+    cached = CACHE_DIR / "pypy" / archive_name
     if cached.exists():
         return cached
 
-    _download_file(PYPY_DOWNLOAD_URL, cached, "Downloading PyPy stdlib")
+    _download_file(url, cached, "Downloading PyPy stdlib")
 
     # Verify checksum
     sys.stderr.write("[DEPLOY]   Verifying checksum... ")
     sys.stderr.flush()
-    if not _verify_checksum(cached, PYPY_SHA256):
+    if not _verify_checksum(cached, expected_sha256):
         sys.stderr.write("FAILED\n")
         cached.unlink()
         raise RuntimeError("Checksum verification failed")

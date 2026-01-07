@@ -294,7 +294,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Local execution
     from .config import RUNTIME_DIR
     from .interact import main as interact_main
-    from .runtime import SetupError, find_pypy_sandbox, get_runtime_path, setup_runtime
+    from .runtime import (
+        SetupError,
+        download_sandbox,
+        find_pypy_sandbox,
+        get_runtime_path,
+        setup_runtime,
+    )
 
     argv = []
 
@@ -334,6 +340,15 @@ def cmd_run(args: argparse.Namespace) -> int:
                 return 1
 
             argv.append(f"--lib-path={runtime_path}")
+
+            # Also try to download sandbox binary (graceful failure)
+            try:
+                download_sandbox(verbose=True)
+            except SetupError as e:
+                # Graceful: continue without binary, user will get instructions later
+                print(f"Note: Could not download sandbox binary: {e}", file=sys.stderr)
+                print("You can download it manually with: shannot setup runtime", file=sys.stderr)
+
             print("", file=sys.stderr)
             print("Setup complete! Running script...", file=sys.stderr)
             print("", file=sys.stderr)
