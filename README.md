@@ -7,7 +7,7 @@
 
 **Human-in-the-loop execution for LLM agents.**
 
-<img src="https://github.com/corv89/shannot/blob/6e7eb59a0a73ab5ad75a91145960211a9ae5ac11/docs/shannot-demo.gif" width="540" />
+<a href="https://asciinema.org/a/766444"><img src="https://github.com/corv89/shannot/blob/6e7eb59a0a73ab5ad75a91145960211a9ae5ac11/docs/shannot-demo.gif" width="540" alt="Shannot Demo"/></a>
 
 Shannot lets you see what AI agents want to do before they do it. Scripts run in a supervised environment that captures all commands and file writes. You review in a TUI, approve what's safe, and only then do changes apply.
 
