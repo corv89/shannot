@@ -45,9 +45,10 @@ class TestSelfTestScript:
         # Should parse without error
         compile(SELF_TEST_SCRIPT, "<selftest>", "exec")
 
-    def test_script_uses_platform_node(self):
-        """Test that the script uses platform.node()."""
-        assert "platform.node()" in SELF_TEST_SCRIPT
+    def test_script_uses_sys_version(self):
+        """Test that the script uses sys.version_info (pure Python, no subprocess)."""
+        assert "sys.version_info" in SELF_TEST_SCRIPT
+        assert "sandbox ok" in SELF_TEST_SCRIPT
         assert "print" in SELF_TEST_SCRIPT
 
 
@@ -79,7 +80,7 @@ class TestRunLocalSelfTest:
         """Test successful subprocess execution."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = b"sandbox host: sandbox\n"
+        mock_result.stdout = b"sandbox ok: (3, 6)\n"
         mock_result.stderr = b""
 
         with (
@@ -90,7 +91,7 @@ class TestRunLocalSelfTest:
             result = run_local_self_test()
 
         assert result.success is True
-        assert result.output == "sandbox host: sandbox"
+        assert result.output == "sandbox ok: (3, 6)"
         assert result.error is None
         assert result.elapsed_ms > 0
 
@@ -130,10 +131,11 @@ class TestRunLocalSelfTest:
         assert result.elapsed_ms == 30000
 
     def test_output_parsing_multiline(self):
-        """Test that we extract the last non-empty line from output."""
+        """Test that we extract the first line, skipping summary messages."""
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = b"Setup message\n\nsandbox host: sandbox\n"
+        # Script output comes first, summary message comes after
+        mock_result.stdout = b"sandbox ok: (3, 6)\n\n*** No commands or writes were queued. ***\n"
         mock_result.stderr = b""
 
         with (
@@ -144,4 +146,5 @@ class TestRunLocalSelfTest:
             result = run_local_self_test()
 
         assert result.success is True
-        assert result.output == "sandbox host: sandbox"
+        # Should get the script output, not the summary message
+        assert result.output == "sandbox ok: (3, 6)"
