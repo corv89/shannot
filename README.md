@@ -7,9 +7,9 @@
 
 **Human-in-the-loop execution for LLM agents.**
 
-Shannot lets you see what AI agents want to do before they do it. Scripts run in a supervised environment that captures all commands and file writes. You review in a TUI, approve what's safe, and only then do changes apply.
+[![asciicast](https://asciinema.org/a/766444.svg)](https://asciinema.org/a/766444)
 
-No more `--dangerously-skip-permissions`.
+Shannot lets you see what AI agents want to do before they do it. Scripts run in a supervised environment that captures all commands and file writes. You review in a TUI, approve what's safe, and only then do changes apply.
 
 ## How It Works
 
