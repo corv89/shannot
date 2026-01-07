@@ -11,6 +11,8 @@
 
 Shannot lets you see what AI agents want to do before they do it. Scripts run in a supervised environment that captures all commands and file writes. You review in a TUI, approve what's safe, and only then do changes apply.
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/corv89/shannot?quickstart=1)
+
 ## How It Works
 
 ```mermaid
