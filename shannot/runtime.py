@@ -6,6 +6,7 @@ import hashlib
 import os
 import platform
 import shutil
+import ssl
 import sys
 import tarfile
 import tempfile
@@ -30,6 +31,36 @@ class SetupError(Exception):
     """Runtime setup failed."""
 
     pass
+
+
+def get_ssl_context() -> ssl.SSLContext:
+    """Get SSL context that works on macOS with Nuitka binaries.
+
+    Nuitka-compiled binaries on macOS can't find system SSL certificates.
+    This function tries multiple certificate locations.
+    """
+    # Try default context first (works on most systems)
+    ctx = ssl.create_default_context()
+
+    # On macOS, try known certificate locations if default fails verification
+    if platform.system() == "Darwin":
+        # Common certificate locations on macOS
+        cert_paths = [
+            "/etc/ssl/cert.pem",  # Homebrew OpenSSL
+            "/opt/homebrew/etc/openssl@3/cert.pem",  # Homebrew ARM64
+            "/usr/local/etc/openssl@3/cert.pem",  # Homebrew x86_64
+            "/opt/homebrew/etc/openssl/cert.pem",
+            "/usr/local/etc/openssl/cert.pem",
+        ]
+        for cert_path in cert_paths:
+            if os.path.exists(cert_path):
+                try:
+                    ctx = ssl.create_default_context(cafile=cert_path)
+                    break
+                except ssl.SSLError:
+                    continue
+
+    return ctx
 
 
 def is_runtime_installed() -> bool:
@@ -114,8 +145,9 @@ def download_with_progress(
 ) -> None:
     """Download URL to dest with optional progress reporting."""
     request = urllib.request.Request(url, headers={"User-Agent": "shannot/1.0"})
+    ssl_context = get_ssl_context()
 
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, context=ssl_context) as response:
         total_size = int(response.headers.get("Content-Length", 0))
         downloaded = 0
 
