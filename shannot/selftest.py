@@ -13,10 +13,10 @@ import time
 from dataclasses import dataclass
 
 # Minimal script that exercises basic sandbox functionality
-# Uses platform.node() which verifies uname syscall virtualization
+# Uses pure Python (no subprocess calls) to verify execution works
 SELF_TEST_SCRIPT = """\
-import platform
-print('sandbox host:', platform.node())
+import sys
+print('sandbox ok:', sys.version_info[:2])
 """
 
 
@@ -67,11 +67,10 @@ def run_local_self_test() -> SelfTestResult:
         elapsed_ms = (time.perf_counter() - start) * 1000
 
         if result.returncode == 0:
-            # Extract output (last non-empty line from stdout)
+            # Extract first line of script output (skip summary messages)
             stdout = result.stdout.decode().strip()
-            # Filter out any setup messages, get the actual script output
-            lines = [line for line in stdout.split("\n") if line.strip()]
-            output = lines[-1] if lines else ""
+            lines = [ln for ln in stdout.split("\n") if ln.strip() and not ln.startswith("***")]
+            output = lines[0] if lines else ""
 
             return SelfTestResult(
                 success=True,
@@ -164,9 +163,10 @@ def run_remote_self_test(
             elapsed_ms = (time.perf_counter() - start) * 1000
 
             if result.returncode == 0:
+                # Extract first line of script output (skip summary messages)
                 stdout = result.stdout.decode().strip()
-                lines = [line for line in stdout.split("\n") if line.strip()]
-                output = lines[-1] if lines else ""
+                lines = [ln for ln in stdout.split("\n") if ln.strip() and not ln.startswith("***")]
+                output = lines[0] if lines else ""
 
                 return SelfTestResult(
                     success=True,

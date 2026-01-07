@@ -766,10 +766,12 @@ def cmd_status(args: argparse.Namespace) -> int:
             result = run_local_self_test()
             if result.success:
                 print(f"  ✓ Self-test: passed ({result.elapsed_ms:.0f}ms)")
-                print(f"    Output: {result.output!r}")
             else:
                 print("  ✗ Self-test: FAILED")
-                print(f"    Error: {result.error}")
+                if result.error:
+                    print(f"    Error: {result.error}")
+                if result.output:
+                    print(f"    Output: {result.output!r}")
 
         if show_all:
             print()
