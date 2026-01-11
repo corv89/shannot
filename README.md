@@ -69,6 +69,11 @@ shannot approve
 - Always-deny destructive patterns (rm -rf /)
 - Everything else requires human review
 
+**Checkpoint and Rollback**
+- Automatic checkpoint before execution
+- Restore files to pre-execution state with `shannot rollback`
+- Conflict detection prevents accidental overwrites
+
 ## Installation
 
 ```bash
@@ -112,6 +117,11 @@ shannot setup mcp install     # Claude Desktop integration
 
 # Status
 shannot status                # Runtime, config, pending sessions
+
+# Rollback
+shannot rollback <session_id> # Restore files to pre-execution state
+shannot checkpoint list       # List sessions with checkpoints
+shannot checkpoint show <id>  # Show checkpoint details
 ```
 
 ## Configuration

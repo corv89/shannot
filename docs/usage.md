@@ -160,6 +160,47 @@ shannot approve show SESSION_ID    # Review details
 # Then press 'x' in TUI
 ```
 
+### 4. Checkpoint and Rollback
+
+Shannot automatically creates checkpoints before executing approved changes, enabling you to restore files to their pre-execution state.
+
+#### How Checkpoints Work
+
+1. Before execution, original file content is saved to blob files
+2. After execution, file hashes are recorded for conflict detection
+3. Use `shannot rollback` to restore files if needed
+
+#### Rollback Command
+
+```bash
+# Rollback a session (with conflict detection)
+shannot rollback abc123
+
+# Force rollback (skip conflict check)
+shannot rollback abc123 --force
+
+# Preview what would be restored
+shannot rollback abc123 --dry-run
+```
+
+**Conflict Detection:** If a file was modified after session execution, rollback will fail unless `--force` is used.
+
+#### Managing Checkpoints
+
+```bash
+# List all sessions with checkpoints
+shannot checkpoint list
+
+# Show checkpoint details for a session
+shannot checkpoint show abc123
+```
+
+#### Limitations
+
+- Large directory deletions (>100 files or >50MB) create partial checkpoints
+- Partial checkpoints cannot be fully restored
+- Checkpoints are tied to session lifecycle
+
 ## Approval Profiles
 
 Profiles control which commands execute automatically vs. require approval.
