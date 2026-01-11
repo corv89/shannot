@@ -731,6 +731,197 @@ def cmd_mcp_install(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rollback(args: argparse.Namespace) -> int:
+    """Handle 'shannot rollback' command."""
+    from .checkpoint import rollback_local, rollback_remote
+    from .session import Session
+
+    session_id = args.session_id
+
+    try:
+        session = Session.load(session_id)
+    except FileNotFoundError:
+        print(f"Error: Session not found: {session_id}", file=sys.stderr)
+        return 1
+
+    # Verify session has a checkpoint
+    if not session.checkpoint_created_at:
+        print(f"Error: No checkpoint for session {session_id}", file=sys.stderr)
+        print("Only executed sessions have checkpoints.", file=sys.stderr)
+        return 1
+
+    if session.status == "rolled_back":
+        print(f"Error: Session {session_id} already rolled back", file=sys.stderr)
+        return 1
+
+    # Show what would be rolled back
+    if session.checkpoint:
+        print(f"Session: {session_id}")
+        print(f"Checkpoint created: {session.checkpoint_created_at}")
+        print(f"Files to restore: {len(session.checkpoint)}")
+        print()
+
+        if args.dry_run:
+            print("Dry run - would restore:")
+            for path, entry in session.checkpoint.items():
+                was_created = entry.get("was_created", False)
+                was_deleted = entry.get("was_deleted", False)
+                partial = entry.get("partial", False)
+
+                if was_created:
+                    print(f"  DELETE {path} (was created)")
+                elif was_deleted:
+                    if partial:
+                        print(f"  SKIP {path} (partial checkpoint)")
+                    else:
+                        print(f"  RECREATE {path}")
+                else:
+                    print(f"  RESTORE {path}")
+            return 0
+
+    # Perform rollback
+    if session.is_remote():
+        from .config import resolve_target
+        from .ssh import SSHConfig, SSHConnection
+
+        user, host, port = resolve_target(session.target or "")
+        config = SSHConfig(target=f"{user}@{host}", port=port)
+
+        with SSHConnection(config) as ssh:
+            if not ssh.connect():
+                print("Error: Failed to connect to remote", file=sys.stderr)
+                return 1
+            results = rollback_remote(session, ssh, force=args.force)
+    else:
+        results = rollback_local(session, force=args.force)
+
+    # Check for conflicts
+    conflicts = [r for r in results if r.get("action") == "conflict"]
+    if conflicts:
+        print(f"Error: {len(conflicts)} file(s) modified since execution:", file=sys.stderr)
+        for r in conflicts:
+            print(f"  {r['path']}", file=sys.stderr)
+        print("\nUse --force to restore anyway.", file=sys.stderr)
+        return 1
+
+    # Update session status
+    session.status = "rolled_back"
+    session.save()
+
+    # Display results
+    success_count = sum(1 for r in results if r.get("success"))
+    error_count = sum(1 for r in results if not r.get("success"))
+
+    print(f"Rollback complete: {success_count} succeeded, {error_count} failed")
+    for r in results:
+        path = r.get("path", "")
+        action = r.get("action", "")
+        success = r.get("success", False)
+        error = r.get("error", "")
+
+        mark = "✓" if success else "✗"
+        if success:
+            print(f"  {mark} {action}: {path}")
+        else:
+            print(f"  {mark} {action}: {path} ({error})")
+
+    return 0 if error_count == 0 else 1
+
+
+def cmd_checkpoint(args: argparse.Namespace) -> int:
+    """Handle 'shannot checkpoint' command."""
+    if args.checkpoint_cmd == "list":
+        return cmd_checkpoint_list(args)
+    elif args.checkpoint_cmd == "show":
+        return cmd_checkpoint_show(args)
+    else:
+        print("Usage: shannot checkpoint {list,show}", file=sys.stderr)
+        return 1
+
+
+def cmd_checkpoint_list(args: argparse.Namespace) -> int:
+    """Handle 'shannot checkpoint list' command."""
+    from .checkpoint import list_checkpoints
+
+    checkpoints = list_checkpoints()
+
+    if not checkpoints:
+        print("No checkpoints available.")
+        print("Checkpoints are created when sessions are executed.")
+        return 0
+
+    print(f"{'SESSION ID':<30} {'STATUS':<12} {'FILES':<6} {'SIZE':<10} {'CREATED'}")
+    print("-" * 80)
+
+    for session, info in checkpoints:
+        size_str = _format_checkpoint_size(info["total_size"])
+        # Truncate timestamp to date only
+        created = info["created_at"][:10] if info["created_at"] else ""
+        print(
+            f"{session.id:<30} {session.status:<12} {info['file_count']:<6} "
+            f"{size_str:<10} {created}"
+        )
+
+    return 0
+
+
+def cmd_checkpoint_show(args: argparse.Namespace) -> int:
+    """Handle 'shannot checkpoint show' command."""
+    from .session import Session
+
+    session_id = args.session_id
+
+    try:
+        session = Session.load(session_id, audit=False)
+    except FileNotFoundError:
+        print(f"Error: Session not found: {session_id}", file=sys.stderr)
+        return 1
+
+    if not session.checkpoint:
+        print(f"No checkpoint for session {session_id}", file=sys.stderr)
+        return 1
+
+    print(f"Session: {session_id}")
+    print(f"Status: {session.status}")
+    print(f"Checkpoint created: {session.checkpoint_created_at}")
+    print(f"Checkpoint directory: {session.checkpoint_dir}")
+    print()
+    print("Files:")
+
+    for path, entry in sorted(session.checkpoint.items()):
+        blob = entry.get("blob", "")
+        size = entry.get("size", 0)
+        was_created = entry.get("was_created", False)
+        was_deleted = entry.get("was_deleted", False)
+        partial = entry.get("partial", False)
+
+        if was_created:
+            tag = "[created]"
+        elif was_deleted:
+            if partial:
+                tag = "[deleted, partial]"
+            else:
+                tag = "[deleted]"
+        else:
+            tag = "[modified]"
+
+        size_str = _format_checkpoint_size(size) if size else ""
+        blob_str = f" ({blob})" if blob else ""
+        print(f"  {path} {tag} {size_str}{blob_str}")
+
+    return 0
+
+
+def _format_checkpoint_size(size: int) -> str:
+    """Format size for checkpoint display."""
+    if size < 1024:
+        return f"{size} B"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    else:
+        return f"{size / (1024 * 1024):.1f} MB"
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Handle 'shannot status' command."""
     # Determine what to show
@@ -870,7 +1061,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(
         dest="command",
         help="Commands",
-        metavar="{run,approve,status,setup}",
+        metavar="{run,approve,status,setup,rollback,checkpoint}",
     )
 
     # ===== setup subcommand (with sub-subcommands) =====
@@ -1113,6 +1304,60 @@ def main() -> int:
         help="Test target connections only",
     )
     status_parser.set_defaults(func=cmd_status)
+
+    # ===== rollback subcommand =====
+    rollback_parser = subparsers.add_parser(
+        "rollback",
+        help="Rollback session to pre-execution state",
+        description="Restore files to their state before session was executed",
+    )
+    rollback_parser.add_argument(
+        "session_id",
+        help="Session ID to rollback",
+    )
+    rollback_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Skip conflict detection and restore anyway",
+    )
+    rollback_parser.add_argument(
+        "--dry-run",
+        "-n",
+        action="store_true",
+        help="Show what would be restored without making changes",
+    )
+    rollback_parser.set_defaults(func=cmd_rollback)
+
+    # ===== checkpoint subcommand =====
+    checkpoint_parser = subparsers.add_parser(
+        "checkpoint",
+        help="Manage checkpoints",
+        description="List and inspect session checkpoints",
+    )
+    checkpoint_subparsers = checkpoint_parser.add_subparsers(
+        dest="checkpoint_cmd",
+        help="Checkpoint commands",
+    )
+
+    # checkpoint list
+    checkpoint_subparsers.add_parser(
+        "list",
+        help="List sessions with checkpoints",
+        description="Show all sessions that have checkpoints available for rollback",
+    )
+
+    # checkpoint show
+    checkpoint_show_parser = checkpoint_subparsers.add_parser(
+        "show",
+        help="Show checkpoint details",
+        description="Display files included in a session checkpoint",
+    )
+    checkpoint_show_parser.add_argument(
+        "session_id",
+        help="Session ID to show checkpoint for",
+    )
+    checkpoint_parser.set_defaults(func=cmd_checkpoint)
 
     # Parse and execute
     args = parser.parse_args()

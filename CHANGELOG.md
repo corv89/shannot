@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-01-11
+
+### Features
+
+- **Checkpoint and rollback**: Automatically create checkpoints before session execution, enabling rollback to restore files to their pre-execution state
+  - Original file content stored as blob files in `~/.local/share/shannot/sessions/{id}/checkpoint/`
+  - Conflict detection via post-exec hash comparison (bypass with `--force`)
+  - Support for both local and remote (SSH) rollback
+  - Large directory handling with limits (100 files / 50MB) and partial checkpoint warnings
+  - New session status: `rolled_back`
+
+### CLI
+
+- Add `shannot rollback <session_id>` command with `--force` and `--dry-run` options
+- Add `shannot checkpoint list` to list sessions with available checkpoints
+- Add `shannot checkpoint show <session_id>` to display checkpoint details
+
 ## [0.10.3] - 2026-01-07
 
 ### Bug Fixes

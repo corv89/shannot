@@ -399,6 +399,74 @@ shannot setup runtime
 shannot status
 ```
 
+## Checkpoint and Rollback Issues
+
+### "Conflict detected" during rollback
+
+**Symptoms:**
+```
+Error: Conflict detected - file was modified since execution
+```
+
+**Cause:** A file was modified after the session was executed, and the current content differs from what Shannot wrote.
+
+**Solutions:**
+
+1. Review the conflict:
+   ```bash
+   shannot checkpoint show SESSION_ID
+   ```
+
+2. Force rollback (overwrites current changes):
+   ```bash
+   shannot rollback SESSION_ID --force
+   ```
+
+3. Manually restore the file from the checkpoint blob
+
+### "Partial checkpoint" warning
+
+**Symptoms:**
+```
+Warning: Partial checkpoint - directory too large to fully checkpoint
+```
+
+**Cause:** Large directories (>100 files or >50MB) cannot be fully checkpointed.
+
+**Impact:** These directories cannot be restored via rollback.
+
+**Solutions:**
+1. Accept the limitation for large directories
+2. Manually backup large directories before execution
+3. Use smaller, more targeted scripts
+
+### "No checkpoint" error
+
+**Symptoms:**
+```
+Error: Session has no checkpoint
+```
+
+**Causes:**
+1. Session was executed before v0.11.0
+2. Checkpoint creation failed
+3. Session was created in dry-run only mode
+
+**Solutions:**
+1. Create a new session and execute it
+2. Check session details:
+   ```bash
+   shannot checkpoint show SESSION_ID
+   ```
+
+### Checkpoint not created
+
+**Symptoms:** Session executed but no checkpoint is available.
+
+**Cause:** The session may have been created before the checkpoint feature was added.
+
+**Solution:** Re-run the script to create a new session with checkpoint support.
+
 ## Getting Help
 
 If you're still stuck:

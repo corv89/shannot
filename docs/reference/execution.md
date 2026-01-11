@@ -12,7 +12,9 @@ Shannot v0.4.0+ uses a session-based approval workflow instead of direct executo
 |-------|-------------|
 | Dry-run | Script runs in sandbox, operations captured |
 | Review | User reviews captured operations via TUI |
+| Checkpoint | Original file content saved before changes |
 | Execute | Approved operations run on host system |
+| Rollback | (Optional) Restore files to pre-execution state |
 
 ## Session Workflow
 
@@ -47,8 +49,37 @@ The remote receives the session data and executes in its own PyPy sandbox.
 |--------|---------|
 | `run_session.py` | Session execution orchestration |
 | `session.py` | Session data structures |
+| `checkpoint.py` | Checkpoint and rollback logic |
 | `deploy.py` | Remote deployment |
 | `ssh.py` | Zero-dependency SSH client |
+
+## Checkpoint Creation
+
+Before committing writes, Shannot creates a checkpoint:
+
+1. **Blob storage**: Original file content saved as `{hash[:8]}.blob`
+2. **Metadata**: Path mappings stored in `session.checkpoint`
+3. **Post-exec hashes**: Recorded after writes for conflict detection
+
+Directory structure:
+
+```
+~/.local/share/shannot/sessions/{session_id}/
+  session.json
+  checkpoint/
+    a1b2c3d4.blob
+    e5f6g7h8.blob
+```
+
+## Session Statuses
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Awaiting approval |
+| `approved` | Ready for execution |
+| `executed` | Completed successfully |
+| `rolled_back` | Restored to pre-execution state |
+| `expired` | TTL exceeded |
 
 ## See Also
 

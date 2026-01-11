@@ -209,8 +209,16 @@ def execute_session_direct(session) -> int:
         exit_code = result or 0
         executed_commands = []
 
+    # Create checkpoint before committing changes
+    from .checkpoint import create_checkpoint, update_post_exec_hashes
+
+    create_checkpoint(session)
+
     # Commit pending writes to filesystem
     completed_writes = session.commit_writes()
+
+    # Record post-execution hashes for rollback conflict detection
+    update_post_exec_hashes(session)
 
     # Commit pending deletions to filesystem
     completed_deletions = session.commit_deletions()
