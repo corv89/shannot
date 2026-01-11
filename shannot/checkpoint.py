@@ -202,6 +202,7 @@ def update_post_exec_hashes(session: Session) -> None:
                     content = real_path.read_bytes()
                     entry["post_exec_hash"] = _hash_content(content)
                 except (OSError, PermissionError):
+                    # Skip unreadable files - conflict detection is best-effort
                     pass
 
 
@@ -239,6 +240,7 @@ def rollback_local(session: Session, *, force: bool = False) -> list[dict]:
                         if current_hash != post_exec_hash:
                             conflicts.append(path)
                     except (OSError, PermissionError):
+                        # Skip unreadable files - don't block rollback on read errors
                         pass
 
     if conflicts:
@@ -367,6 +369,7 @@ def rollback_remote(session: Session, ssh: object, *, force: bool = False) -> li
                         if current_hash != post_exec_hash:
                             conflicts.append(path)
                 except Exception:
+                    # Skip on SSH/network errors - don't block rollback on transient failures
                     pass
 
     if conflicts:
