@@ -13,7 +13,14 @@ from typing import Literal
 from .config import SESSIONS_DIR
 
 SessionStatus = Literal[
-    "pending", "approved", "rejected", "executed", "failed", "cancelled", "expired"
+    "pending",
+    "approved",
+    "rejected",
+    "executed",
+    "failed",
+    "cancelled",
+    "expired",
+    "rolled_back",
 ]
 
 # Session TTL - pending sessions expire after this duration
@@ -49,6 +56,10 @@ class Session:
     # Remote execution fields
     target: str | None = None  # SSH target (user@host) if remote
     remote_session_id: str | None = None  # Session ID on remote
+
+    # Checkpoint/rollback fields
+    checkpoint_created_at: str | None = None  # ISO timestamp when checkpoint was created
+    checkpoint: dict | None = None  # path → {blob, size, mtime, post_exec_hash}
 
     def is_remote(self) -> bool:
         """Check if this is a remote session."""
@@ -311,6 +322,11 @@ class Session:
     def session_dir(self) -> Path:
         """Directory storing this session's data."""
         return SESSIONS_DIR / self.id
+
+    @property
+    def checkpoint_dir(self) -> Path:
+        """Directory storing checkpoint blob files."""
+        return self.session_dir / "checkpoint"
 
     def save(self) -> None:
         """Persist session to disk."""
