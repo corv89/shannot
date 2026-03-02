@@ -65,25 +65,25 @@ jobs:
 
     steps:
       - name: Download Linux x86_64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: shannot-binary-linux-x86_64
           path: dist/
 
       - name: Download Linux arm64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: shannot-binary-linux-arm64
           path: dist/
 
       - name: Download macOS x86_64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: shannot-binary-darwin-x86_64
           path: dist/
 
       - name: Download macOS arm64 binary
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: shannot-binary-darwin-arm64
           path: dist/
