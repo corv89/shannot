@@ -1,3 +1,5 @@
+
+
 # Shannot
 
 [![Tests](https://github.com/corv89/shannot/actions/workflows/test.yml/badge.svg)](https://github.com/corv89/shannot/actions/workflows/test.yml)
@@ -126,7 +128,7 @@ shannot checkpoint show <id>  # Show checkpoint details
 
 ## Configuration
 
-Single TOML file: `~/.config/shannot/config.toml` (or `.shannot/config.toml` per-project)
+Single TOML file: `~/.config/shannot/config.toml` (or `.shannot/config.toml` per-project, which takes precedence)
 
 ```toml
 [profile]
